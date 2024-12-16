@@ -3,7 +3,7 @@ services:
     name: avantlush-api
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: python manage.py runserver 0.0.0.0:$PORT
+    startCommand: gunicorn avantlush_backend.wsgi:application
     envVars:
       - key: DJANGO_SECRET_KEY
         generateValue: true
