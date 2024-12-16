@@ -14,6 +14,13 @@ from pathlib import Path
 from datetime import timedelta
 import os
 from dotenv import load_dotenv
+import dj_database_url
+import os
+
+DATABASE_URL = os.getenv('DATABASE_URL')
+DATABASES = {
+    'default': dj_database_url.config(default=DATABASE_URL)
+}
 
 load_dotenv()  # Load environment variables
 
