@@ -1,7 +1,15 @@
 from django.urls import path
-from .views import waitlist_signup, api_root
+from rest_framework.urlpatterns import format_suffix_patterns
+from .views import waitlist_signup, api_root, register, login, preview_email
+from rest_framework.authtoken.views import obtain_auth_token
 
 urlpatterns = [
-    path('', api_root, name='api-root'),
-    path('waitlist/signup/', waitlist_signup, name='waitlist-signup'),
+    path('', api_root),
+    path('waitlist/signup/', waitlist_signup, name='waitlist_signup'),
+    path('register/', register, name='register'),
+    path('login/', login, name='login'),
+    path('api-token-auth/', obtain_auth_token, name='api_token_auth'),
+    path('preview-email/', preview_email, name='preview_email'),
 ]
+
+urlpatterns = format_suffix_patterns(urlpatterns)
