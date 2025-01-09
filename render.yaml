@@ -2,9 +2,11 @@ services:
   - type: web
     name: avantlush-api
     env: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: cd /opt/render/project/src/avantlush_backend && gunicorn avantlush_backend.wsgi:application
-
+    buildCommand: |
+      pip install -r requirements.txt
+      python manage.py collectstatic --noinput
+    startCommand: |
+      cd /opt/render/project/src/avantlush_backend && gunicorn avantlush_backend.wsgi:application --timeout 120 --workers 2 --threads 2 --worker-class=gthread --worker-tmp-dir /dev/shm
     envVars:
       - key: PYTHONPATH
         value: /opt/render/project/src
@@ -14,3 +16,7 @@ services:
         value: false
       - key: ALLOWED_HOSTS
         value: .onrender.com
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        value: postgresql://avantlush_52pt_user:xJQFF7fTdUyPABbpvLlqhv747RiX2ecb@dpg-ctvtp3qj1k6c73dsgc6g-a.oregon-postgres.render.com/avantlush_52pt
