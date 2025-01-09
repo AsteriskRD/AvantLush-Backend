@@ -1,9 +1,10 @@
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.decorators import action
 from rest_framework.decorators import api_view, throttle_classes
 from rest_framework.throttling import AnonRateThrottle
-from .serializers import WaitlistSerializer, RegistrationSerializer, LoginSerializer
+from .serializers import WaitlistSerializer, RegistrationSerializer, LoginSerializer, ProductSerializer, ArticleSerializer, CartSerializer, CartItemSerializer, OrderSerializer
 from django.core.exceptions import ValidationError
 from django.core.mail import send_mail
 from django.contrib.auth import authenticate
@@ -15,6 +16,10 @@ from google.auth.transport import requests
 
 from django.utils.html import strip_tags
 from django.shortcuts import render
+from .models import Product, Article, Cart, CartItem, Order
+from rest_framework import generics, viewsets
+from rest_framework.permissions import IsAuthenticated
+from rest_framework import mixins
 
 class WaitlistRateThrottle(AnonRateThrottle):
     rate = '5/minute'  # Limit to 5 requests per minute per IP
@@ -28,6 +33,15 @@ def api_root(request):
             'register': '/api/register/',
             'login': '/api/login/',
             'admin': '/admin/',
+            'products': '/api/products/',
+            'products_detail': '/api/products/<int:pk>/',
+            'articles': '/api/articles/',
+            'articles_detail': '/api/articles/<int:pk>/',
+            'cart': '/api/cart/',
+            'cart_items': '/api/cart/items/',
+            'orders': '/api/orders/',
+            'orders_detail': '/api/orders/<int:pk>/',
+            'orders_update_status': '/api/orders/<int:pk>/status/',
         }
     })
 
@@ -85,6 +99,8 @@ def google_auth(request):
     
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+from django.conf import settings
+
 @api_view(['POST'])
 @throttle_classes([WaitlistRateThrottle])
 def waitlist_signup(request):
@@ -93,17 +109,30 @@ def waitlist_signup(request):
         if serializer.is_valid():
             waitlist_entry = serializer.save()
 
-            #import os
-            #print("Template path:", os.path.join(settings.BASE_DIR, 'api', 'templates', 'waitlist_email.html'))
+            # Prepare email context with Cloudinary URLs
+            context = {
+                'email': waitlist_entry.email,
+                'CLOUDINARY_URLS': {
+                    'logo': 'https://res.cloudinary.com/dvfwa8fzh/image/upload/v1736339705/avantlush-email/Avantlush%20logo.svg',
+                    'menu': 'https://res.cloudinary.com/dvfwa8fzh/image/upload/v1736339712/avantlush-email/menu.svg',
+                    'share': 'https://res.cloudinary.com/dvfwa8fzh/image/upload/v1736339714/avantlush-email/share.svg',
+                    'facebook': 'https://res.cloudinary.com/dvfwa8fzh/image/upload/v1736339707/avantlush-email/Facebook.svg',
+                    'linkedin': 'https://res.cloudinary.com/dvfwa8fzh/image/upload/v1736339710/avantlush-email/Linkedin.svg',
+                    'twitter': 'https://res.cloudinary.com/dvfwa8fzh/image/upload/v1736339719/avantlush-email/Twitter.svg',
+                    'instagram': 'https://res.cloudinary.com/dvfwa8fzh/image/upload/v1736339709/avantlush-email/Instagram.svg',
+                    'template1': 'https://res.cloudinary.com/dvfwa8fzh/image/upload/v1736339717/avantlush-email/template1.png',
+                    'template2': 'https://res.cloudinary.com/dvfwa8fzh/image/upload/v1736339717/avantlush-email/template2.png',
+                    'template3': 'https://res.cloudinary.com/dvfwa8fzh/image/upload/v1736339718/avantlush-email/template3.png'
+                }
+            }
 
-            # Send confirmation email
-            html_message = render_to_string('waitlist-email(1).html', {'email': waitlist_entry.email})
+            html_message = render_to_string('waitlist-email(1).html', context)
             plain_message = strip_tags(html_message)
 
             send_mail(
-                'Thank You For Joining The Avantlush Wailtlist',
+                'Thank You For Joining The Avantlush Waitlist',
                 plain_message,
-                'avalusht@gmail.com',
+                settings.DEFAULT_FROM_EMAIL,
                 [waitlist_entry.email],
                 html_message=html_message,
                 fail_silently=False,
@@ -111,38 +140,26 @@ def waitlist_signup(request):
 
             return Response({
                 'message': 'Successfully added to waitlist',
-                'email': waitlist_entry.email,
-                'status_code': status.HTTP_201_CREATED
+                'email': waitlist_entry.email
             }, status=status.HTTP_201_CREATED)
-        else:
-            return Response({
-                'error': serializer.errors,
-                'status_code': status.HTTP_400_BAD_REQUEST
-            }, status=status.HTTP_400_BAD_REQUEST)
 
-    except ValidationError as e:
-        return Response({
-            'error': str(e),
-            'status_code': status.HTTP_400_BAD_REQUEST
-        }, status=status.HTTP_400_BAD_REQUEST)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
     except Exception as e:
-        return Response({
-            'error': str(e),
-            'status_code': status.HTTP_500_INTERNAL_SERVER_ERROR
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 @api_view(['GET'])
 def preview_email(request):
-    return render(request, 'waitlist-email(1).html')
+    return render(request, 'waitlist-email.html')
 
 # Update register function:
 @api_view(['POST'])
 def register(request):
+    
     serializer = RegistrationSerializer(data=request.data)
     if serializer.is_valid():
         user = serializer.save()
         token, _ = Token.objects.get_or_create(user=user)
-        return Response({
+        return Response({  
             'token': token.key,
             'email': user.email,
             'location': user.location
@@ -169,3 +186,58 @@ def login(request):
             'error': 'Invalid credentials'
         }, status=status.HTTP_401_UNAUTHORIZED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class ProductViewSet(viewsets.ModelViewSet):
+    queryset = Product.objects.all()
+    serializer_class = ProductSerializer
+
+class ArticleViewSet(viewsets.ModelViewSet):
+    queryset = Article.objects.all()
+    serializer_class = ArticleSerializer
+
+class CartViewSet(viewsets.ModelViewSet):
+    queryset = Cart.objects.all()
+    serializer_class = CartSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Cart.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+class CartItemViewSet(viewsets.ModelViewSet):
+    queryset = CartItem.objects.all()
+    serializer_class = CartItemSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return CartItem.objects.filter(cart__user=self.request.user)
+
+class OrderViewSet(viewsets.GenericViewSet, 
+                   mixins.CreateModelMixin,
+                   mixins.RetrieveModelMixin,
+                   mixins.ListModelMixin,
+                   mixins.UpdateModelMixin):
+    queryset = Order.objects.all()
+    serializer_class = OrderSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Order.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+    @action(detail=True, methods=['patch'])
+    def update_status(self, request, pk=None):
+        try:
+            order = self.get_queryset().get(pk=pk)
+        except Order.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        serializer = self.get_serializer(order, data={'status': request.data.get('status')}, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
