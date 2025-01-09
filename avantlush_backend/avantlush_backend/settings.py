@@ -17,7 +17,6 @@ from dotenv import load_dotenv
 import dj_database_url
 import os
 
-
 load_dotenv()  # Load environment variables
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
