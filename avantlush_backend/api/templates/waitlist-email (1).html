@@ -6,27 +6,23 @@
         <title>Your Spot Is Confirmed - Avantlush</title>
         <style>
             body {
-                font-family: Arial, sans-serif;
                 margin: 0;
                 padding: 0;
-                background-color: #f5f5f5;
+                font-family: Arial, sans-serif;
             }
             .container {
                 max-width: 600px;
                 margin: 0 auto;
-                padding: 20px;
                 background-color: white;
             }
             .header {
+                padding: 20px;
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
-                padding: 10px 0;
             }
-            .logo {
-                color: #1b3d3d;
-                font-size: 24px;
-                font-weight: bold;
+            .logo img {
+                height: 30px;
             }
             .tell-friend {
                 background-color: #e9c88e;
@@ -34,16 +30,16 @@
                 border-radius: 4px;
                 text-decoration: none;
                 color: #1b3d3d;
-                display: flex;
-                align-items: center;
-                gap: 0.5rem;
+                font-size: 14px;
+            }
+            .tell-friend img {
+                vertical-align: middle;
+                margin-left: 8px;
             }
             .confirmation-box {
                 background-color: #1b3d3d;
                 color: white;
                 padding: 20px;
-                border-radius: 8px;
-                margin: 20px 0;
                 position: relative;
             }
             .tape {
@@ -52,108 +48,133 @@
                 height: 20px;
                 background-color: #e9c88e;
                 opacity: 0.7;
-            }
-            .tape-top-right {
-                top: -10px;
                 right: 20px;
+                top: -10px;
                 transform: rotate(45deg);
             }
-            .tape-bottom-left {
-                bottom: -10px;
-                left: 20px;
-                transform: rotate(-45deg);
+            .confirmation-box h1 {
+                margin: 0 0 10px 0;
+                font-size: 24px;
+            }
+            .confirmation-box p {
+                margin: 0;
+                font-size: 14px;
+                line-height: 1.4;
             }
             .main-content {
-                padding: 20px 0;
+                padding: 20px;
+            }
+            .main-content p {
+                margin: 10px 0;
+                font-size: 14px;
+                line-height: 1.4;
+            }
+            .main-content ol {
+                margin: 10px 0;
+                padding-left: 20px;
+            }
+            .main-content li {
+                font-size: 14px;
+                line-height: 1.4;
+                margin: 5px 0;
             }
             .learn-more {
-                background-color: #e9c88e;
-                padding: 12px 24px;
-                border-radius: 4px;
-                text-decoration: none;
-                color: #1b3d3d;
                 display: inline-block;
-                margin: 20px 0;
-                display: flex;
-                align-items: center;
-                gap: 1rem;
-                width: 16.063rem;
+                background-color: #e9c88e;
+                color: #1b3d3d;
+                text-decoration: none;
+                padding: 12px 20px;
+                border-radius: 4px;
+                margin: 15px 0;
+                font-size: 14px;
+            }
+            .learn-more img {
+                vertical-align: middle;
+                margin-left: 8px;
             }
             .eco-box {
                 border: 1px solid #1b3d3d;
-                border-radius: 4px;
                 padding: 15px;
-                margin: 20px 0;
-                color: #1b3d3d;
+                margin: 15px 0;
+                text-align: center;
+                font-size: 14px;
+                border-radius: 4px;
             }
             .social-links {
-                display: flex;
-                gap: 20px;
+                text-align: center;
                 margin: 20px 0;
-                justify-content: center;
             }
-            .social-icon {
-                width: 40px;
-                height: 40px;
-                border: 1px solid #1b3d3d;
-                border-radius: 50%;
-                display: flex;
-                align-items: center;
-                justify-content: center;
+            .social-links a {
+                display: inline-block;
+                margin: 0 5px;
+            }
+            .social-links img {
+                width: 24px;
+                height: 24px;
             }
             .furniture-images {
                 display: flex;
-                gap: 10px;
+                justify-content: space-between;
+                gap: 8px;
                 margin: 20px 0;
             }
             .furniture-images img {
-                width: 32%;
+                width: 180px;
+                height: 120px;
+                object-fit: cover;
                 border-radius: 4px;
             }
             .footer {
                 background-color: #1b3d3d;
                 color: white;
-                padding: 30px;
-                margin-top: 20px;
+                padding: 40px;
+                display: flex;
+                justify-content: space-between;
+            }
+            .footer-left, .footer-right {
+                flex: 1;
+            }
+            .footer h3 {
+                margin: 0 0 15px 0;
+                font-size: 18px;
+                color: white;
+            }
+            .footer p {
+                margin: 5px 0;
+                font-size: 14px;
+                color: #999;
+                line-height: 1.6;
+            }
+            .footer-location {
+                margin-top: 30px;
             }
             .footer a {
-                color: #e9c88e;
-                text-decoration: none;
+                color: #999;
+                text-decoration: underline;
             }
         </style>
     </head>
     <body>
         <div class="container">
             <div class="header">
-                <img
-                    src="https://avantlush-backend-8.onrender.com/Public/Image/Avantlush%20logo.svg"
-                    alt="Avantlush logo"
-                />
-                <a href="https://avantlush.com/referral" class="tell-friend"
-                    >Tell A Friend
-                    <img
-                        src="https://avantlush-backend-8.onrender.com/Public/Image/menu.svg"
-                        alt=""
-                /></a>
+                <div class="logo">
+                    <img src="https://res.cloudinary.com/dvfwa8fzh/image/upload/avantlush-email/Avantlush%20logo.png" alt="Avantlush" />
+                </div>
+                <a href="https://avantlush.com/referral" class="tell-friend">
+                    Tell A Friend
+                    <img src="https://res.cloudinary.com/dvfwa8fzh/image/upload/avantlush-email/menu.png" alt="" width="16" />
+                </a>
             </div>
 
             <div class="confirmation-box">
-                <div class="tape tape-top-right"></div>
-                <div class="tape tape-bottom-left"></div>
+                <div class="tape"></div>
                 <h1>Your Spot Is Confirmed</h1>
-                <p>
-                    Thank you for joining the Avantlush waitlist. We can't wait
-                    to share our exclusive designs with you
-                </p>
+                <p>Thank you for joining the Avantlush waitlist. We can't wait to share our exclusive designs with you</p>
             </div>
 
             <div class="main-content">
                 <p>Hi {{ email }}</p>
-                <p>
-                    You're now officially on our waitlist! We're excited to
-                    bring you eco-friendly, customizable furniture that fits
-                    your style and space perfectly.
-                </p>
+                <p>You're now officially on our waitlist! We're excited to bring you eco-friendly, customizable furniture that fits your style and space perfectly.</p>
 
                 <p>Here is what to expect:</p>
                 <ol>
@@ -162,74 +183,54 @@
                     <li>Explore our collection before anyone else.</li>
                 </ol>
 
-                <a href="https://avantlush.com" class="learn-more"
-                    >Learn More About Avantlush
-                    <img
-                        src="https://avantlush-backend-8.onrender.com/Public/Image/share.svg"
-                        alt="Share logo"
-                /></a>
+                <a href="https://avantlush.com" class="learn-more">
+                    Learn More About Avantlush
+                    <img src="https://res.cloudinary.com/dvfwa8fzh/image/upload/avantlush-email/share.png" alt="" width="16" />
+                </a>
 
                 <div class="eco-box">
-                    Join hundreds of eco-conscious homeowners already
-                    transforming their spaces with Avantlush furniture
+                    Join hundreds of eco-conscious homeowners already transforming their spaces with Avantlush furniture
                 </div>
 
                 <div class="social-links">
-                    <a href="https://www.facebook.com/AvantLush/" class="social-icon"
-                        ><img
-                            src="https://avantlush-backend-8.onrender.com/Public/Image/Facebook.svg"
-                            alt="facebook logo"
-                    /></a>
-                    <a href="https://www.linkedin.com/company/avantlush/" class="social-icon"
-                        ><img
-                            src="https://avantlush-backend-8.onrender.com/Public/Image/Linkedin.svg"
-                            alt="linkedin logo"
-                    /></a>
-                    <a href="https://twitter.com/avant_lush" class="social-icon"
-                        ><img
-                            src="https://avantlush-backend-8.onrender.com/Public/Image/Twitter.svg"
-                            alt="x logo"
-                    /></a>
-                    <a href="https://www.instagram.com/avantlushdesign/" class="social-icon"
-                        ><img
-                            src="https://avantlush-backend-8.onrender.com/Public/Image/Instagram.svg"
-                            alt="Instagram logo"
-                    /></a>
+                    <a href="https://www.facebook.com/AvantLush/">
+                        <img src="https://res.cloudinary.com/dvfwa8fzh/image/upload/avantlush-email/Facebook.png" alt="Facebook" />
+                    </a>
+                    <a href="https://www.linkedin.com/company/avantlush/">
+                        <img src="https://res.cloudinary.com/dvfwa8fzh/image/upload/avantlush-email/Linkedin.png" alt="LinkedIn" />
+                    </a>
+                    <a href="https://twitter.com/avant_lush">
+                        <img src="https://res.cloudinary.com/dvfwa8fzh/image/upload/avantlush-email/Twitter.png" alt="Twitter" />
+                    </a>
+                    <a href="https://www.instagram.com/avantlushdesign/">
+                        <img src="https://res.cloudinary.com/dvfwa8fzh/image/upload/avantlush-email/Instagram.png" alt="Instagram" />
+                    </a>
                 </div>
 
                 <div class="furniture-images">
-                    <img
-                        src="https://avantlush-backend-8.onrender.com/Public/Image/template1.png"
-                        alt="Modern dining table"
-                    />
-                    <img
-                        src="https://avantlush-backend-8.onrender.com/Public/Image/template2.png"
-                        alt="Green accent chair"
-                    />
-                    <img
-                        src="https://avantlush-backend-8.onrender.com/Public/Image/template3.png"
-                        alt="Entertainment center"
-                    />
+                    <img src="https://res.cloudinary.com/dvfwa8fzh/image/upload/avantlush-email/template1.png" alt="Modern dining table" />
+                    <img src="https://res.cloudinary.com/dvfwa8fzh/image/upload/avantlush-email/template2.png" alt="Green accent chair" />
+                    <img src="https://res.cloudinary.com/dvfwa8fzh/image/upload/avantlush-email/template3.png" alt="Entertainment center" />
                 </div>
             </div>
 
             <div class="footer">
-                <h3>Contact Us</h3>
-                <p>+1 (999) 888-77-66</p>
-                <p>hello@logoipsum.com</p>
-
-                <h3>Location</h3>
-                <p>
-                    483920, Moscow,<br />
-                    Myasnitskaya 22/2/5, Office 4
-                </p>
-
-                <h3>Privacy</h3>
-                <p>We value your privacy and promise not to spam your inbox</p>
-                <p>
-                    Don't want to hear from us?<br />
-                    <a href="#">Unsubscribe</a>
-                </p>
+                <div class="footer-left">
+                    <h3>Contact Us</h3>
+                    <p>+1 (999) 888-77-66</p>
+                    <p>hello@logoipsum.com</p>
+                    
+                    <div class="footer-location">
+                        <h3>Location</h3>
+                        <p>483920, Moscow,<br>Myasnitskaya 22/2/5, Office 4</p>
+                    </div>
+                </div>
+                
+                <div class="footer-right">
+                    <h3>Privacy</h3>
+                    <p>We value your privacy and promise not to spam your inbox</p>
+                    <p>Don't want to hear from us ?<br><a href="#">Unsubscribe</a></p>
+                </div>
             </div>
         </div>
     </body>
