@@ -120,12 +120,30 @@ WSGI_APPLICATION = 'avantlush_backend.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
+#DATABASES = {
+#    'default': {
+#        'ENGINE': 'django.db.backends.sqlite3',
+#        'NAME': BASE_DIR / 'db.sqlite3',
+ #   }
+#}
+
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        **dj_database_url.config(
+            default=os.getenv('DATABASE_URL'),
+            conn_max_age=600,
+            conn_health_checks=True,
+        ),
+        'OPTIONS': {
+            'connect_timeout': 5,
+            'keepalives': 1,
+            'keepalives_idle': 30,
+            'keepalives_interval': 10,
+            'keepalives_count': 5,
+        }
     }
 }
+
 
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
@@ -197,7 +215,7 @@ EMAIL_USE_TLS = False  # Disable TLS since we're using SSL
 EMAIL_HOST_USER = 'avalusht@gmail.com'
 EMAIL_HOST_PASSWORD = 'qxzipmbwcjhhjpmv'
 DEFAULT_FROM_EMAIL = 'avalusht@gmail.com'
-EMAIL_TIMEOUT = 20
+EMAIL_TIMEOUT = 5
 SERVER_EMAIL = 'avalusht@gmail.com'
 
 REST_FRAMEWORK = {
@@ -212,13 +230,41 @@ REST_FRAMEWORK = {
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+    },
     'handlers': {
         'console': {
             'class': 'logging.StreamHandler',
+            'formatter': 'verbose'
         },
     },
-    'root': {
-        'handlers': ['console'],
-        'level': 'INFO',
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': os.getenv('DJANGO_LOG_LEVEL', 'INFO'),
+        },
+        'django.db.backends': {
+            'handlers': ['console'],
+            'level': 'WARNING',
+        },
     },
 }
+
+# Cache configuration
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'unique-snowflake',
+        'OPTIONS': {
+            'MAX_ENTRIES': 1000
+        }
+    }
+}
+
+# Session configuration
+SESSION_ENGINE = 'django.contrib.sessions.backends.db'
+SESSION_COOKIE_AGE = 1209600  # 2 weeks in seconds
