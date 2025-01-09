@@ -126,7 +126,7 @@ def waitlist_signup(request):
                 }
             }
 
-            html_message = render_to_string('waitlist-email(1).html', context)
+            html_message = render_to_string('waitlist-email.html', context)
             plain_message = strip_tags(html_message)
 
             send_mail(
