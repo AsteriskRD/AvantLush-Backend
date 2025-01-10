@@ -11,7 +11,7 @@ services:
       - key: DEBUG
         value: "False"
       - key: DJANGO_SETTINGS_MODULE
-        value: "avantlush_backend.avantlush_backend.settings"
+        value: "Avantlush-Backend-main.avantlush_backend.settings"
       - key: DATABASE_URL
         fromDatabase:
           name: avantlush_db
