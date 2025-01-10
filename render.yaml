@@ -17,7 +17,7 @@ services:
           name: avantlush_db
           property: connectionString
 deployHooks:
-  - entrypoint: python manage.py collectstatic --noinput
+  - entrypoint: cd avantlush_backend && python manage.py collectstatic --noinput
 navigationLinks: []
 
 databases:
