@@ -3,7 +3,7 @@ services:
     name: avantlush-backend
     env: python
     rootDirectory: .
-    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
+    buildCommand: pip install -r requirements.txt
     startCommand: gunicorn avantlush_backend.wsgi:application
     envVars:
       - key: PYTHON_VERSION
@@ -16,6 +16,9 @@ services:
         fromDatabase:
           name: avantlush_db
           property: connectionString
+deployHooks:
+  - entrypoint: python manage.py collectstatic --noinput
+navigationLinks: []
 
 databases:
   - name: avantlush_db
