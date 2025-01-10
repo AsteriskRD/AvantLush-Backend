@@ -2,7 +2,7 @@ services:
   - type: web
     name: avantlush-backend
     env: python
-    rootDirectory: .  
+    rootDirectory: .
     buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
     startCommand: gunicorn avantlush_backend.wsgi:application
     envVars:
@@ -10,6 +10,8 @@ services:
         value: "3.9"
       - key: DEBUG
         value: "False"
+      - key: DJANGO_SETTINGS_MODULE
+        value: "avantlush_backend.settings"
       - key: DATABASE_URL
         fromDatabase:
           name: avantlush_db
