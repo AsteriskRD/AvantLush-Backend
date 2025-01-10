@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: AvantLush-Backend
+    runtime: python
+    wsgi: AvantLush-Backend-main/avantlush_backend/avantlush_backend/wsgi.py
+    requirements_txt_path: AvantLush-Backend-main/requirements.txt
+    static_dir: AvantLush-Backend-main/avantlush_backend/staticfiles
+    build_command: pip install -r AvantLush-Backend-main/requirements.txt
+    start_command: gunicorn avantlush_backend.wsgi
