@@ -2,13 +2,17 @@
 # exit on error
 set -o errexit
 
-# Install Python dependencies
+echo "Installing Python dependencies..."
 pip install --upgrade pip
 pip install -r requirements.txt
 
-# Run migrations and collect static files
+echo "Running database migrations..."
 python manage.py migrate
+
+echo "Collecting static files..."
 python manage.py collectstatic --no-input
 
-# Create cache table for sessions
+echo "Creating cache table..."
 python manage.py createcachetable
+
+echo "Build completed successfully!"
