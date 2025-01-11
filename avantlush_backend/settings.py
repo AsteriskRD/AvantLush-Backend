@@ -65,7 +65,7 @@ INSTALLED_APPS = [
     'corsheaders',
     
     # Local
-    'api',
+    'avantlush_backend.api',
 ]
 
 MIDDLEWARE = [
