@@ -1,7 +1,7 @@
 # API Documentation
 
 ## Base URL
-
+https://avantlush-backend-13.onrender.com
 All API endpoints are prefixed with `/api/`.
 
 ## Endpoints

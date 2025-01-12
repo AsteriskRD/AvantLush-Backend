@@ -35,8 +35,13 @@ ALLOWED_HOSTS = [
     'localhost',
     '127.0.0.1',
     '.onrender.com',
-    '.ngrok-free.app',  # This will allow all ngrok domains
+    '.ngrok-free.app',
+    'https://avantlush-backend-13.onrender.com'  # This will allow all ngrok domains
 ]
+
+#Https handling
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SECURE_SSL_REDIRECT = True if os.getenv('SECURE_SSL_REDIRECT') == 'True' else False
 
 RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
 if RENDER_EXTERNAL_HOSTNAME:
