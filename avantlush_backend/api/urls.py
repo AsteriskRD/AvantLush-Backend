@@ -2,6 +2,9 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import waitlist_signup, preview_email, register, login, ProductViewSet, ArticleViewSet, CartViewSet, CartItemViewSet, OrderViewSet
 from django.urls import path
+from django.urls import path
+from .views import verify_email, resend_verification_email
+
 from .views import (
     waitlist_signup, 
     preview_email, 
@@ -29,6 +32,8 @@ urlpatterns = [
     path('login/', login, name='login'),
     path('auth/google/', GoogleLoginView.as_view(), name='google_login'),
     path('auth/google/callback/', google_auth_callback, name='google_callback'),
+     path('verify-email/<str:uidb64>/<str:token>/', verify_email, name='verify_email'),
+    path('resend-verification/', resend_verification_email, name='resend_verification'),
     path('', include(router.urls)),
 ]
 urlpatterns += router.urls

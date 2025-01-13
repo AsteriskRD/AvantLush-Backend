@@ -1,13 +1,9 @@
 from django.db import models
-from django.contrib.auth.models import AbstractUser
 from django.contrib.auth.models import AbstractUser, BaseUserManager
-from django.db import models
 from django.utils.translation import gettext_lazy as _
+from django.utils import timezone
+import uuid
 
-
-#class CustomUser(AbstractUser):
-#    pass
-    
 class CustomUserManager(BaseUserManager):
     def create_user(self, email, password=None, **extra_fields):
         if not email:
@@ -24,11 +20,12 @@ class CustomUserManager(BaseUserManager):
         extra_fields.setdefault('is_superuser', True)
         return self.create_user(email, password, **extra_fields)
 
-
 class CustomUser(AbstractUser):
     username = None  # Remove username field
     email = models.EmailField('email address', unique=True)
-    
+    location = models.CharField(max_length=100, default='Nigeria')
+    agreed_to_terms = models.BooleanField(default=False)
+
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = []  # Email & Password are required by default
     
@@ -43,6 +40,26 @@ class WaitlistEntry(models.Model):
 
     def __str__(self):
         return self.email
+
+class EmailVerificationToken(models.Model):
+    user = models.OneToOneField('CustomUser', on_delete=models.CASCADE)
+    token = models.UUIDField(default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    is_used = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"Verification token for {self.user.email}"
+
+    def save(self, *args, **kwargs):
+        if not self.expires_at:
+            # Token expires in 24 hours
+            self.expires_at = timezone.now() + timezone.timedelta(hours=24)
+        super().save(*args, **kwargs)
+
+    @property
+    def is_valid(self):
+        return not self.is_used and self.expires_at > timezone.now()
     
 class Product(models.Model):
     name = models.CharField(max_length=255)

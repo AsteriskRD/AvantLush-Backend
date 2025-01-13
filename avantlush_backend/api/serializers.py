@@ -1,18 +1,23 @@
 from rest_framework import serializers
-from .models import WaitlistEntry, Product, Article, Cart, CartItem, Order, OrderItem
-from django.contrib.auth.models import User
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core import exceptions
-from rest_framework import serializers
-from allauth.socialaccount.models import SocialAccount
-from django.contrib.auth import get_user_model
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
-from dj_rest_auth.registration.serializers import SocialLoginSerializer
+from dj_rest_auth.registration.serializers import SocialLoginSerializer, RegisterSerializer
 from dj_rest_auth.serializers import UserDetailsSerializer
-from dj_rest_auth.registration.serializers import RegisterSerializer
+from .models import (
+    CustomUser,  
+    WaitlistEntry, 
+    Product, 
+    Article, 
+    Cart, 
+    CartItem, 
+    Order, 
+    OrderItem
+)
 
+User = get_user_model()
 
 class WaitlistSerializer(serializers.ModelSerializer):
     class Meta:
@@ -25,28 +30,26 @@ class WaitlistSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('This email is already on the waitlist.')
         return value
     
-User = get_user_model()
-
 class RegistrationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, style={'input_type': 'password'})
     password_confirm = serializers.CharField(write_only=True, style={'input_type': 'password'})
+    location = serializers.CharField(required=True)
+    agreed_to_terms = serializers.BooleanField(required=True)
 
     class Meta:
-        model = User
-        fields = ('email', 'password', 'password_confirm')
+        model = CustomUser
+        fields = ('email', 'password', 'password_confirm', 'location', 'agreed_to_terms')
 
     def validate(self, data):
-        # Remove password confirmation from the data
+        # Existing password validation
         password = data.get('password')
         password_confirm = data.pop('password_confirm')
 
-        # Validate passwords match
         if password != password_confirm:
             raise serializers.ValidationError({
                 'password_confirm': 'Passwords do not match.'
             })
 
-        # Validate password strength
         try:
             validate_password(password)
         except exceptions.ValidationError as e:
@@ -54,14 +57,24 @@ class RegistrationSerializer(serializers.ModelSerializer):
                 'password': list(e.messages)
             })
 
+        # Terms validation
+        if not data.get('agreed_to_terms'):
+            raise serializers.ValidationError({
+                'agreed_to_terms': 'You must accept the terms and privacy policy.'
+            })
+
+        # Location validation
+        if not data.get('location'):
+            raise serializers.ValidationError({
+                'location': 'Location is required.'
+            })
+
         return data
 
     def create(self, validated_data):
-        # Remove password from validated_data to prevent direct insertion
         password = validated_data.pop('password')
         
-        # Create user instance
-        user = User(**validated_data)
+        user = CustomUser(**validated_data)
         user.set_password(password)
         user.save()
         
@@ -90,24 +103,24 @@ User = get_user_model()
 
 class GoogleAuthSerializer(SocialLoginSerializer):
     token = serializers.CharField(required=True)
+    username = None  # Remove username field
 
     def validate_token(self, value):
-        """
-        Validate the Google OAuth2 token
-        """
         if not value:
             raise serializers.ValidationError("Google token is required")
         return value
 
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        if 'user' in attrs and not attrs['user'].email:
+            raise serializers.ValidationError('Email is required')
+        return attrs
+
     def get_social_login(self, adapter, app, token, response):
-        """
-        Get or create social login
-        """
         request = self.context.get('request')
         social_login = adapter.complete_login(request, app, token, response=response)
         social_login.token = token
         return social_login
-
 
 class CustomUserDetailsSerializer(UserDetailsSerializer):
     class Meta(UserDetailsSerializer.Meta):
@@ -125,16 +138,6 @@ class CustomRegisterSerializer(RegisterSerializer):
             'last_name': self.validated_data.get('last_name', '')
         }
 
-class GoogleAuthSerializer(SocialLoginSerializer):
-    username = None  # Remove username field
-    
-    def validate(self, attrs):
-        attrs = super().validate(attrs)
-        if 'user' in attrs:
-            if not attrs['user'].email:
-                raise serializers.ValidationError('Email is required')
-        return attrs
-    
 class ProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = Product

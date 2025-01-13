@@ -14,7 +14,6 @@ import rest_framework
 from django.template.loader import render_to_string
 from google.oauth2 import id_token
 from google.auth.transport import requests
-
 from django.utils.html import strip_tags
 from django.shortcuts import render
 from .models import Product, Article, Cart, CartItem, Order, WaitlistEntry
@@ -23,15 +22,24 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework import mixins
 from django.conf import settings
 from django.contrib.auth.models import User
-from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
-from rest_framework.response import Response
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
 from dj_rest_auth.registration.views import SocialLoginView
 from django.conf import settings
 from .serializers import GoogleAuthSerializer
+from django.utils.http import urlsafe_base64_encode
+from django.utils.encoding import force_bytes
+from django.template.loader import render_to_string
+from django.core.mail import send_mail
+from .models import EmailVerificationToken
+from django.utils.http import urlsafe_base64_decode
+from django.utils.encoding import force_str
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
+from django.core.exceptions import ObjectDoesNotExist
+import uuid
 
 class WaitlistRateThrottle(AnonRateThrottle):
     rate = '5/minute'  # Limit to 5 requests per minute per IP
@@ -223,14 +231,39 @@ def register(request):
     serializer = RegistrationSerializer(data=request.data)
     if serializer.is_valid():
         try:
-            user = serializer.save()
-            token, _ = Token.objects.get_or_create(user=user)
+            # Create user but set as inactive
+            user = serializer.save(is_active=False)
+            
+            # Create verification token
+            verification_token = EmailVerificationToken.objects.create(user=user)
+            
+            # Create verification URL
+            verification_url = f"{settings.FRONTEND_URL}/verify-email/{urlsafe_base64_encode(force_bytes(user.pk))}/{verification_token.token}"
+            
+            # Prepare email context
+            context = {
+                'verification_url': verification_url,
+                'location': user.location,  # Add location to context
+            }
+            
+            # Send verification email
+            html_message = render_to_string('email_verification.html', context)
+            plain_message = strip_tags(html_message)
+            
+            send_mail(
+                'Verify Your Email - Avantlush',
+                plain_message,
+                settings.DEFAULT_FROM_EMAIL,
+                [user.email],
+                html_message=html_message,
+                fail_silently=False,
+            )
 
             return Response({
                 'success': True,
-                'token': token.key,
+                'message': 'Registration successful. Please check your email to verify your account.',
                 'email': user.email,
-                'message': 'Registration successful'
+                'location': user.location,  # Include location in response
             }, status=status.HTTP_201_CREATED)
 
         except Exception as e:
@@ -245,6 +278,96 @@ def register(request):
         'message': 'Invalid data',
         'errors': serializer.errors
     }, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def verify_email(request, uidb64, token):
+    try:
+        # Decode the user ID
+        uid = force_str(urlsafe_base64_decode(uidb64))
+        user = CustomUser.objects.get(pk=uid)
+        
+        # Get the verification token
+        verification_token = EmailVerificationToken.objects.get(
+            user=user,
+            token=uuid.UUID(token),
+            is_used=False
+        )
+        
+        # Check if token is valid
+        if not verification_token.is_valid:
+            return Response({
+                'success': False,
+                'message': 'Verification link has expired'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Activate user and mark token as used
+        user.is_active = True
+        user.save()
+        
+        verification_token.is_used = True
+        verification_token.save()
+        
+        # Create auth token for automatic login
+        token, _ = Token.objects.get_or_create(user=user)
+        
+        return Response({
+            'success': True,
+            'message': 'Email verified successfully',
+            'token': token.key
+        }, status=status.HTTP_200_OK)
+        
+    except (TypeError, ValueError, OverflowError, ObjectDoesNotExist) as e:
+        return Response({
+            'success': False,
+            'message': 'Invalid verification link'
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def resend_verification_email(request):
+    try:
+        email = request.data.get('email')
+        user = CustomUser.objects.get(email=email, is_active=False)
+        
+        # Delete old token if exists
+        EmailVerificationToken.objects.filter(user=user).delete()
+        
+        # Create new verification token
+        verification_token = EmailVerificationToken.objects.create(user=user)
+        
+        # Create verification URL
+        verification_url = f"{settings.FRONTEND_URL}/verify-email/{urlsafe_base64_encode(force_bytes(user.pk))}/{verification_token.token}"
+        
+        # Prepare email context
+        context = {
+            'verification_url': verification_url,
+        }
+        
+        # Render email template
+        html_message = render_to_string('email_verification.html', context)
+        plain_message = strip_tags(html_message)
+        
+        # Send verification email
+        send_mail(
+            'Verify Your Email - Avantlush',
+            plain_message,
+            settings.DEFAULT_FROM_EMAIL,
+            [user.email],
+            html_message=html_message,
+            fail_silently=False,
+        )
+        
+        return Response({
+            'success': True,
+            'message': 'Verification email resent successfully'
+        }, status=status.HTTP_200_OK)
+        
+    except CustomUser.DoesNotExist:
+        return Response({
+            'success': False,
+            'message': 'No unverified user found with this email'
+        }, status=status.HTTP_404_NOT_FOUND)
 
 @api_view(['POST'])
 def login(request):

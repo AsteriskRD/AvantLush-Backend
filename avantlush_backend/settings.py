@@ -148,6 +148,8 @@ DATABASES = {
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
 
+FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:3000')
+
 # Google OAuth2 settings
 # Instead of hardcoding the callback URL, using an environment variable
 GOOGLE_OAUTH2_CALLBACK_URL = os.getenv('GOOGLE_OAUTH2_CALLBACK_URL', '*')  # Allows any URL in development
