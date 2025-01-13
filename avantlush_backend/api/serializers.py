@@ -6,7 +6,13 @@ class WaitlistSerializer(serializers.ModelSerializer):
     class Meta:
         model = WaitlistEntry
         fields = ['email']
-
+    
+    def validate_email(self, value):
+        # Optional: Add any additional email validation if needed
+        if WaitlistEntry.objects.filter(email=value).exists():
+            raise serializers.ValidationError('This email is already on the waitlist.')
+        return value
+    
 class RegistrationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True, style={'input_type': 'password'})
 
