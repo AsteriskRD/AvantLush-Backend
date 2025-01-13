@@ -68,9 +68,13 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework.authtoken',
     'corsheaders',
+    'rest_framework_simplejwt',
+    'dj_rest_auth',
+    'dj_rest_auth.registration',
     
     # Local
     'avantlush_backend.api',
+
 ]
 
 MIDDLEWARE = [
@@ -125,6 +129,12 @@ ACCOUNT_UNIQUE_EMAIL = True
 
 WSGI_APPLICATION = 'avantlush_backend.wsgi.application'
 
+ACCOUNT_USER_MODEL_USERNAME_FIELD = None
+ACCOUNT_USERNAME_REQUIRED = False
+ACCOUNT_AUTHENTICATION_METHOD = 'email'
+ACCOUNT_EMAIL_REQUIRED = True
+ACCOUNT_UNIQUE_EMAIL = True
+
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
@@ -138,6 +148,18 @@ DATABASES = {
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
 
+# Google OAuth2 settings
+# Instead of hardcoding the callback URL, using an environment variable
+GOOGLE_OAUTH2_CALLBACK_URL = os.getenv('GOOGLE_OAUTH2_CALLBACK_URL', '*')  # Allows any URL in development
+REST_USE_JWT = True
+REST_AUTH_SERIALIZERS = {
+    'LOGIN_SERIALIZER': 'avantlush_backend.api.serializers.GoogleAuthSerializer',
+}
+
+REST_AUTH = {
+    'USER_DETAILS_SERIALIZER': 'avantlush_backend.api.serializers.CustomUserDetailsSerializer',
+    'LOGIN_SERIALIZER': 'avantlush_backend.api.serializers.LoginSerializer',
+}
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
@@ -182,9 +204,12 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+    ),
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated',
     ),
 }
-
 CORS_ALLOW_ALL_ORIGINS = True  # For development only
 
 CORS_ALLOW_METHODS = [
