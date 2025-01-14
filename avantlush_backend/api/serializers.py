@@ -32,41 +32,20 @@ class WaitlistSerializer(serializers.ModelSerializer):
     
 class RegistrationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, style={'input_type': 'password'})
-    password_confirm = serializers.CharField(write_only=True, style={'input_type': 'password'})
-    location = serializers.CharField(required=True)
-    agreed_to_terms = serializers.BooleanField(required=True)
+    location = serializers.CharField(required=False, allow_blank=True)  # Make location optional
 
     class Meta:
         model = CustomUser
-        fields = ('email', 'password', 'password_confirm', 'location', 'agreed_to_terms')
+        fields = ('email', 'password', 'location')
 
     def validate(self, data):
-        # Existing password validation
         password = data.get('password')
-        password_confirm = data.pop('password_confirm')
-
-        if password != password_confirm:
-            raise serializers.ValidationError({
-                'password_confirm': 'Passwords do not match.'
-            })
 
         try:
             validate_password(password)
         except exceptions.ValidationError as e:
             raise serializers.ValidationError({
                 'password': list(e.messages)
-            })
-
-        # Terms validation
-        if not data.get('agreed_to_terms'):
-            raise serializers.ValidationError({
-                'agreed_to_terms': 'You must accept the terms and privacy policy.'
-            })
-
-        # Location validation
-        if not data.get('location'):
-            raise serializers.ValidationError({
-                'location': 'Location is required.'
             })
 
         return data

@@ -23,11 +23,10 @@ class CustomUserManager(BaseUserManager):
 class CustomUser(AbstractUser):
     username = None  # Remove username field
     email = models.EmailField('email address', unique=True)
-    location = models.CharField(max_length=100, default='Nigeria')
-    agreed_to_terms = models.BooleanField(default=False)
-
+    location = models.CharField(max_length=100, null=True, blank=True)  # Make location optional
+    
     USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = []  # Email & Password are required by default
+    REQUIRED_FIELDS = []
     
     objects = CustomUserManager()
 
