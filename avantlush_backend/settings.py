@@ -121,6 +121,24 @@ SITE_ID = 1
 SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = '706871150237-rou6sud1lbelvim0u49bmkcp80k1eudo.apps.googleusercontent.com'
 SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = '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'
 
+# Add these settings
+SOCIALACCOUNT_PROVIDERS = {
+    'google': {
+        'APP': {
+            'client_id': '706871150237-rou6sud1lbelvim0u49bmkcp80k1eudo.apps.googleusercontent.com',
+            'secret': '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',
+            'key': ''
+        },
+        'SCOPE': [
+            'profile',
+            'email',
+        ],
+        'AUTH_PARAMS': {
+            'access_type': 'online',
+        }
+    }
+}
+
 ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_AUTHENTICATION_METHOD = 'email'
 ACCOUNT_USERNAME_REQUIRED = False
@@ -152,16 +170,27 @@ FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:3000')
 
 # Google OAuth2 settings
 # Instead of hardcoding the callback URL, using an environment variable
-GOOGLE_OAUTH2_CALLBACK_URL = os.getenv('GOOGLE_OAUTH2_CALLBACK_URL', '*')  # Allows any URL in development
+
+GOOGLE_OAUTH2_CALLBACK_URL = os.getenv('GOOGLE_OAUTH2_CALLBACK_URL', f'{FRONTEND_URL}/auth/google/callback')
 REST_USE_JWT = True
 REST_AUTH_SERIALIZERS = {
     'LOGIN_SERIALIZER': 'avantlush_backend.api.serializers.GoogleAuthSerializer',
 }
 
 REST_AUTH = {
+    'USE_JWT': True,
+    'JWT_AUTH_COOKIE': 'auth-token',
+    'JWT_AUTH_REFRESH_COOKIE': 'refresh-token',
     'USER_DETAILS_SERIALIZER': 'avantlush_backend.api.serializers.CustomUserDetailsSerializer',
     'LOGIN_SERIALIZER': 'avantlush_backend.api.serializers.LoginSerializer',
 }
+
+# JWT settings
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+}
+
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
