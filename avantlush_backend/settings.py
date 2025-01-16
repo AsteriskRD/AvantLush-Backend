@@ -56,16 +56,20 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'django.contrib.sites',  
+    'django.contrib.sites',
+     
     
     # Allauth
     'allauth',
     'allauth.account',
     'allauth.socialaccount',
     'allauth.socialaccount.providers.google',
+    'allauth.socialaccount.providers.apple',
+
     
     # Third party
     'rest_framework',
+    'django_filters',
     'rest_framework.authtoken',
     'corsheaders',
     'rest_framework_simplejwt',
@@ -139,6 +143,31 @@ SOCIALACCOUNT_PROVIDERS = {
     }
 }
 
+# Apple provider settings
+SOCIALACCOUNT_PROVIDERS = {
+    'apple': {
+        'APP': {
+            'client_id': 'your.apple.client.id',
+            'secret': 'your.apple.secret',
+            'key': 'your.apple.key',
+        },
+        'SCOPE': ['email', 'name'],
+        'TEAM_ID': 'your.apple.team.id',
+        'KEY_ID': 'your.apple.key.id',
+        'CERTIFICATE_KEY': """-----BEGIN PRIVATE KEY-----
+Your private key here
+-----END PRIVATE KEY-----"""
+    }
+}
+
+# Apple OAuth2 settings
+APPLE_OAUTH2_CALLBACK_URL = 'your-callback-url'
+APPLE_OAUTH2_CLIENT_ID = 'your-client-id'
+APPLE_OAUTH2_CLIENT_SECRET = 'your-client-secret'
+APPLE_OAUTH2_KEY_ID = 'your-key-id'
+APPLE_OAUTH2_TEAM_ID = 'your-team-id'
+APPLE_OAUTH2_PRIVATE_KEY = '''your-private-key'''
+
 ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_AUTHENTICATION_METHOD = 'email'
 ACCOUNT_USERNAME_REQUIRED = False
@@ -172,6 +201,7 @@ FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:3000')
 # Instead of hardcoding the callback URL, using an environment variable
 
 GOOGLE_OAUTH2_CALLBACK_URL = os.getenv('GOOGLE_OAUTH2_CALLBACK_URL', f'{FRONTEND_URL}/auth/google/callback')
+APPLE_OAUTH2_CALLBACK_URL = os.getenv('APPLE_OAUTH2_CALLBACK_URL', f'{FRONTEND_URL}/auth/apple/callback')
 REST_USE_JWT = True
 REST_AUTH_SERIALIZERS = {
     'LOGIN_SERIALIZER': 'avantlush_backend.api.serializers.GoogleAuthSerializer',
@@ -240,7 +270,15 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
+    'DEFAULT_FILTER_BACKENDS': [
+        'django_filters.rest_framework.DjangoFilterBackend',
+        'rest_framework.filters.SearchFilter',
+        'rest_framework.filters.OrderingFilter',
+    ],
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 12
 }
+
 CORS_ALLOW_ALL_ORIGINS = True  # For development only
 
 CORS_ALLOW_METHODS = [

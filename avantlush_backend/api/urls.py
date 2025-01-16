@@ -4,7 +4,6 @@ from .views import waitlist_signup, preview_email, register, login, ProductViewS
 from django.urls import path
 from django.urls import path
 from .views import verify_email, resend_verification_email
-
 from .views import (
     waitlist_signup, 
     preview_email, 
@@ -16,7 +15,14 @@ from .views import (
     CartItemViewSet, 
     OrderViewSet,
     GoogleLoginView,
+#    AppleLoginView,
+#    apple_login_view,
+#    apple_auth_callback,
+#    google_login_view,  # Login view for Google OAuth2
+    forgot_password,
+    reset_password,
     google_auth_callback
+    
 )
 router = DefaultRouter()
 router.register(r'products', ProductViewSet, basename='product')
@@ -32,8 +38,12 @@ urlpatterns = [
     path('login/', login, name='login'),
     path('auth/google/', GoogleLoginView.as_view(), name='google_login'),
     path('auth/google/callback/', google_auth_callback, name='google_callback'),
-     path('verify-email/<str:uidb64>/<str:token>/', verify_email, name='verify_email'),
+#    path('auth/apple/', AppleLoginView.as_view(), name='apple_login'),
+#    path('auth/apple/callback/', apple_auth_callback, name='apple_callback'),
+    path('verify-email/<str:uidb64>/<str:token>/', verify_email, name='verify_email'),
     path('resend-verification/', resend_verification_email, name='resend_verification'),
+    path('forgot-password/', forgot_password, name='forgot_password'),
+    path('reset-password/<str:uidb64>/<str:token>/', reset_password, name='reset_password'),
     path('', include(router.urls)),
 ]
 urlpatterns += router.urls

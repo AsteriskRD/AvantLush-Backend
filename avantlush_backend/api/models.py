@@ -56,21 +56,64 @@ class EmailVerificationToken(models.Model):
             self.expires_at = timezone.now() + timezone.timedelta(hours=24)
         super().save(*args, **kwargs)
 
+class PasswordResetToken(models.Model):
+    user = models.OneToOneField('CustomUser', on_delete=models.CASCADE)
+    token = models.UUIDField(default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    is_used = models.BooleanField(default=False)
+
+    def save(self, *args, **kwargs):
+        if not self.expires_at:
+            # Token expires in 1 hour
+            self.expires_at = timezone.now() + timezone.timedelta(hours=1)
+        super().save(*args, **kwargs)
+
     @property
     def is_valid(self):
         return not self.is_used and self.expires_at > timezone.now()
     
-class Product(models.Model):
-    name = models.CharField(max_length=255)
-    description = models.TextField()
-    price = models.DecimalField(max_digits=10, decimal_places=2)
-    image = models.URLField(blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
+    @property
+    def is_valid(self):
+        return not self.is_used and self.expires_at > timezone.now()
+    
+class Category(models.Model):
+    name = models.CharField(max_length=100)
+    slug = models.SlugField(unique=True)
+    parent = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='children')
+    
+    class Meta:
+        verbose_name_plural = 'categories'
+    
     def __str__(self):
         return self.name
 
+# Product model
+class Product(models.Model):
+    
+    name = models.CharField(max_length=255)
+    description = models.TextField()
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, related_name='products')
+    images = models.JSONField(default=list)  # Store multiple image URLs
+    stock_quantity = models.PositiveIntegerField(default=0)
+    slug = models.SlugField(max_length=200, unique=True)
+    is_featured = models.BooleanField(default=False)
+    sku = models.CharField(max_length=100, unique=True)
+    status = models.CharField(max_length=20, choices=[
+        ('active', 'Active'),
+        ('inactive', 'Inactive'),
+        ('out_of_stock', 'Out of Stock')
+    ], default='active')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return self.name
+    
 class Article(models.Model):
     title = models.CharField(max_length=255)
     content = models.TextField()

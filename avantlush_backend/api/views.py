@@ -16,7 +16,7 @@ from google.oauth2 import id_token
 from google.auth.transport import requests
 from django.utils.html import strip_tags
 from django.shortcuts import render
-from .models import Product, Article, Cart, CartItem, Order, WaitlistEntry
+from .models import Product, Article, Cart, CartItem, Order, WaitlistEntry, CustomUser, PasswordResetToken
 from rest_framework import generics, viewsets
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import mixins
@@ -39,6 +39,22 @@ from django.utils.encoding import force_str
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from django.core.exceptions import ObjectDoesNotExist
+from allauth.socialaccount.providers.apple.views import AppleOAuth2Adapter
+from allauth.socialaccount.providers.oauth2.client import OAuth2Client
+from dj_rest_auth.registration.views import SocialLoginView
+from .serializers import GoogleAuthSerializer, AppleAuthSerializer 
+from rest_framework import filters
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.pagination import PageNumberPagination
+from .models import CustomUser
+from .serializers import (
+    WaitlistSerializer, 
+    RegistrationSerializer, 
+    LoginSerializer,
+    
+    ForgotPasswordSerializer,
+    ResetPasswordSerializer
+)
 import uuid
 
 class WaitlistRateThrottle(AnonRateThrottle):
@@ -49,6 +65,21 @@ class GoogleLoginView(SocialLoginView):
     callback_url = settings.GOOGLE_OAUTH2_CALLBACK_URL  # You'll need to add this to settings.py
     client_class = OAuth2Client
     serializer_class = GoogleAuthSerializer
+
+class AppleLoginView(SocialLoginView):
+    adapter_class = AppleOAuth2Adapter
+    callback_url = settings.APPLE_OAUTH2_CALLBACK_URL
+    client_class = OAuth2Client
+    serializer_class = AppleAuthSerializer
+
+    def post(self, request, *args, **kwargs):
+        try:
+            return super().post(request, *args, **kwargs)
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 @api_view(['GET'])
 def api_root(request):
     return Response({
@@ -399,8 +430,148 @@ def login(request):
     }, status=status.HTTP_400_BAD_REQUEST)
 
 class ProductViewSet(viewsets.ModelViewSet):
-    queryset = Product.objects.all()
     serializer_class = ProductSerializer
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter, DjangoFilterBackend]
+    search_fields = ['name', 'description', 'sku']
+    ordering_fields = ['price', 'created_at', 'name']
+    filterset_fields = ['category', 'status', 'is_featured']
+    pagination_class = PageNumberPagination
+
+    def get_queryset(self):
+        queryset = Product.objects.all()
+        
+        # Price range filtering
+        min_price = self.request.query_params.get('min_price')
+        max_price = self.request.query_params.get('max_price')
+        if min_price:
+            queryset = queryset.filter(price__gte=min_price)
+        if max_price:
+            queryset = queryset.filter(price__lte=max_price)
+            
+        # Stock status filtering
+        in_stock = self.request.query_params.get('in_stock')
+        if in_stock is not None:
+            if in_stock.lower() == 'true':
+                queryset = queryset.filter(stock_quantity__gt=0)
+            elif in_stock.lower() == 'false':
+                queryset = queryset.filter(stock_quantity=0)
+                
+        return queryset
+
+    @action(detail=False, methods=['get'])
+    def featured(self, request):
+        featured_products = self.get_queryset().filter(is_featured=True)
+        serializer = self.get_serializer(featured_products, many=True)
+        return Response(serializer.data)
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def forgot_password(request):
+    serializer = ForgotPasswordSerializer(data=request.data)
+    if serializer.is_valid():
+        email = serializer.validated_data['email']
+        try:
+            user = CustomUser.objects.get(email=email)
+            
+            # Delete any existing reset token
+            PasswordResetToken.objects.filter(user=user).delete()
+            
+            # Create new reset token
+            reset_token = PasswordResetToken.objects.create(user=user)
+            
+            # Create reset URL
+            reset_url = f"{settings.FRONTEND_URL}/reset-password/{urlsafe_base64_encode(force_bytes(user.pk))}/{reset_token.token}"
+            
+            # Prepare email context
+            context = {
+                'reset_url': reset_url,
+                'user_email': user.email
+            }
+            
+            # Send reset email
+            html_message = render_to_string('password_reset_email.html', context)
+            plain_message = strip_tags(html_message)
+            
+            send_mail(
+                'Reset Your Password - Avantlush',
+                plain_message,
+                settings.DEFAULT_FROM_EMAIL,
+                [user.email],
+                html_message=html_message,
+                fail_silently=False,
+            )
+            
+            return Response({
+                'success': True,
+                'message': 'Password reset instructions have been sent to your email. Please check both your inbox and spam folder.'
+            }, status=status.HTTP_200_OK)
+            
+        except CustomUser.DoesNotExist:
+            # For security reasons, still return success even if email doesn't exist
+            return Response({
+                'success': True,
+                'message': 'If an account exists with this email address, you will receive instructions shortly on how to reset your password.'
+            }, status=status.HTTP_200_OK)
+    
+    return Response({
+        'success': False,
+        'message': 'Invalid data',
+        'errors': serializer.errors
+    }, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def reset_password(request, uidb64, token):
+    try:
+        # Decode the user ID
+        uid = force_str(urlsafe_base64_decode(uidb64))
+        user = CustomUser.objects.get(pk=uid)
+        
+        # Get the reset token
+        reset_token = PasswordResetToken.objects.get(
+            user=user,
+            token=uuid.UUID(token),
+            is_used=False
+        )
+        
+        # Check if token is valid
+        if not reset_token.is_valid:
+            return Response({
+                'success': False,
+                'message': 'Reset link has expired'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Validate and set new password
+        serializer = ResetPasswordSerializer(data=request.data)
+        if serializer.is_valid():
+            user.set_password(serializer.validated_data['password'])
+            user.save()
+            
+            # Mark token as used
+            reset_token.is_used = True
+            reset_token.save()
+            
+            # Create new auth token
+            Token.objects.filter(user=user).delete()
+            token = Token.objects.create(user=user)
+            
+            return Response({
+                'success': True,
+                'message': 'Password reset successful',
+                'token': token.key
+            }, status=status.HTTP_200_OK)
+            
+        return Response({
+            'success': False,
+            'message': 'Invalid password',
+            'errors': serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+        
+    except (TypeError, ValueError, OverflowError, ObjectDoesNotExist) as e:
+        return Response({
+            'success': False,
+            'message': 'Invalid reset link'
+        }, status=status.HTTP_400_BAD_REQUEST)
 
 class ArticleViewSet(viewsets.ModelViewSet):
     queryset = Article.objects.all()

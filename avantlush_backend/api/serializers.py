@@ -6,10 +6,13 @@ from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
 from dj_rest_auth.registration.serializers import SocialLoginSerializer, RegisterSerializer
 from dj_rest_auth.serializers import UserDetailsSerializer
+from allauth.socialaccount.providers.apple.views import AppleOAuth2Adapter
+from dj_rest_auth.registration.serializers import SocialLoginSerializer
 from .models import (
     CustomUser,  
     WaitlistEntry, 
-    Product, 
+    Product,
+    Category, 
     Article, 
     Cart, 
     CartItem, 
@@ -77,8 +80,18 @@ class LoginSerializer(serializers.Serializer):
                 'email': 'No account found with this email address.'
             })
         return data
+class ForgotPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField()
 
-User = get_user_model()
+class ResetPasswordSerializer(serializers.Serializer):
+    password = serializers.CharField(write_only=True)
+    
+    def validate_password(self, value):
+        try:
+            validate_password(value)
+        except exceptions.ValidationError as e:
+            raise serializers.ValidationError(list(e.messages))
+        return value
 
 class GoogleAuthSerializer(SocialLoginSerializer):
     token = serializers.CharField(required=True)
@@ -87,6 +100,28 @@ class GoogleAuthSerializer(SocialLoginSerializer):
     def validate_token(self, value):
         if not value:
             raise serializers.ValidationError("Google token is required")
+        return value
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        if 'user' in attrs and not attrs['user'].email:
+            raise serializers.ValidationError('Email is required')
+        return attrs
+
+    def get_social_login(self, adapter, app, token, response):
+        request = self.context.get('request')
+        social_login = adapter.complete_login(request, app, token, response=response)
+        social_login.token = token
+        return social_login
+
+class AppleAuthSerializer(SocialLoginSerializer):
+    token = serializers.CharField(required=True)
+    code = serializers.CharField(required=False)  # Apple specific
+    id_token = serializers.CharField(required=False)  # Apple specific
+
+    def validate_token(self, value):
+        if not value:
+            raise serializers.ValidationError("Apple token is required")
         return value
 
     def validate(self, attrs):
@@ -118,9 +153,20 @@ class CustomRegisterSerializer(RegisterSerializer):
         }
 
 class ProductSerializer(serializers.ModelSerializer):
+    category_name = serializers.CharField(source='category.name', read_only=True)
+    
     class Meta:
         model = Product
-        fields = '__all__'
+        fields = [
+            'id', 'name', 'slug', 'description', 'price', 
+            'category', 'category_name', 'images', 'stock_quantity',
+            'is_featured', 'sku', 'status', 'created_at', 'updated_at'
+        ]
+class CategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Category
+        fields = ['id', 'name', 'slug', 'parent']
+
 
 class ArticleSerializer(serializers.ModelSerializer):
     class Meta:
