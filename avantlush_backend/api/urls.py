@@ -4,6 +4,8 @@ from .views import waitlist_signup, preview_email, register, login, ProductViewS
 from django.urls import path
 from django.urls import path
 from .views import verify_email, resend_verification_email
+from django.conf import settings
+from django.conf.urls.static import static
 from .views import (
     waitlist_signup, 
     preview_email, 
@@ -47,3 +49,6 @@ urlpatterns = [
     path('', include(router.urls)),
 ]
 urlpatterns += router.urls
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

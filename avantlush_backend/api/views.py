@@ -46,6 +46,7 @@ from .serializers import GoogleAuthSerializer, AppleAuthSerializer
 from rest_framework import filters
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.permissions import AllowAny, IsAuthenticatedOrReadOnly
 from .models import CustomUser
 from .serializers import (
     WaitlistSerializer, 
@@ -436,6 +437,7 @@ class ProductViewSet(viewsets.ModelViewSet):
     ordering_fields = ['price', 'created_at', 'name']
     filterset_fields = ['category', 'status', 'is_featured']
     pagination_class = PageNumberPagination
+    permission_classes = [IsAuthenticatedOrReadOnly]
 
     def get_queryset(self):
         queryset = Product.objects.all()
