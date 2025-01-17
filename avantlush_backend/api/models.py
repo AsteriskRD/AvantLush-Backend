@@ -2,6 +2,10 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
+from django.db import models
+from django.conf import settings
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 import uuid
 
 class CustomUserManager(BaseUserManager):
@@ -56,6 +60,56 @@ class EmailVerificationToken(models.Model):
             self.expires_at = timezone.now() + timezone.timedelta(hours=24)
         super().save(*args, **kwargs)
 
+class Profile(models.Model):
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='profile')
+    full_name = models.CharField(max_length=255)
+    phone_number = models.CharField(max_length=20, blank=True)  # Make phone optional
+    photo = models.ImageField(upload_to='profile_photos/', null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Profile for {self.user.email}"
+
+    def save(self, *args, **kwargs):
+        # Ensure full_name is populated if empty
+        if not self.full_name:
+            self.full_name = self.user.get_full_name() or self.user.email
+        super().save(*args, **kwargs)
+    @receiver(post_save, sender=settings.AUTH_USER_MODEL)
+    def create_user_profile(sender, instance, created, **kwargs):
+        if created:
+            Profile.objects.create(user=instance)
+
+    @receiver(post_save, sender=settings.AUTH_USER_MODEL)
+    def save_user_profile(sender, instance, **kwargs):
+        try:
+            instance.profile.save()
+        except Profile.DoesNotExist:
+            Profile.objects.create(user=instance)
+class Address(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='addresses')
+    street_address = models.TextField()
+    city = models.CharField(max_length=100)
+    state = models.CharField(max_length=100)
+    country = models.CharField(max_length=100)
+    zip_code = models.CharField(max_length=20)
+    is_default = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name_plural = 'Addresses'
+        ordering = ['-is_default', '-created_at']
+
+    def save(self, *args, **kwargs):
+        if self.is_default:
+            # Set all other addresses of this user to non-default
+            Address.objects.filter(user=self.user).exclude(id=self.id).update(is_default=False)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.street_address}, {self.city}, {self.state}"
+    
 class PasswordResetToken(models.Model):
     user = models.OneToOneField('CustomUser', on_delete=models.CASCADE)
     token = models.UUIDField(default=uuid.uuid4, editable=False)

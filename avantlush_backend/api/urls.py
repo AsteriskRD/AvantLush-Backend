@@ -6,6 +6,9 @@ from django.urls import path
 from .views import verify_email, resend_verification_email
 from django.conf import settings
 from django.conf.urls.static import static
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from .views import ProfileViewSet, AddressViewSet
 from .views import (
     waitlist_signup, 
     preview_email, 
@@ -32,6 +35,9 @@ router.register(r'articles', ArticleViewSet, basename='article')
 router.register(r'cart', CartViewSet, basename='cart')
 router.register(r'cart/items', CartItemViewSet, basename='cartitem')
 router.register(r'orders', OrderViewSet, basename='order')
+router.register(r'profile', ProfileViewSet, basename='profile')
+router.register(r'addresses', AddressViewSet, basename='address')
+
 
 urlpatterns = [
     path('waitlist/signup/', waitlist_signup, name='waitlist_signup'),

@@ -8,6 +8,11 @@ from dj_rest_auth.registration.serializers import SocialLoginSerializer, Registe
 from dj_rest_auth.serializers import UserDetailsSerializer
 from allauth.socialaccount.providers.apple.views import AppleOAuth2Adapter
 from dj_rest_auth.registration.serializers import SocialLoginSerializer
+from rest_framework import serializers
+import re
+from rest_framework import serializers
+from .models import Profile, Address
+from .utils import VALID_COUNTRY_CODES, validate_phone_format, format_phone_number
 from .models import (
     CustomUser,  
     WaitlistEntry, 
@@ -17,8 +22,10 @@ from .models import (
     Cart, 
     CartItem, 
     Order, 
-    OrderItem
-)
+    OrderItem,
+    Profile,  
+    Address
+)   
 
 User = get_user_model()
 
@@ -151,6 +158,95 @@ class CustomRegisterSerializer(RegisterSerializer):
             'first_name': self.validated_data.get('first_name', ''),
             'last_name': self.validated_data.get('last_name', '')
         }
+
+class ProfileSerializer(serializers.ModelSerializer):
+    email = serializers.EmailField(source='user.email', read_only=True)
+    photo_url = serializers.SerializerMethodField()
+    country_code = serializers.CharField(max_length=4, required=True)
+    formatted_phone_number = serializers.SerializerMethodField()
+    available_country_codes = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Profile
+        fields = [
+            'id', 'email', 'full_name', 'phone_number', 
+            'country_code', 'formatted_phone_number', 
+            'photo', 'photo_url', 'updated_at',
+            'available_country_codes'
+        ]
+        read_only_fields = ['id', 'email', 'updated_at', 'formatted_phone_number', 'available_country_codes']
+    
+    def get_photo_url(self, obj):
+        if obj.photo:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.photo.url)
+            return obj.photo.url
+        return None
+    
+    def get_formatted_phone_number(self, obj):
+        if obj.phone_number and hasattr(obj, 'country_code'):
+            return format_phone_number(obj.country_code, obj.phone_number)
+        return None
+    
+    def get_available_country_codes(self, obj):
+        return {code: name for code, name in VALID_COUNTRY_CODES.items()}
+    
+    def validate(self, data):
+        country_code = data.get('country_code')
+        phone_number = data.get('phone_number')
+        
+        if country_code and phone_number:
+            is_valid, error_message = validate_phone_format(country_code, phone_number)
+            if not is_valid:
+                raise serializers.ValidationError({'phone_number': error_message})
+            
+            # Format the phone number before saving
+            data['phone_number'] = format_phone_number(country_code, phone_number)
+        
+        return data
+    
+    def validate_country_code(self, value):
+        if not value.startswith('+'):
+            raise serializers.ValidationError("Country code must start with '+'")
+        
+        if value not in VALID_COUNTRY_CODES:
+            raise serializers.ValidationError(
+                f"Invalid country code. Valid options are: {', '.join(VALID_COUNTRY_CODES.keys())}"
+            )
+        return value
+    
+class AddressSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Address
+        fields = ['id', 'street_address', 'city', 'state', 'country',
+                 'zip_code', 'is_default', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+    
+    def validate_zip_code(self, value):
+        if not re.match(r'^\d{5}(-\d{4})?$', value):
+            raise serializers.ValidationError("Invalid zip code format")
+        return value
+    
+    def validate_street_address(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("Street address cannot be empty")
+        return value
+    
+    def validate_city(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("City cannot be empty")
+        return value
+    
+    def validate_state(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("State cannot be empty")
+        return value
+    
+    def validate_country(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("Country cannot be empty")
+        return value
 
 class ProductSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source='category.name', read_only=True)

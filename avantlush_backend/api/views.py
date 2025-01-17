@@ -48,6 +48,18 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import AllowAny, IsAuthenticatedOrReadOnly
 from .models import CustomUser
+from rest_framework import viewsets, status
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from django.shortcuts import get_object_or_404
+from .serializers import ProfileSerializer
+from .serializers import AddressSerializer
+from .models import Profile
+from rest_framework.response import Response
+from .models import Profile, Address
+from .serializers import ProfileSerializer, AddressSerializer
+
 from .serializers import (
     WaitlistSerializer, 
     RegistrationSerializer, 
@@ -575,6 +587,124 @@ def reset_password(request, uidb64, token):
             'message': 'Invalid reset link'
         }, status=status.HTTP_400_BAD_REQUEST)
 
+class ProfileViewSet(viewsets.ModelViewSet):
+    serializer_class = ProfileSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        return Profile.objects.filter(user=self.request.user)
+    
+    def update(self, request, *args, **kwargs):
+        try:
+            response = super().update(request, *args, **kwargs)
+            return Response({
+                'status': 'success',
+                'message': 'Profile updated successfully',
+                'data': response.data
+            }, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({
+                'status': 'error',
+                'message': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['POST'])
+    def upload_photo(self, request):
+        try:
+            profile = request.user.profile
+            photo = request.FILES.get('photo')
+            if not photo:
+                return Response({
+                    'status': 'error',
+                    'message': 'No photo provided'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            profile.photo = photo
+            profile.save()
+            
+            return Response({
+                'status': 'success',
+                'message': 'Photo uploaded successfully',
+                'data': ProfileSerializer(profile, context={'request': request}).data
+            })
+        except Exception as e:
+            return Response({
+                'status': 'error',
+                'message': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['DELETE'])
+    def remove_photo(self, request):
+        try:
+            profile = request.user.profile
+            if profile.photo:
+                profile.photo.delete()
+                profile.save()
+            
+            return Response({
+                'status': 'success',
+                'message': 'Photo removed successfully'
+            })
+        except Exception as e:
+            return Response({
+                'status': 'error',
+                'message': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+class AddressViewSet(viewsets.ModelViewSet):
+    serializer_class = AddressSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        return Address.objects.filter(user=self.request.user)
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+    
+    def create(self, request, *args, **kwargs):
+        try:
+            response = super().create(request, *args, **kwargs)
+            return Response({
+                'status': 'success',
+                'message': 'Address added successfully',
+                'data': response.data
+            }, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            return Response({
+                'status': 'error',
+                'message': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+    
+    def update(self, request, *args, **kwargs):
+        try:
+            response = super().update(request, *args, **kwargs)
+            return Response({
+                'status': 'success',
+                'message': 'Address updated successfully',
+                'data': response.data
+            }, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({
+                'status': 'error',
+                'message': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['POST'])
+    def set_default(self, request, pk=None):
+        try:
+            address = self.get_object()
+            address.is_default = True
+            address.save()
+            return Response({
+                'status': 'success',
+                'message': 'Address set as default successfully'
+            })
+        except Exception as e:
+            return Response({
+                'status': 'error',
+                'message': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
 class ArticleViewSet(viewsets.ModelViewSet):
     queryset = Article.objects.all()
     serializer_class = ArticleSerializer
