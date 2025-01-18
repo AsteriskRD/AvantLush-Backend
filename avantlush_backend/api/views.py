@@ -275,8 +275,11 @@ def register(request):
     serializer = RegistrationSerializer(data=request.data)
     if serializer.is_valid():
         try:
-            # Create user but set as inactive
+            # Create user but set as inactive until email verification
             user = serializer.save(is_active=False)
+            
+            # Log the user creation
+            print(f"User created: {user.email}, Password hash: {user.password[:20]}...")
             
             # Create verification token
             verification_token = EmailVerificationToken.objects.create(user=user)
@@ -284,39 +287,49 @@ def register(request):
             # Create verification URL
             verification_url = f"{settings.FRONTEND_URL}/verify-email/{urlsafe_base64_encode(force_bytes(user.pk))}/{verification_token.token}"
             
+            # Log the verification URL
+            print(f"Verification URL created: {verification_url}")
+            
             # Prepare email context
             context = {
                 'verification_url': verification_url,
-                'location': user.location,  # Add location to context
+                'location': user.location,
             }
             
             # Send verification email
-            html_message = render_to_string('email_verification.html', context)
-            plain_message = strip_tags(html_message)
-            
-            send_mail(
-                'Verify Your Email - Avantlush',
-                plain_message,
-                settings.DEFAULT_FROM_EMAIL,
-                [user.email],
-                html_message=html_message,
-                fail_silently=False,
-            )
-
+            try:
+                html_message = render_to_string('email_verification.html', context)
+                plain_message = strip_tags(html_message)
+                
+                send_mail(
+                    'Verify Your Email - Avantlush',
+                    plain_message,
+                    settings.DEFAULT_FROM_EMAIL,
+                    [user.email],
+                    html_message=html_message,
+                    fail_silently=False,
+                )
+                print(f"Verification email sent to: {user.email}")
+            except Exception as email_error:
+                print(f"Email sending failed: {str(email_error)}")
+                # Don't raise the error, still return success response
+                
             return Response({
                 'success': True,
                 'message': 'Registration successful. Please check your email to verify your account.',
                 'email': user.email,
-                'location': user.location,  # Include location in response
+                'location': user.location,
             }, status=status.HTTP_201_CREATED)
 
         except Exception as e:
+            print(f"Registration failed: {str(e)}")
             return Response({
                 'success': False,
                 'message': 'Registration failed',
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
+    print(f"Registration validation errors: {serializer.errors}")
     return Response({
         'success': False,
         'message': 'Invalid data',
@@ -558,21 +571,33 @@ def reset_password(request, uidb64, token):
         # Validate and set new password
         serializer = ResetPasswordSerializer(data=request.data)
         if serializer.is_valid():
-            user.set_password(serializer.validated_data['password'])
+            # Important: Use set_password() to properly hash the password
+            new_password = serializer.validated_data['password']
+            user.set_password(new_password)
             user.save()
             
             # Mark token as used
             reset_token.is_used = True
             reset_token.save()
             
-            # Create new auth token
+            # Delete any existing auth tokens for this user
             Token.objects.filter(user=user).delete()
-            token = Token.objects.create(user=user)
+            
+            # Create new auth token
+            new_token = Token.objects.create(user=user)
+            
+            # Try to authenticate with new password to verify it works
+            auth_user = authenticate(email=user.email, password=new_password)
+            if auth_user is None:
+                return Response({
+                    'success': False,
+                    'message': 'Password reset failed - authentication error'
+                }, status=status.HTTP_400_BAD_REQUEST)
             
             return Response({
                 'success': True,
                 'message': 'Password reset successful',
-                'token': token.key
+                'token': new_token.key
             }, status=status.HTTP_200_OK)
             
         return Response({
@@ -584,9 +609,9 @@ def reset_password(request, uidb64, token):
     except (TypeError, ValueError, OverflowError, ObjectDoesNotExist) as e:
         return Response({
             'success': False,
-            'message': 'Invalid reset link'
+            'message': f'Invalid reset link: {str(e)}'
         }, status=status.HTTP_400_BAD_REQUEST)
-
+    
 class ProfileViewSet(viewsets.ModelViewSet):
     serializer_class = ProfileSerializer
     permission_classes = [IsAuthenticated]

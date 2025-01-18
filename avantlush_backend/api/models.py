@@ -154,6 +154,11 @@ class Product(models.Model):
     slug = models.SlugField(max_length=200, unique=True)
     is_featured = models.BooleanField(default=False)
     sku = models.CharField(max_length=100, unique=True)
+    category = models.ForeignKey(Category, on_delete=models.CASCADE)
+    name = models.CharField(max_length=255)
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    rating = models.DecimalField(max_digits=3, decimal_places=2, default=0)
+    num_ratings = models.IntegerField(default=0)
     status = models.CharField(max_length=20, choices=[
         ('active', 'Active'),
         ('inactive', 'Inactive'),
