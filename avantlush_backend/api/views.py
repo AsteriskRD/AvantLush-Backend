@@ -521,11 +521,11 @@ def forgot_password(request):
             }, status=status.HTTP_200_OK)
             
         except CustomUser.DoesNotExist:
-            # For security reasons, still return success even if email doesn't exist
+            # Return error message when email doesn't exist
             return Response({
-                'success': True,
-                'message': 'If an account exists with this email address, you will receive instructions shortly on how to reset your password.'
-            }, status=status.HTTP_200_OK)
+                'success': False,
+                'message': 'Your account does not exist'
+            }, status=status.HTTP_404_NOT_FOUND)
     
     return Response({
         'success': False,
