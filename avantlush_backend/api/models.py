@@ -55,6 +55,9 @@ class EmailVerificationToken(models.Model):
         if not self.expires_at:
             self.expires_at = timezone.now() + timezone.timedelta(hours=24)
         super().save(*args, **kwargs)
+    @property
+    def is_valid(self):
+        return not self.is_used and self.expires_at > timezone.now()
 
 class Profile(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='profile')

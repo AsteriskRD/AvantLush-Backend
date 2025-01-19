@@ -278,17 +278,11 @@ def register(request):
             # Create user but set as inactive until email verification
             user = serializer.save(is_active=False)
             
-            # Log the user creation
-            print(f"User created: {user.email}, Password hash: {user.password[:20]}...")
-            
             # Create verification token
             verification_token = EmailVerificationToken.objects.create(user=user)
             
-            # Create verification URL
-            verification_url = f"{settings.FRONTEND_URL}/verify-email/{urlsafe_base64_encode(force_bytes(user.pk))}/{verification_token.token}"
-            
-            # Log the verification URL
-            print(f"Verification URL created: {verification_url}")
+            # Create verification URL - Update the order of parameters
+            verification_url = f"{settings.FRONTEND_URL}/verify-email/{verification_token.token}/{urlsafe_base64_encode(force_bytes(user.pk))}"
             
             # Prepare email context
             context = {
@@ -309,10 +303,9 @@ def register(request):
                     html_message=html_message,
                     fail_silently=False,
                 )
-                print(f"Verification email sent to: {user.email}")
+                
             except Exception as email_error:
                 print(f"Email sending failed: {str(email_error)}")
-                # Don't raise the error, still return success response
                 
             return Response({
                 'success': True,
@@ -329,7 +322,6 @@ def register(request):
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
-    print(f"Registration validation errors: {serializer.errors}")
     return Response({
         'success': False,
         'message': 'Invalid data',
@@ -345,13 +337,19 @@ def verify_email(request, uidb64, token):
         user = CustomUser.objects.get(pk=uid)
         
         # Get the verification token
-        verification_token = EmailVerificationToken.objects.get(
-            user=user,
-            token=uuid.UUID(token),
-            is_used=False
-        )
+        try:
+            verification_token = EmailVerificationToken.objects.get(
+                user=user,
+                token=token,  # Remove UUID conversion
+                is_used=False
+            )
+        except EmailVerificationToken.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': 'Invalid verification token'
+            }, status=status.HTTP_400_BAD_REQUEST)
         
-        # Check if token is valid
+        # Check if token is valid (not expired)
         if not verification_token.is_valid:
             return Response({
                 'success': False,
@@ -374,12 +372,13 @@ def verify_email(request, uidb64, token):
             'token': token.key
         }, status=status.HTTP_200_OK)
         
-    except (TypeError, ValueError, OverflowError, ObjectDoesNotExist) as e:
+    except (TypeError, ValueError, OverflowError, CustomUser.DoesNotExist) as e:
+        print(f"Verification error: {str(e)}")  # Add logging
         return Response({
             'success': False,
             'message': 'Invalid verification link'
         }, status=status.HTTP_400_BAD_REQUEST)
-
+    
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def resend_verification_email(request):
