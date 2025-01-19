@@ -2,10 +2,7 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
-from django.db import models
 from django.conf import settings
-from django.db.models.signals import post_save
-from django.dispatch import receiver
 import uuid
 
 class CustomUserManager(BaseUserManager):
@@ -25,9 +22,9 @@ class CustomUserManager(BaseUserManager):
         return self.create_user(email, password, **extra_fields)
 
 class CustomUser(AbstractUser):
-    username = None  # Remove username field
+    username = None
     email = models.EmailField('email address', unique=True)
-    location = models.CharField(max_length=100, null=True, blank=True)  # Make location optional
+    location = models.CharField(max_length=100, null=True, blank=True)
     
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = []
@@ -56,14 +53,13 @@ class EmailVerificationToken(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.expires_at:
-            # Token expires in 24 hours
             self.expires_at = timezone.now() + timezone.timedelta(hours=24)
         super().save(*args, **kwargs)
 
 class Profile(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='profile')
     full_name = models.CharField(max_length=255)
-    phone_number = models.CharField(max_length=20, blank=True)  # Make phone optional
+    phone_number = models.CharField(max_length=20, blank=True)
     photo = models.ImageField(upload_to='profile_photos/', null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -71,22 +67,10 @@ class Profile(models.Model):
         return f"Profile for {self.user.email}"
 
     def save(self, *args, **kwargs):
-        # Ensure full_name is populated if empty
         if not self.full_name:
             self.full_name = self.user.get_full_name() or self.user.email
         super().save(*args, **kwargs)
-@receiver(post_save, sender=settings.AUTH_USER_MODEL)
-def create_user_profile(sender, instance, created, **kwargs):
-    if created:
-        Profile.objects.create(user=instance)
 
-@receiver(post_save, sender=settings.AUTH_USER_MODEL)
-def save_user_profile(sender, instance, **kwargs):
-    try:
-        instance.profile.save()
-    except Profile.DoesNotExist:
-        Profile.objects.create(user=instance)
-        
 class Address(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='addresses')
     street_address = models.TextField()
@@ -104,13 +88,12 @@ class Address(models.Model):
 
     def save(self, *args, **kwargs):
         if self.is_default:
-            # Set all other addresses of this user to non-default
             Address.objects.filter(user=self.user).exclude(id=self.id).update(is_default=False)
         super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.street_address}, {self.city}, {self.state}"
-    
+
 class PasswordResetToken(models.Model):
     user = models.OneToOneField('CustomUser', on_delete=models.CASCADE)
     token = models.UUIDField(default=uuid.uuid4, editable=False)
@@ -120,18 +103,13 @@ class PasswordResetToken(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.expires_at:
-            # Token expires in 1 hour
             self.expires_at = timezone.now() + timezone.timedelta(hours=1)
         super().save(*args, **kwargs)
 
     @property
     def is_valid(self):
         return not self.is_used and self.expires_at > timezone.now()
-    
-    @property
-    def is_valid(self):
-        return not self.is_used and self.expires_at > timezone.now()
-    
+
 class Category(models.Model):
     name = models.CharField(max_length=100)
     slug = models.SlugField(unique=True)
@@ -143,28 +121,25 @@ class Category(models.Model):
     def __str__(self):
         return self.name
 
-# Product model
 class Product(models.Model):
+    STATUS_CHOICES = [
+        ('active', 'Active'),
+        ('inactive', 'Inactive'),
+        ('out_of_stock', 'Out of Stock')
+    ]
     
+    category = models.ForeignKey(Category, on_delete=models.CASCADE)
     name = models.CharField(max_length=255)
     description = models.TextField()
     price = models.DecimalField(max_digits=10, decimal_places=2)
-    category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, related_name='products')
-    images = models.JSONField(default=list)  # Store multiple image URLs
+    images = models.JSONField(default=list)
     stock_quantity = models.PositiveIntegerField(default=0)
     slug = models.SlugField(max_length=200, unique=True)
     is_featured = models.BooleanField(default=False)
     sku = models.CharField(max_length=100, unique=True)
-    category = models.ForeignKey(Category, on_delete=models.CASCADE)
-    name = models.CharField(max_length=255)
-    price = models.DecimalField(max_digits=10, decimal_places=2)
     rating = models.DecimalField(max_digits=3, decimal_places=2, default=0)
     num_ratings = models.IntegerField(default=0)
-    status = models.CharField(max_length=20, choices=[
-        ('active', 'Active'),
-        ('inactive', 'Inactive'),
-        ('out_of_stock', 'Out of Stock')
-    ], default='active')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -173,7 +148,7 @@ class Product(models.Model):
 
     def __str__(self):
         return self.name
-    
+
 class Article(models.Model):
     title = models.CharField(max_length=255)
     content = models.TextField()
