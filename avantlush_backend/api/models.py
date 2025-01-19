@@ -75,17 +75,18 @@ class Profile(models.Model):
         if not self.full_name:
             self.full_name = self.user.get_full_name() or self.user.email
         super().save(*args, **kwargs)
-    @receiver(post_save, sender=settings.AUTH_USER_MODEL)
-    def create_user_profile(sender, instance, created, **kwargs):
-        if created:
-            Profile.objects.create(user=instance)
+@receiver(post_save, sender=settings.AUTH_USER_MODEL)
+def create_user_profile(sender, instance, created, **kwargs):
+    if created:
+        Profile.objects.create(user=instance)
 
-    @receiver(post_save, sender=settings.AUTH_USER_MODEL)
-    def save_user_profile(sender, instance, **kwargs):
-        try:
-            instance.profile.save()
-        except Profile.DoesNotExist:
-            Profile.objects.create(user=instance)
+@receiver(post_save, sender=settings.AUTH_USER_MODEL)
+def save_user_profile(sender, instance, **kwargs):
+    try:
+        instance.profile.save()
+    except Profile.DoesNotExist:
+        Profile.objects.create(user=instance)
+        
 class Address(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='addresses')
     street_address = models.TextField()

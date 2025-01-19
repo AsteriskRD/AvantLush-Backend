@@ -42,11 +42,23 @@ class WaitlistSerializer(serializers.ModelSerializer):
     
 class RegistrationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, style={'input_type': 'password'})
-    location = serializers.CharField(required=False, allow_blank=True)  # Make location optional
+    location = serializers.CharField(required=False, allow_blank=True)
 
     class Meta:
         model = CustomUser
         fields = ('email', 'password', 'location')
+
+    def validate_email(self, value):
+        # Log the email being validated
+        print(f"Validating email: {value}")
+        
+        # Check if user exists
+        exists = CustomUser.objects.filter(email__iexact=value).exists()
+        print(f"User exists: {exists}")
+        
+        if exists:
+            raise serializers.ValidationError("User with this email address already exists.")
+        return value
 
     def validate(self, data):
         password = data.get('password')
@@ -61,6 +73,7 @@ class RegistrationSerializer(serializers.ModelSerializer):
         return data
 
     def create(self, validated_data):
+        print(f"Creating user with data: {validated_data}")
         password = validated_data.pop('password')
         
         user = CustomUser(**validated_data)
