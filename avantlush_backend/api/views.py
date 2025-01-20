@@ -311,6 +311,7 @@ def register(request):
                 'success': True,
                 'message': 'Registration successful. Please check your email to verify your account.',
                 'email': user.email,
+                'id': str(user.uuid),
                 'location': user.location,
             }, status=status.HTTP_201_CREATED)
 
@@ -439,6 +440,7 @@ def login(request):
             return Response({
                 'success': True,
                 'token': token.key,
+                'id': user.id,
                 'email': user.email,
                 'message': 'Login successful'
             }, status=status.HTTP_200_OK)

@@ -46,7 +46,9 @@ class RegistrationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CustomUser
-        fields = ('email', 'password', 'location')
+        fields = ('email', 'password', 'location', 'uuid')
+        read_only_fields = ('uuid',)
+
 
     def validate_email(self, value):
         # Log the email being validated

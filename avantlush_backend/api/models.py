@@ -25,6 +25,7 @@ class CustomUser(AbstractUser):
     username = None
     email = models.EmailField('email address', unique=True)
     location = models.CharField(max_length=100, null=True, blank=True)
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True) 
     
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = []
