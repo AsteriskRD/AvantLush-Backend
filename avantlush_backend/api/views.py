@@ -556,7 +556,7 @@ def reset_password(request, uidb64, token):
         # Get the reset token
         reset_token = PasswordResetToken.objects.get(
             user=user,
-            token=uuid.UUID(token),
+        #    token=uuid.UUID(token),
             is_used=False
         )
         
