@@ -48,7 +48,6 @@ if RENDER_EXTERNAL_HOSTNAME:
     ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
 
 # Application definition
-
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -57,28 +56,25 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'django.contrib.sites',
+    
+    # Local
+    'avantlush_backend.api',  
      
-    
-    # Allauth
-    'allauth',
-    'allauth.account',
-    'allauth.socialaccount',
-    'allauth.socialaccount.providers.google',
-    'allauth.socialaccount.providers.apple',
-
-    
     # Third party
     'rest_framework',
     'django_filters',
     'rest_framework.authtoken',
     'corsheaders',
     'rest_framework_simplejwt',
+    
+    # Allauth and registration
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
+    'allauth.socialaccount.providers.google',
+    'allauth.socialaccount.providers.apple',
     'dj_rest_auth',
     'dj_rest_auth.registration',
-    
-    # Local
-    'avantlush_backend.api',
-
 ]
 
 MIDDLEWARE = [
