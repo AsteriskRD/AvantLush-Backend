@@ -59,7 +59,10 @@ from .models import Profile
 from rest_framework.response import Response
 from .models import Profile, Address
 from .serializers import ProfileSerializer, AddressSerializer
-
+from .models import Wishlist, WishlistItem, ProductRecommendation
+from .serializers import WishlistSerializer, WishlistItemSerializer, ProductRecommendationSerializer
+from rest_framework import viewsets, filters
+from django_filters.rest_framework import DjangoFilterBackend
 from .serializers import (
     WaitlistSerializer, 
     RegistrationSerializer, 
@@ -736,7 +739,6 @@ class ArticleViewSet(viewsets.ModelViewSet):
     serializer_class = ArticleSerializer
 
 class CartViewSet(viewsets.ModelViewSet):
-    queryset = Cart.objects.all()
     serializer_class = CartSerializer
     permission_classes = [IsAuthenticated]
 
@@ -746,20 +748,57 @@ class CartViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        cart = self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response(serializer.data)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        self.perform_destroy(instance)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 class CartItemViewSet(viewsets.ModelViewSet):
-    queryset = CartItem.objects.all()
     serializer_class = CartItemSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         return CartItem.objects.filter(cart__user=self.request.user)
 
-class OrderViewSet(viewsets.GenericViewSet,
-                   mixins.CreateModelMixin,
-                   mixins.RetrieveModelMixin,
-                   mixins.ListModelMixin,
-                   mixins.UpdateModelMixin):
-    queryset = Order.objects.all()
+    def perform_create(self, serializer):
+        serializer.save(cart=self.request.user.cart)
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        cart_item = self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response(serializer.data)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        self.perform_destroy(instance)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+    
+class OrderViewSet(viewsets.ModelViewSet):
     serializer_class = OrderSerializer
     permission_classes = [IsAuthenticated]
 
@@ -769,15 +808,74 @@ class OrderViewSet(viewsets.GenericViewSet,
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        order = self.perform_create(serializer)
+
+        # cross-sell products to the order
+        cart_items = CartItem.objects.filter(cart__user=request.user)
+        for cart_item in cart_items:
+            recommendations = ProductRecommendation.objects.filter(product=cart_item.product)
+            for recommendation in recommendations:
+                OrderItem.objects.create(
+                    order=order,
+                    product=recommendation.recommended_product,
+                    quantity=1,
+                    price=recommendation.recommended_product.price
+                )
+
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response(serializer.data)
+
     @action(detail=True, methods=['patch'])
     def update_status(self, request, pk=None):
-        try:
-            order = self.get_queryset().get(pk=pk)
-        except Order.DoesNotExist:
-            return Response(status=status.HTTP_404_NOT_FOUND)
-
+        order = self.get_object()
         serializer = self.get_serializer(order, data={'status': request.data.get('status')}, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+    
+# Product Search and Filtering Views
+class ProductSearchView(generics.ListAPIView):
+    serializer_class = ProductSerializer
+    filter_backends = [filters.SearchFilter, DjangoFilterBackend]
+    search_fields = ['name', 'description', 'sku', 'tags__name', 'categories__name']
+    filterset_fields = ['category', 'tags', 'is_featured', 'status']
+
+# Wishlist Views
+class WishlistViewSet(viewsets.ModelViewSet):
+    serializer_class = WishlistSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Wishlist.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+class WishlistItemViewSet(viewsets.ModelViewSet):
+    serializer_class = WishlistItemSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return WishlistItem.objects.filter(wishlist__user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(wishlist=self.request.user.wishlist)
+
+# Product Recommendation View
+class ProductRecommendationView(generics.ListAPIView):
+    serializer_class = ProductRecommendationSerializer
+
+    def get_queryset(self):
+        product_id = self.kwargs['product_id']
+        return ProductRecommendation.objects.filter(product_id=product_id)

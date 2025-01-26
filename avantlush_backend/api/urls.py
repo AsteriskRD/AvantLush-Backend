@@ -9,6 +9,7 @@ from django.conf.urls.static import static
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import ProfileViewSet, AddressViewSet
+from .views import ProductSearchView, ProductRecommendationView
 from .views import (
     waitlist_signup, 
     preview_email, 
@@ -26,7 +27,9 @@ from .views import (
 #    google_login_view,  # Login view for Google OAuth2
     forgot_password,
     reset_password,
-    google_auth_callback
+    google_auth_callback,
+    ProductViewSet, ArticleViewSet, CartViewSet, CartItemViewSet, OrderViewSet,
+    WishlistViewSet, WishlistItemViewSet
     
 )
 router = DefaultRouter()
@@ -37,6 +40,9 @@ router.register(r'cart/items', CartItemViewSet, basename='cartitem')
 router.register(r'orders', OrderViewSet, basename='order')
 router.register(r'profile', ProfileViewSet, basename='profile')
 router.register(r'addresses', AddressViewSet, basename='address')
+router.register(r'wishlist', WishlistViewSet, basename='wishlist')
+router.register(r'wishlist-items', WishlistItemViewSet, basename='wishlist-item')
+
 
 
 urlpatterns = [
@@ -52,6 +58,8 @@ urlpatterns = [
     path('resend-verification/', resend_verification_email, name='resend_verification'),
     path('forgot-password/', forgot_password, name='forgot_password'),
     path('reset-password/<str:uidb64>/<str:token>/', reset_password, name='reset_password'),
+    path('products/search/', ProductSearchView.as_view(), name='product-search'),
+    path('products/<int:product_id>/recommendations/', ProductRecommendationView.as_view(), name='product-recommendations'),
     path('', include(router.urls)),
 ]
 urlpatterns += router.urls

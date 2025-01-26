@@ -13,6 +13,7 @@ import re
 from rest_framework import serializers
 from .models import Profile, Address
 from .utils import VALID_COUNTRY_CODES, validate_phone_format, format_phone_number
+from .models import Wishlist, WishlistItem, ProductRecommendation
 from .models import (
     CustomUser,  
     WaitlistEntry, 
@@ -309,3 +310,18 @@ class OrderSerializer(serializers.ModelSerializer):
         model = Order
         fields = ['id', 'user', 'items', 'status', 'created_at', 'updated_at']
         read_only_fields = ['id', 'user', 'created_at', 'updated_at']
+
+class WishlistSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Wishlist
+        fields = ['id', 'user', 'products']
+
+class WishlistItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WishlistItem
+        fields = ['id', 'wishlist', 'product', 'added_at']
+
+class ProductRecommendationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProductRecommendation
+        fields = ['id', 'product', 'recommended_product', 'score']

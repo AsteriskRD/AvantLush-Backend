@@ -59,11 +59,13 @@ class EmailVerificationTokenAdmin(admin.ModelAdmin):
 # Product Admin
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
-    list_display = ('name', 'price', 'category', 'stock_quantity', 'status', 'is_featured')
-    list_filter = ('category', 'status', 'is_featured')
-    search_fields = ('name', 'description', 'sku')
-    ordering = ('-created_at',)
+    def product_category(self, obj):
+        return obj.category.name if obj.category else '-'
+    product_category.short_description = 'Category'
 
+    list_display = ('name', 'price', 'product_category', 'stock_quantity', 'status', 'is_featured')
+    list_filter = ('status', 'is_featured', 'category')
+    search_fields = ('name', 'description', 'sku')
 # Article Admin
 @admin.register(Article)
 class ArticleAdmin(admin.ModelAdmin):
