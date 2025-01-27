@@ -65,7 +65,6 @@ urlpatterns = [
     path('products/search/', ProductSearchView.as_view(), name='product-search'),
     path('products/<int:product_id>/recommendations/', ProductRecommendationView.as_view(), name='product-recommendations'),
     path('', include(router.urls)),
-    path('', include(router.urls)),
 ]
 urlpatterns += router.urls
 
