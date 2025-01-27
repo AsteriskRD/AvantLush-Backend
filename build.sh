@@ -8,6 +8,7 @@ pip install -r requirements.txt
 
 echo "Running database migrations..."
 python manage.py migrate
+python manage.py populate_products
 
 echo "Collecting static files..."
 python manage.py collectstatic --no-input
