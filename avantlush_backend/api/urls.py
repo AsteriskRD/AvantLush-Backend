@@ -10,6 +10,9 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import ProfileViewSet, AddressViewSet
 from .views import ProductSearchView, ProductRecommendationView
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from .views import ReviewViewSet
 from .views import (
     waitlist_signup, 
     preview_email, 
@@ -42,9 +45,10 @@ router.register(r'profile', ProfileViewSet, basename='profile')
 router.register(r'addresses', AddressViewSet, basename='address')
 router.register(r'wishlist', WishlistViewSet, basename='wishlist')
 router.register(r'wishlist-items', WishlistItemViewSet, basename='wishlist-item')
+router.register(r'reviews', ReviewViewSet, basename='review')
 
 
-
+# URL patterns for Django Rest Framework API
 urlpatterns = [
     path('waitlist/signup/', waitlist_signup, name='waitlist_signup'),
     path('preview_email/', preview_email, name='preview_email'),
@@ -60,6 +64,7 @@ urlpatterns = [
     path('reset-password/<str:uidb64>/<str:token>/', reset_password, name='reset_password'),
     path('products/search/', ProductSearchView.as_view(), name='product-search'),
     path('products/<int:product_id>/recommendations/', ProductRecommendationView.as_view(), name='product-recommendations'),
+    path('', include(router.urls)),
     path('', include(router.urls)),
 ]
 urlpatterns += router.urls

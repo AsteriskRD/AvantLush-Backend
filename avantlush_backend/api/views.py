@@ -63,6 +63,14 @@ from .models import Wishlist, WishlistItem, ProductRecommendation
 from .serializers import WishlistSerializer, WishlistItemSerializer, ProductRecommendationSerializer
 from rest_framework import viewsets, filters
 from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework import viewsets, status, filters
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticatedOrReadOnly
+from django_filters import rest_framework as django_filters
+from django.db.models import Count
+from .models import Review, ReviewTag, ReviewHelpfulVote
+from .serializers import ReviewSerializer
 from .serializers import (
     WaitlistSerializer, 
     RegistrationSerializer, 
@@ -879,3 +887,83 @@ class ProductRecommendationView(generics.ListAPIView):
     def get_queryset(self):
         product_id = self.kwargs['product_id']
         return ProductRecommendation.objects.filter(product_id=product_id)
+
+class ReviewFilter(django_filters.FilterSet):
+    rating = django_filters.NumberFilter()
+    has_images = django_filters.BooleanFilter(method='filter_has_images')
+    tag = django_filters.CharFilter(field_name='tags__slug')
+    
+    class Meta:
+        model = Review
+        fields = ['rating', 'has_images', 'tag']
+    
+    def filter_has_images(self, queryset, name, value):
+        if value:
+            return queryset.exclude(images=[])
+        return queryset
+
+class ReviewViewSet(viewsets.ModelViewSet):
+    serializer_class = ReviewSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
+    filter_backends = [django_filters.DjangoFilterBackend, filters.OrderingFilter]
+    filterset_class = ReviewFilter
+    ordering_fields = ['created_at', 'helpful_votes', 'rating']
+    ordering = ['-created_at']
+
+    def get_queryset(self):
+        return Review.objects.all()
+
+    def perform_create(self, serializer):
+        # Check if user has purchased the product
+        product = serializer.validated_data['product']
+        user = self.request.user
+        is_verified = OrderItem.objects.filter(
+            order__user=user,
+            product=product,
+            order__status='DELIVERED'
+        ).exists()
+        
+        serializer.save(
+            user=user,
+            is_verified_purchase=is_verified
+        )
+
+    @action(detail=True, methods=['POST'])
+    def helpful(self, request, pk=None):
+        review = self.get_object()
+        user = request.user
+        
+        vote, created = ReviewHelpfulVote.objects.get_or_create(
+            review=review,
+            user=user
+        )
+        
+        if not created:
+            # User is un-marking as helpful
+            vote.delete()
+            review.helpful_votes = ReviewHelpfulVote.objects.filter(review=review).count()
+            review.save()
+            return Response({'helpful': False, 'count': review.helpful_votes})
+            
+        review.helpful_votes = ReviewHelpfulVote.objects.filter(review=review).count()
+        review.save()
+        return Response({'helpful': True, 'count': review.helpful_votes})
+
+    @action(detail=False, methods=['GET'])
+    def summary(self, request):
+        product_id = request.query_params.get('product')
+        if not product_id:
+            return Response(
+                {'error': 'Product ID is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        review = Review.objects.filter(product_id=product_id).first()
+        if not review:
+            return Response({
+                'rating_distribution': {i: 0 for i in range(1, 6)},
+                'tag_distribution': {}
+            })
+            
+        serializer = ReviewSummarySerializer(review)
+        return Response(serializer.data)

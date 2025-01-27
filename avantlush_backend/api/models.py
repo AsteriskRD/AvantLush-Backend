@@ -3,6 +3,8 @@ from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
 from django.conf import settings
+from django.db import models
+from django.core.validators import MinValueValidator, MaxValueValidator
 import uuid
 
 class CustomUserManager(BaseUserManager):
@@ -229,3 +231,66 @@ class Tag(models.Model):
 
     def __str__(self):
         return self.name
+
+class ReviewTag(models.Model):
+    """Model for predefined review tags like 'Fast shipping', 'Good quality', etc."""
+    name = models.CharField(max_length=50, unique=True)
+    slug = models.SlugField(unique=True)
+    count = models.PositiveIntegerField(default=0)
+
+    def __str__(self):
+        return self.name
+
+class Review(models.Model):
+    product = models.ForeignKey('Product', on_delete=models.CASCADE, related_name='reviews')
+    user = models.ForeignKey('CustomUser', on_delete=models.CASCADE)
+    rating = models.PositiveSmallIntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(5)]
+    )
+    content = models.TextField()
+    images = models.JSONField(default=list)  # Store list of image URLs
+    tags = models.ManyToManyField(ReviewTag, related_name='reviews')
+    helpful_votes = models.PositiveIntegerField(default=0)
+    variant = models.CharField(max_length=100, blank=True)  # Store variant info like "White"
+    is_verified_purchase = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        # Ensure one review per user per product
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user', 'product'],
+                name='unique_user_product_review'
+            )
+        ]
+
+    def save(self, *args, **kwargs):
+        # Update product rating on save
+        super().save(*args, **kwargs)
+        self.update_product_rating()
+
+    def update_product_rating(self):
+        product = self.product
+        reviews = product.reviews.all()
+        if reviews:
+            avg_rating = sum(review.rating for review in reviews) / len(reviews)
+            product.rating = round(avg_rating, 2)
+            product.num_ratings = len(reviews)
+            product.save()
+
+class ReviewHelpfulVote(models.Model):
+    """Track who has voted a review as helpful"""
+    review = models.ForeignKey(Review, on_delete=models.CASCADE)
+    user = models.ForeignKey('CustomUser', on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        # Ensure one vote per user per review
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user', 'review'],
+                name='unique_user_review_vote'
+            )
+        ]

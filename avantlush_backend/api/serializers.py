@@ -14,6 +14,8 @@ from rest_framework import serializers
 from .models import Profile, Address
 from .utils import VALID_COUNTRY_CODES, validate_phone_format, format_phone_number
 from .models import Wishlist, WishlistItem, ProductRecommendation
+from rest_framework import serializers
+from .models import Review, ReviewTag, ReviewHelpfulVote
 from .models import (
     CustomUser,  
     WaitlistEntry, 
@@ -327,3 +329,68 @@ class ProductRecommendationSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProductRecommendation
         fields = ['id', 'product', 'recommended_product', 'score']
+
+
+class ReviewTagSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ReviewTag
+        fields = ['id', 'name', 'slug', 'count']
+
+class ReviewSerializer(serializers.ModelSerializer):
+    user_email = serializers.EmailField(source='user.email', read_only=True)
+    tags = ReviewTagSerializer(many=True, read_only=True)
+    tag_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        write_only=True,
+        required=False
+    )
+    helpful_count = serializers.IntegerField(source='helpful_votes', read_only=True)
+    is_helpful = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Review
+        fields = [
+            'id', 'product', 'user_email', 'rating', 'content',
+            'images', 'tags', 'tag_ids', 'helpful_count', 'is_helpful',
+            'variant', 'is_verified_purchase', 'created_at'
+        ]
+        read_only_fields = ['user', 'helpful_votes', 'is_verified_purchase']
+
+    def get_is_helpful(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            return ReviewHelpfulVote.objects.filter(
+                review=obj,
+                user=request.user
+            ).exists()
+        return False
+
+    def create(self, validated_data):
+        tag_ids = validated_data.pop('tag_ids', [])
+        review = Review.objects.create(**validated_data)
+        if tag_ids:
+            review.tags.set(tag_ids)
+            # Update tag counts
+            ReviewTag.objects.filter(id__in=tag_ids).update(count=models.F('count') + 1)
+        return review
+
+class ReviewSummarySerializer(serializers.ModelSerializer):
+    """Serializer for aggregated review data shown at the top of reviews"""
+    rating_distribution = serializers.SerializerMethodField()
+    tag_distribution = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Review
+        fields = ['rating_distribution', 'tag_distribution']
+
+    def get_rating_distribution(self, obj):
+        reviews = Review.objects.filter(product=obj.product)
+        distribution = {i: reviews.filter(rating=i).count() for i in range(1, 6)}
+        return distribution
+
+    def get_tag_distribution(self, obj):
+        reviews = Review.objects.filter(product=obj.product)
+        tags = ReviewTag.objects.filter(reviews__in=reviews).annotate(
+            count=models.Count('reviews')
+        ).values('name', 'count')
+        return {tag['name']: tag['count'] for tag in tags}
