@@ -64,6 +64,12 @@ urlpatterns = [
     path('reset-password/<str:uidb64>/<str:token>/', reset_password, name='reset_password'),
     path('products/search/', ProductSearchView.as_view(), name='product-search'),
     path('products/<int:product_id>/recommendations/', ProductRecommendationView.as_view(), name='product-recommendations'),
+    path('cart/summary/', CartViewSet.as_view({'get': 'summary'})),
+    path('cart/add-item/', CartViewSet.as_view({'post': 'add_item'})),
+    path('cart/update-quantity/', CartViewSet.as_view({'post': 'update_quantity'})),
+    path('cart/remove-item/', CartViewSet.as_view({'post': 'remove_item'})),
+    path('cart/apply-discount/', CartViewSet.as_view({'post': 'apply_discount'})),
+    path('cart/clear/', CartViewSet.as_view({'post': 'clear'})),
     path('', include(router.urls)),
 ]
 urlpatterns += router.urls

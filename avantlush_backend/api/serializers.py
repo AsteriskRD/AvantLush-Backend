@@ -290,10 +290,14 @@ class ArticleSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class CartItemSerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    product_price = serializers.DecimalField(source='product.price', max_digits=10, decimal_places=2, read_only=True)
+    stock_status = serializers.CharField(source='product.status', read_only=True)
+    
     class Meta:
         model = CartItem
-        fields = ['id', 'product', 'quantity']
-
+        fields = ['id', 'product', 'quantity', 'product_name', 'product_price', 'stock_status']
+        
 class CartSerializer(serializers.ModelSerializer):
     items = CartItemSerializer(many=True, read_only=True)
     user = serializers.PrimaryKeyRelatedField(read_only=True)

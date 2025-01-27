@@ -71,6 +71,15 @@ from django_filters import rest_framework as django_filters
 from django.db.models import Count
 from .models import Review, ReviewTag, ReviewHelpfulVote
 from .serializers import ReviewSerializer
+from rest_framework import viewsets, status
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from django.shortcuts import get_object_or_404
+from decimal import Decimal
+from .models import Cart, CartItem, Product
+from .serializers import CartItemSerializer
+
 from .serializers import (
     WaitlistSerializer, 
     RegistrationSerializer, 
@@ -747,35 +756,139 @@ class ArticleViewSet(viewsets.ModelViewSet):
     serializer_class = ArticleSerializer
 
 class CartViewSet(viewsets.ModelViewSet):
-    serializer_class = CartSerializer
     permission_classes = [IsAuthenticated]
+    
+    def get_serializer_class(self):
+        if self.action in ['add_item', 'update_quantity']:
+            return CartItemSerializer
+        return CartSerializer
 
-    def get_queryset(self):
-        return Cart.objects.filter(user=self.request.user)
+    def get_cart(self):
+        """Get or create cart for current user"""
+        cart, created = Cart.objects.get_or_create(user=self.request.user)
+        return cart
 
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+    @action(detail=False, methods=['GET'])
+    def summary(self, request):
+        """Get cart summary with totals"""
+        cart = self.get_cart()
+        items = CartItem.objects.filter(cart=cart).select_related('product')
+        
+        subtotal = sum(item.product.price * item.quantity for item in items)
+        shipping = Decimal('0.00')  # Can be calculated based on your logic
+        
+        return Response({
+            'items': CartItemSerializer(items, many=True).data,
+            'subtotal': subtotal,
+            'shipping': shipping,
+            'total': subtotal + shipping,
+            'item_count': items.count()
+        })
 
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        cart = self.perform_create(serializer)
-        headers = self.get_success_headers(serializer.data)
-        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+    @action(detail=False, methods=['POST'])
+    def add_item(self, request):
+        """Add item to cart"""
+        cart = self.get_cart()
+        product_id = request.data.get('product_id')
+        quantity = int(request.data.get('quantity', 1))
+        
+        try:
+            product = Product.objects.get(id=product_id)
+            
+            # Check if product is in stock
+            if product.stock_quantity < quantity:
+                return Response(
+                    {'error': 'Not enough stock available'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Update or create cart item
+            cart_item, created = CartItem.objects.get_or_create(
+                cart=cart,
+                product=product,
+                defaults={'quantity': quantity}
+            )
+            
+            if not created:
+                cart_item.quantity += quantity
+                cart_item.save()
+            
+            return Response(CartItemSerializer(cart_item).data)
+            
+        except Product.DoesNotExist:
+            return Response(
+                {'error': 'Product not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
-    def update(self, request, *args, **kwargs):
-        partial = kwargs.pop('partial', False)
-        instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
-        serializer.is_valid(raise_exception=True)
-        self.perform_update(serializer)
-        return Response(serializer.data)
+    @action(detail=False, methods=['POST'])
+    def update_quantity(self, request):
+        """Update item quantity in cart"""
+        cart = self.get_cart()
+        item_id = request.data.get('item_id')
+        quantity = int(request.data.get('quantity', 0))
+        
+        try:
+            cart_item = CartItem.objects.get(cart=cart, id=item_id)
+            
+            # Check stock availability
+            if quantity > cart_item.product.stock_quantity:
+                return Response(
+                    {'error': 'Not enough stock available'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            if quantity > 0:
+                cart_item.quantity = quantity
+                cart_item.save()
+            else:
+                cart_item.delete()
+                
+            return Response({'status': 'success'})
+            
+        except CartItem.DoesNotExist:
+            return Response(
+                {'error': 'Cart item not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
-    def destroy(self, request, *args, **kwargs):
-        instance = self.get_object()
-        self.perform_destroy(instance)
-        return Response(status=status.HTTP_204_NO_CONTENT)
+    @action(detail=False, methods=['POST'])
+    def apply_discount(self, request):
+        """Apply discount code to cart"""
+        code = request.data.get('code')
+        cart = self.get_cart()
+        
+        # Implement your discount logic here
+        # For now returning a mock response
+        return Response({
+            'status': 'success',
+            'discount': '10.00',
+            'message': 'Discount applied successfully'
+        })
 
+    @action(detail=False, methods=['POST'])
+    def remove_item(self, request):
+        """Remove item from cart"""
+        cart = self.get_cart()
+        item_id = request.data.get('item_id')
+        
+        try:
+            cart_item = CartItem.objects.get(cart=cart, id=item_id)
+            cart_item.delete()
+            return Response({'status': 'success'})
+        except CartItem.DoesNotExist:
+            return Response(
+                {'error': 'Cart item not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+    @action(detail=False, methods=['POST'])
+    def clear(self, request):
+        """Clear all items from cart"""
+        cart = self.get_cart()
+        CartItem.objects.filter(cart=cart).delete()
+        return Response({'status': 'success'})
+    
 class CartItemViewSet(viewsets.ModelViewSet):
     serializer_class = CartItemSerializer
     permission_classes = [IsAuthenticated]
