@@ -272,8 +272,10 @@ class ProductSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'slug', 'description', 'price', 
             'category', 'category_name', 'images', 'stock_quantity',
-            'is_featured', 'sku', 'status', 'created_at', 'updated_at'
+            'is_featured', 'sku', 'status', 'created_at', 'updated_at',
+            'rating', 'num_ratings'
         ]
+    
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
