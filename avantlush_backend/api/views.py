@@ -1,95 +1,106 @@
-from django.db import IntegrityError
-from rest_framework import status
-from rest_framework.response import Response
-from rest_framework.views import APIView
-from rest_framework.decorators import action
-from rest_framework.decorators import api_view, throttle_classes
-from rest_framework.throttling import AnonRateThrottle
-from .serializers import WaitlistSerializer, RegistrationSerializer, LoginSerializer, ProductSerializer, ArticleSerializer, CartSerializer, CartItemSerializer, OrderSerializer, GoogleAuthSerializer
-from django.core.exceptions import ValidationError
-from django.core.mail import send_mail
-from django.contrib.auth import authenticate
-from rest_framework.authtoken.models import Token
-import rest_framework
-from django.template.loader import render_to_string
-from google.oauth2 import id_token
-from google.auth.transport import requests
-from django.utils.html import strip_tags
-from django.shortcuts import render
-from .models import Product, Article, Cart, CartItem, Order, WaitlistEntry, CustomUser, PasswordResetToken
-from rest_framework import generics, viewsets
-from rest_framework.permissions import IsAuthenticated
-from rest_framework import mixins
+# Django imports
 from django.conf import settings
+from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
+from django.core.exceptions import ValidationError, ObjectDoesNotExist
+from django.core.mail import send_mail
+from django.db import IntegrityError, transaction
+from django.shortcuts import render, get_object_or_404
+from django.template.loader import render_to_string
+from django.utils import timezone
+from django.utils.encoding import force_bytes, force_str
+from django.utils.html import strip_tags
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+
+from .models import SupportTicket, TicketResponse
+
+# Rest Framework imports
+from rest_framework import status, filters, viewsets, generics, mixins
+from rest_framework.authtoken.models import Token
+from rest_framework.decorators import (
+    action,
+    api_view,
+    permission_classes,
+    throttle_classes
+)
+from rest_framework.exceptions import ValidationError
+from rest_framework.pagination import PageNumberPagination
+from rest_framework.permissions import (
+    IsAuthenticated,
+    AllowAny,
+    IsAuthenticatedOrReadOnly
+)
+from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle
+from rest_framework.views import APIView
+
+# Third party imports
+from allauth.socialaccount.providers.apple.views import AppleOAuth2Adapter
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
 from dj_rest_auth.registration.views import SocialLoginView
-from django.conf import settings
-from .serializers import GoogleAuthSerializer
-from django.utils.http import urlsafe_base64_encode
-from django.utils.encoding import force_bytes
-from django.template.loader import render_to_string
-from django.core.mail import send_mail
-from .models import EmailVerificationToken
-from django.utils.http import urlsafe_base64_decode
-from django.utils.encoding import force_str
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
-from django.core.exceptions import ObjectDoesNotExist
-from allauth.socialaccount.providers.apple.views import AppleOAuth2Adapter
-from allauth.socialaccount.providers.oauth2.client import OAuth2Client
-from dj_rest_auth.registration.views import SocialLoginView
-from .serializers import GoogleAuthSerializer, AppleAuthSerializer 
-from rest_framework import filters
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework.pagination import PageNumberPagination
-from rest_framework.permissions import AllowAny, IsAuthenticatedOrReadOnly
-from .models import CustomUser
-from rest_framework import viewsets, status
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from django.shortcuts import get_object_or_404
-from .serializers import ProfileSerializer
-from .serializers import AddressSerializer
-from .models import Profile
-from rest_framework.response import Response
-from .models import Profile, Address
-from .serializers import ProfileSerializer, AddressSerializer
-from .models import Wishlist, WishlistItem, ProductRecommendation
-from .serializers import WishlistSerializer, WishlistItemSerializer, ProductRecommendationSerializer
-from rest_framework import viewsets, filters
-from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import viewsets, status, filters
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticatedOrReadOnly
 from django_filters import rest_framework as django_filters
-from django.db.models import Count
-from .models import Review, ReviewTag, ReviewHelpfulVote
-from .serializers import ReviewSerializer
-from rest_framework import viewsets, status
+from google.oauth2 import id_token
+from google.auth.transport import requests
+import stripe
+import uuid
+from decimal import Decimal
+from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from django.shortcuts import get_object_or_404
-from decimal import Decimal
-from .models import Cart, CartItem, Product
-from .serializers import CartItemSerializer
 
-from .serializers import (
-    WaitlistSerializer, 
-    RegistrationSerializer, 
-    LoginSerializer,
-    
-    ForgotPasswordSerializer,
-    ResetPasswordSerializer
+
+# Local imports - Models
+from .models import (
+    Address,
+    Article,
+    Cart,
+    CartItem,
+    CustomUser,
+    EmailVerificationToken,
+    Order,
+    PasswordResetToken,
+    Payment,
+    Product,
+    ProductRecommendation,
+    Profile,
+    Review,
+    ReviewHelpfulVote,
+    ReviewTag,
+    ShippingMethod,
+    WaitlistEntry,
+    Wishlist,
+    WishlistItem
 )
-import uuid
 
+# Local imports - Serializers
+from .serializers import (
+    AddressSerializer,
+    AppleAuthSerializer,
+    ArticleSerializer,
+    CartItemSerializer,
+    CartSerializer,
+    ForgotPasswordSerializer,
+    GoogleAuthSerializer,
+    LoginSerializer,
+    OrderSerializer,
+    ProductRecommendationSerializer,
+    ProductSerializer,
+    ProfileSerializer,
+    RegistrationSerializer,
+    ResetPasswordSerializer,
+    ReviewSerializer,
+    ShippingMethodSerializer,
+    WaitlistSerializer,
+    WishlistItemSerializer,
+    WishlistSerializer,
+    SupportTicketSerializer, 
+    TicketResponseSerializer
+)
+
+# Local imports - Services
+from .services import CloverPaymentService
 class WaitlistRateThrottle(AnonRateThrottle):
     rate = '5/minute'  # Limit to 5 requests per minute per IP
 
@@ -924,8 +935,38 @@ class OrderViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return Order.objects.filter(user=self.request.user)
+        queryset = Order.objects.filter(user=self.request.user)
+        status = self.request.query_params.get('status', None)
+        if status:
+            queryset = queryset.filter(status=status)
+        return queryset
+    @action(detail=True, methods=['POST'])
+    def add_tracking_event(self, request, pk=None):
+        """Add a new tracking event to the order"""
+        order = self.get_object()
+        serializer = OrderTrackingSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save(order=order)
+            # Send notification to user
+            notify_order_update.delay(order.id, request.data.get('status'))
+            return Response(serializer.data)
+        return Response(serializer.errors, status=400)
 
+    @action(detail=False, methods=['GET'])
+    def filter_by_date(self, request):
+        """Filter orders by date range"""
+        start_date = request.query_params.get('start_date')
+        end_date = request.query_params.get('end_date')
+        
+        queryset = self.get_queryset()
+        if start_date:
+            queryset = queryset.filter(created_at__gte=start_date)
+        if end_date:
+            queryset = queryset.filter(created_at__lte=end_date)
+            
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+    
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
@@ -988,8 +1029,72 @@ class WishlistItemViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return WishlistItem.objects.filter(wishlist__user=self.request.user)
+        return Wishlist.objects.filter(user=self.request.user)
 
+    @action(detail=False, methods=['POST'])
+    def move_to_cart(self, request):
+        """Move items from wishlist to cart"""
+        try:
+            wishlist = Wishlist.objects.get(user=request.user)
+            cart, _ = Cart.objects.get_or_create(user=request.user)
+            
+            item_ids = request.data.get('item_ids', [])
+            items = WishlistItem.objects.filter(
+                wishlist=wishlist,
+                id__in=item_ids
+            )
+            
+            for wishlist_item in items:
+                # Check if product is in stock
+                if wishlist_item.product.stock_quantity > 0:
+                    CartItem.objects.create(
+                        cart=cart,
+                        product=wishlist_item.product,
+                        quantity=1
+                    )
+                    wishlist_item.delete()
+            
+            return Response({'status': 'Items moved to cart successfully'})
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    @action(detail=False, methods=['POST'])
+    def bulk_delete(self, request):
+        """Delete multiple wishlist items at once"""
+        try:
+            item_ids = request.data.get('item_ids', [])
+            WishlistItem.objects.filter(
+                wishlist__user=request.user,
+                id__in=item_ids
+            ).delete()
+            return Response({'status': 'Items deleted successfully'})
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    @action(detail=False, methods=['GET'])
+    def stock_notifications(self, request):
+        """Get stock notifications for wishlist items"""
+        wishlist_items = WishlistItem.objects.filter(
+            wishlist__user=request.user
+        ).select_related('product')
+        
+        notifications = []
+        for item in wishlist_items:
+            if item.product.stock_quantity > 0:
+                notifications.append({
+                    'product_id': item.product.id,
+                    'product_name': item.product.name,
+                    'stock_quantity': item.product.stock_quantity,
+                    'added_at': item.added_at
+                })
+        
+        return Response(notifications)
     def perform_create(self, serializer):
         serializer.save(wishlist=self.request.user.wishlist)
 
@@ -1080,3 +1185,325 @@ class ReviewViewSet(viewsets.ModelViewSet):
             
         serializer = ReviewSummarySerializer(review)
         return Response(serializer.data)
+    
+
+
+class CheckoutViewSet(viewsets.ViewSet):
+    permission_classes = [IsAuthenticated]
+    
+    @action(detail=False, methods=['GET'])
+    def payment_methods(self, request):
+        """Return available payment methods"""
+        return Response({
+            'methods': [
+                {
+                    'id': 'visa',
+                    'name': 'Visa',
+                    'enabled': True
+                },
+                {
+                    'id': 'mastercard',
+                    'name': 'Mastercard',
+                    'enabled': True
+                },
+                {
+                    'id': 'stripe',
+                    'name': 'Stripe',
+                    'enabled': True
+                },
+                {
+                    'id': 'paypal',
+                    'name': 'PayPal',
+                    'enabled': True
+                },
+                {
+                    'id': 'google_pay',
+                    'name': 'Google Pay',
+                    'enabled': True
+                }
+            ]
+        })
+
+    @action(detail=False, methods=['POST'])
+    def validate_promocode(self, request):
+        """Validate promocode and return discount amount"""
+        promocode = request.data.get('promocode')
+        subtotal = Decimal(request.data.get('subtotal', '0'))
+
+        try:
+            discount = self._calculate_discount(promocode, subtotal)
+            return Response({
+                'valid': True,
+                'discount_percentage': 20,  # Example fixed percentage
+                'discount_amount': discount
+            })
+        except ValueError as e:
+            return Response({
+                'valid': False,
+                'message': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['POST'])
+    def process(self, request):
+        """Process checkout"""
+        try:
+            with transaction.atomic():
+                # Get cart and items
+                cart = Cart.objects.get(user=request.user)
+                cart_items = CartItem.objects.filter(cart=cart).select_related('product')
+                
+                if not cart_items.exists():
+                    return Response({
+                        'status': 'error',
+                        'message': 'Cart is empty'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+
+                # Validate address (using new method)
+                address_data = request.data.get('address')
+                self.validate_shipping_address(address_data)
+
+                # Validate stock (using new method)
+                self.validate_stock(cart_items)
+
+                # Calculate totals (using new method)
+                shipping_cost = Decimal('4.99')  # From your UI
+                discount_code = request.data.get('discount_code')
+                totals = self.calculate_order_totals(cart_items, shipping_cost, discount_code)
+
+                # Create order with calculated totals
+                order = Order.objects.create(
+                    user=request.user,
+                    shipping_address=address_data['street_address'],
+                    shipping_city=address_data['city'],
+                    shipping_state=address_data['state'],
+                    shipping_country=address_data['country'],
+                    shipping_zip=address_data['zip_code'],
+                    shipping_cost=shipping_cost,
+                    subtotal=totals['subtotal'],
+                    discount=totals['discount'],
+                    total=totals['total'],
+                    status='PENDING'
+                )
+                # Process order items
+                for cart_item in cart_items:
+                    if cart_item.quantity > cart_item.product.stock_quantity:
+                        raise ValueError(f'Insufficient stock for {cart_item.product.name}')
+                    
+                    OrderItem.objects.create(
+                        order=order,
+                        product=cart_item.product,
+                        quantity=cart_item.quantity,
+                        price=cart_item.product.price
+                    )
+                    
+                    cart_item.product.stock_quantity -= cart_item.quantity
+                    cart_item.product.save()
+                    
+                    subtotal += cart_item.product.price * cart_item.quantity
+
+                # Apply discount
+                discount_code = request.data.get('discount_code')
+                discount_amount = Decimal('0.00')
+                if discount_code:
+                    discount_amount = self._calculate_discount(discount_code, subtotal)
+
+                # Update order totals
+                order.subtotal = subtotal
+                order.discount = discount_amount
+                order.total = subtotal - discount_amount + shipping_cost
+                order.save()
+
+                # Clear cart
+                cart_items.delete()
+
+                return Response({
+                    'status': 'success',
+                    'message': 'Order created successfully',
+                    'order_id': order.id,
+                    'total': order.total
+                }, status=status.HTTP_201_CREATED)
+
+        except Exception as e:
+            return Response({
+                'status': 'error',
+                'message': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['POST'])
+    def process_payment(self, request):
+        """Process payment for an order"""
+        payment_method = request.data.get('payment_method')
+        payment_data = request.data.get('payment_data')
+        order_id = request.data.get('order_id')
+        save_card = request.data.get('save_card', False)
+
+        try:
+            order = Order.objects.get(id=order_id, user=request.user)
+            
+            payment_service = self._get_payment_service(payment_method)
+            if not payment_service:
+                return Response({
+                    'status': 'error',
+                    'message': 'Invalid payment method'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            result = payment_service.process_payment(order, payment_data)
+            
+            if result['success']:
+                payment = Payment.objects.create(
+                    order=order,
+                    amount=order.total,
+                    payment_method=payment_method,
+                    transaction_id=result['transaction_id'],
+                    status='COMPLETED',
+                    gateway_response=result['response'],
+                    save_card=save_card
+                )
+                
+                if payment_data.get('card_details'):
+                    payment.card_last_four = payment_data['card_details'].get('last4')
+                    payment.card_brand = payment_data['card_details'].get('brand')
+                    payment.card_expiry = payment_data['card_details'].get('exp_date')
+                    payment.save()
+                
+                order.status = 'PAID'
+                order.save()
+                
+                return Response({
+                    'status': 'success',
+                    'payment_id': payment.id
+                })
+            
+            return Response({
+                'status': 'error',
+                'message': result['error']
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        except Order.DoesNotExist:
+            return Response({
+                'status': 'error',
+                'message': 'Order not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+
+    def _get_payment_service(self, payment_method):
+        """Get appropriate payment service based on payment method"""
+        services = {
+            'STRIPE': StripePaymentService(),
+            'PAYPAL': PayPalPaymentService(),
+            'GOOGLE_PAY': GooglePayService(),
+            'VISA': StripePaymentService(),
+            'MASTERCARD': StripePaymentService(),
+        }
+        return services.get(payment_method.upper())
+
+    def _calculate_discount(self, promocode, subtotal):
+        """Calculate discount amount based on promocode"""
+        # Implement your discount logic here
+        if not promocode:
+            return Decimal('0.00')
+            
+        # Example: 20% discount
+        return subtotal * Decimal('0.20')
+    def validate_shipping_address(self, address_data):
+        """
+        Validates shipping address shown in the first screen
+        """
+        required_fields = ['street_address', 'city', 'state', 'zip_code', 'country']
+        for field in required_fields:
+            if not address_data.get(field):
+                raise ValidationError(f'{field} is required')
+        return True
+
+    def calculate_order_totals(self, items, shipping_cost, discount_code=None):
+        """
+        Calculates totals shown in the Summary section
+        """
+        subtotal = sum(item.quantity * item.product.price for item in items)
+        discount = self._calculate_discount(discount_code, subtotal) if discount_code else 0
+        total = subtotal + shipping_cost - discount
+        return {
+            'subtotal': subtotal,
+            'shipping_cost': shipping_cost,
+            'discount': discount,
+            'total': total
+        }
+
+    def validate_stock(self, cart_items):
+        """
+        Validates stock before proceeding to checkout
+        """
+        for item in cart_items:
+            if item.quantity > item.product.stock_quantity:
+                raise ValidationError(f'Insufficient stock for {item.product.name}')
+        return True
+
+    @action(detail=False, methods=['GET'])
+    def get_client_secret(self, request):
+        """Get Stripe client secret for frontend payment flow"""
+        try:
+            stripe.api_key = settings.STRIPE_SECRET_KEY
+            intent = stripe.PaymentIntent.create(
+                amount=int(float(request.GET.get('amount')) * 100),
+                currency='usd'
+            )
+            return Response({'client_secret': intent.client_secret})
+        except Exception as e:
+            return Response({
+                'error': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+    @action(detail=False, methods=['POST'])
+    def shipping_cost(self, request):
+        """Calculate shipping cost based on method and address"""
+        shipping_method_id = request.data.get('shipping_method_id')
+        address_id = request.data.get('address_id')
+        
+        try:
+            shipping_method = ShippingMethod.objects.get(id=shipping_method_id)
+            address = Address.objects.get(id=address_id, user=request.user)
+            
+            # You can implement custom shipping logic based on address
+            shipping_cost = shipping_method.price
+            
+            return Response({
+                'shipping_cost': shipping_cost,
+                'estimated_days': shipping_method.estimated_days
+            })
+        except (ShippingMethod.DoesNotExist, Address.DoesNotExist):
+            return Response({
+                'error': 'Invalid shipping method or address'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+class ShippingMethodViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = ShippingMethod.objects.filter(is_active=True)
+    serializer_class = ShippingMethodSerializer
+    permission_classes = [IsAuthenticated]
+
+
+class SupportTicketViewSet(viewsets.ModelViewSet):
+    serializer_class = SupportTicketSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return SupportTicket.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+    @action(detail=True, methods=['POST'])
+    def add_response(self, request, pk=None):
+        ticket = self.get_object()
+        serializer = TicketResponseSerializer(data=request.data)
+        
+        if serializer.is_valid():
+            serializer.save(
+                ticket=ticket,
+                user=request.user,
+                is_staff_response=False
+            )
+            return Response({
+                'status': 'success',
+                'message': 'Response added successfully',
+                'data': serializer.data
+            })
+        return Response(serializer.errors, status=400)

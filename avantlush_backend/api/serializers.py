@@ -16,6 +16,10 @@ from .utils import VALID_COUNTRY_CODES, validate_phone_format, format_phone_numb
 from .models import Wishlist, WishlistItem, ProductRecommendation
 from rest_framework import serializers
 from .models import Review, ReviewTag, ReviewHelpfulVote
+from .models import PromoCode, ShippingMethod
+from rest_framework import serializers
+from .models import SupportTicket, TicketResponse
+
 from .models import (
     CustomUser,  
     WaitlistEntry, 
@@ -26,8 +30,13 @@ from .models import (
     CartItem, 
     Order, 
     OrderItem,
+    OrderTracking,
+    WishlistNotification,
     Profile,  
-    Address
+    Address,
+    TicketResponse,
+    SupportTicket,
+    Payment
 )   
 
 User = get_user_model()
@@ -319,6 +328,12 @@ class OrderSerializer(serializers.ModelSerializer):
         fields = ['id', 'user', 'items', 'status', 'created_at', 'updated_at']
         read_only_fields = ['id', 'user', 'created_at', 'updated_at']
 
+class OrderTrackingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OrderTracking
+        fields = ['id', 'status', 'location', 'description', 'timestamp']
+        read_only_fields = ['timestamp']
+
 class WishlistSerializer(serializers.ModelSerializer):
     class Meta:
         model = Wishlist
@@ -328,6 +343,13 @@ class WishlistItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = WishlistItem
         fields = ['id', 'wishlist', 'product', 'added_at']
+
+class WishlistNotificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WishlistNotification
+        fields = ['id', 'notification_type', 'message', 'is_read', 'created_at']
+        read_only_fields = ['created_at']
+
 
 class ProductRecommendationSerializer(serializers.ModelSerializer):
     class Meta:
@@ -398,3 +420,41 @@ class ReviewSummarySerializer(serializers.ModelSerializer):
             count=models.Count('reviews')
         ).values('name', 'count')
         return {tag['name']: tag['count'] for tag in tags}
+    
+class SavedCardSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Payment
+        fields = ['id', 'card_brand', 'card_last_four', 'card_expiry']
+
+class ShippingMethodSerializer(serializers.ModelSerializer):
+    delivery_date = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ShippingMethod
+        fields = ['id', 'name', 'price', 'estimated_days', 'description', 'delivery_date']
+
+    def get_delivery_date(self, obj):
+        """Returns estimated delivery date as shown in UI"""
+        return timezone.now() + timezone.timedelta(days=obj.estimated_days)
+    
+class PromoCodeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PromoCode
+        fields = ['code', 'discount_percentage']
+        read_only_fields = ['discount_percentage']
+
+
+class TicketResponseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TicketResponse
+        fields = ['id', 'message', 'is_staff_response', 'created_at', 'attachment']
+        read_only_fields = ['is_staff_response']
+
+class SupportTicketSerializer(serializers.ModelSerializer):
+    responses = TicketResponseSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = SupportTicket
+        fields = ['id', 'subject', 'message', 'status', 'priority', 'order', 
+                 'created_at', 'updated_at', 'responses']
+        read_only_fields = ['created_at', 'updated_at']

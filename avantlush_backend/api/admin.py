@@ -1,5 +1,9 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
+from django.contrib import admin
+from .models import Order, OrderItem
+from django.contrib import admin
+from .models import SupportTicket, TicketResponse
 from .models import (
     WaitlistEntry,
     CustomUser,
@@ -13,6 +17,9 @@ from .models import (
     Profile,
     Address
 )
+
+admin.site.register(SupportTicket)
+admin.site.register(TicketResponse)
 
 # CustomUser Admin
 class CustomUserAdmin(UserAdmin):
@@ -86,14 +93,30 @@ class CartItemAdmin(admin.ModelAdmin):
     list_display = ('cart', 'product', 'quantity')
     search_fields = ('cart__user__email', 'product__name')
 
-# Order Admin
+class OrderItemInline(admin.TabularInline):
+    model = OrderItem
+    extra = 0
+
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
-    list_display = ('user', 'status', 'created_at') 
-    list_filter = ('status', 'created_at')
-    search_fields = ('user__email', 'order_number')
+    list_display = ('id', 'user', 'status', 'total', 'created_at')
+    list_filter = ('status', 'created_at', 'payment_status')
+    search_fields = ('user__email', 'shipping_address')
     ordering = ('-created_at',)
-
+    inlines = [OrderItemInline]
+    
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('user', 'status', 'payment_status')
+        }),
+        ('Shipping Information', {
+            'fields': ('shipping_address', 'shipping_city', 'shipping_state', 
+                      'shipping_country', 'shipping_zip')
+        }),
+        ('Payment Information', {
+            'fields': ('subtotal', 'shipping_cost', 'discount', 'total', 'payment_method')
+        }),
+    )
 # Profile Admin
 @admin.register(Profile)
 class ProfileAdmin(admin.ModelAdmin):

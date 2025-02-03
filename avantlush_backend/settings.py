@@ -59,6 +59,7 @@ INSTALLED_APPS = [
     
     # Local
     'avantlush_backend.api',  
+
      
     # Third party
     'rest_framework',
@@ -66,6 +67,9 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
     'corsheaders',
     'rest_framework_simplejwt',
+    'drf_yasg',
+     'checkout',
+
     
     # Allauth and registration
     'allauth',
@@ -75,6 +79,7 @@ INSTALLED_APPS = [
     'allauth.socialaccount.providers.apple',
     'dj_rest_auth',
     'dj_rest_auth.registration',
+
 ]
 
 MIDDLEWARE = [
@@ -155,6 +160,16 @@ Your private key here
 -----END PRIVATE KEY-----"""
     }
 }
+
+#Payment methods
+CLOVER_PUBLIC_TOKEN = 'your_public_token'
+CLOVER_PRIVATE_TOKEN = 'your_private_token'
+STRIPE_PUBLIC_KEY = 'your_stripe_public_key'
+STRIPE_SECRET_KEY = 'your_stripe_secret_key'
+PAYPAL_MODE = 'sandbox'  # sandbox or live
+PAYPAL_CLIENT_ID = 'dummy_client_id'
+PAYPAL_CLIENT_SECRET = 'dummy_client_secret'
+GOOGLE_PAY_MERCHANT_ID = 'your_google_pay_merchant_id'
 
 # Apple OAuth2 settings
 APPLE_OAUTH2_CALLBACK_URL = 'your-callback-url'

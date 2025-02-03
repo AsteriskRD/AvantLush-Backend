@@ -5,6 +5,7 @@ from django.utils import timezone
 from django.conf import settings
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
+
 import uuid
 
 class CustomUserManager(BaseUserManager):
@@ -76,29 +77,6 @@ class Profile(models.Model):
         if not self.full_name:
             self.full_name = self.user.get_full_name() or self.user.email
         super().save(*args, **kwargs)
-
-class Address(models.Model):
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='addresses')
-    street_address = models.TextField()
-    city = models.CharField(max_length=100)
-    state = models.CharField(max_length=100)
-    country = models.CharField(max_length=100)
-    zip_code = models.CharField(max_length=20)
-    is_default = models.BooleanField(default=False)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name_plural = 'Addresses'
-        ordering = ['-is_default', '-created_at']
-
-    def save(self, *args, **kwargs):
-        if self.is_default:
-            Address.objects.filter(user=self.user).exclude(id=self.id).update(is_default=False)
-        super().save(*args, **kwargs)
-
-    def __str__(self):
-        return f"{self.street_address}, {self.city}, {self.state}"
 
 class PasswordResetToken(models.Model):
     user = models.OneToOneField('CustomUser', on_delete=models.CASCADE)
@@ -183,6 +161,7 @@ class CartItem(models.Model):
     def __str__(self):
         return f"{self.quantity} x {self.product.name} in {self.cart}"
 
+
 class Order(models.Model):
     STATUS_CHOICES = [
         ('PENDING', 'Pending'),
@@ -191,10 +170,25 @@ class Order(models.Model):
         ('DELIVERED', 'Delivered'),
         ('CANCELLED', 'Cancelled'),
     ]
+    
+    # Existing fields
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='orders')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    
+    # New fields for checkout
+    shipping_address = models.TextField()
+    shipping_city = models.CharField(max_length=100)
+    shipping_state = models.CharField(max_length=100)
+    shipping_country = models.CharField(max_length=100)
+    shipping_zip = models.CharField(max_length=20)
+    shipping_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    subtotal = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    discount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    payment_method = models.CharField(max_length=50, null=True)
+    payment_status = models.CharField(max_length=50, default='PENDING')
 
     def __str__(self):
         return f"Order #{self.id} by {self.user.email}"
@@ -202,11 +196,27 @@ class Order(models.Model):
 class OrderItem(models.Model):
     order = models.ForeignKey(Order, related_name='items', on_delete=models.CASCADE)
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
-    quantity = models.PositiveIntegerField()
-    price = models.DecimalField(max_digits=10, decimal_places=2)
-
+    quantity = models.PositiveIntegerField(default=1)
+    price = models.DecimalField(max_digits=10, decimal_places=2)  # Price at time of order
+    
     def __str__(self):
-        return f"{self.quantity} x {self.product.name} in Order #{self.order.id}"
+        return f"{self.quantity} x {self.product.name}"
+
+    @property
+    def total(self):
+        return self.quantity * self.price
+        
+class OrderTracking(models.Model):
+    """Model to store detailed order tracking history"""
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='tracking_history')
+    status = models.CharField(max_length=50)
+    location = models.CharField(max_length=255)
+    description = models.TextField()
+    timestamp = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-timestamp']
+
 
 # Wishlist Model
 class Wishlist(models.Model):
@@ -218,6 +228,17 @@ class WishlistItem(models.Model):
     wishlist = models.ForeignKey(Wishlist, on_delete=models.CASCADE, related_name='items')
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
     added_at = models.DateTimeField(auto_now_add=True)
+
+class WishlistNotification(models.Model):
+    """Model to store wishlist item stock notifications"""
+    wishlist_item = models.ForeignKey(WishlistItem, on_delete=models.CASCADE)
+    notification_type = models.CharField(max_length=50)
+    message = models.TextField()
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
 
 # ProductRecommendation Model
 class ProductRecommendation(models.Model):
@@ -294,3 +315,127 @@ class ReviewHelpfulVote(models.Model):
                 name='unique_user_review_vote'
             )
         ]
+
+class Payment(models.Model):
+    PAYMENT_STATUS_CHOICES = [
+        ('PENDING', 'Pending'),
+        ('COMPLETED', 'Completed'),
+        ('FAILED', 'Failed'),
+        ('REFUNDED', 'Refunded')
+    ]
+
+    PAYMENT_METHOD_CHOICES = [
+        ('VISA', 'Visa'),
+        ('MASTERCARD', 'Mastercard'),
+        ('PAYPAL', 'PayPal'),
+        ('GOOGLE_PAY', 'Google Pay'),
+        ('STRIPE', 'Stripe')
+    ]
+
+    card_last_four = models.CharField(max_length=4, null=True, blank=True)
+    card_brand = models.CharField(max_length=20, null=True, blank=True)
+    card_expiry = models.CharField(max_length=7, null=True, blank=True)  # Format: MM/YYYY
+    save_card = models.BooleanField(default=False)
+
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='payments')
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES)
+    transaction_id = models.CharField(max_length=255, unique=True)
+    status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='PENDING')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    gateway_response = models.JSONField(null=True, blank=True)
+
+    def __str__(self):
+        return f"Payment {self.transaction_id} for Order {self.order.id}"
+    
+class Address(models.Model):
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
+    street_address = models.CharField(max_length=255)
+    city = models.CharField(max_length=100)
+    state = models.CharField(max_length=100)
+    zip_code = models.CharField(max_length=20)
+    country = models.CharField(max_length=100)
+    is_default = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-is_default', '-created_at']
+
+    def save(self, *args, **kwargs):
+        if self.is_default:
+            # Set all other addresses of user to non-default
+            Address.objects.filter(user=self.user).update(is_default=False)
+        super().save(*args, **kwargs)
+
+class ShippingMethod(models.Model):
+    name = models.CharField(max_length=100)
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    estimated_days = models.PositiveIntegerField()
+    is_active = models.BooleanField(default=True)
+    description = models.TextField(blank=True)
+    
+    def __str__(self):
+        return f"{self.name} (${self.price})"
+
+class PromoCode(models.Model):
+    code = models.CharField(max_length=50, unique=True)
+    discount_percentage = models.DecimalField(max_digits=5, decimal_places=2)
+    valid_from = models.DateTimeField()
+    valid_until = models.DateTimeField()
+    is_active = models.BooleanField(default=True)
+    minimum_purchase = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    max_discount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    
+    def is_valid(self, total_amount):
+        now = timezone.now()
+        return (
+            self.is_active and
+            self.valid_from <= now <= self.valid_until and
+            total_amount >= self.minimum_purchase
+        )
+
+class SupportTicket(models.Model):
+    STATUS_CHOICES = [
+        ('OPEN', 'Open'),
+        ('IN_PROGRESS', 'In Progress'),
+        ('RESOLVED', 'Resolved'),
+        ('CLOSED', 'Closed')
+    ]
+    
+    PRIORITY_CHOICES = [
+        ('LOW', 'Low'),
+        ('MEDIUM', 'Medium'),
+        ('HIGH', 'High'),
+        ('URGENT', 'Urgent')
+    ]
+
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='support_tickets')
+    subject = models.CharField(max_length=255)
+    message = models.TextField()
+    status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='OPEN')
+    priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default='MEDIUM')
+    order = models.ForeignKey('Order', on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Ticket #{self.id} - {self.subject}"
+
+class TicketResponse(models.Model):
+    ticket = models.ForeignKey(SupportTicket, on_delete=models.CASCADE, related_name='responses')
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
+    message = models.TextField()
+    is_staff_response = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    attachment = models.FileField(upload_to='ticket_attachments/', null=True, blank=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"Response to ticket #{self.ticket.id}"
