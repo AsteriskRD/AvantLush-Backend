@@ -8,7 +8,8 @@ pip install -r requirements.txt
 
 echo "Running database migrations..."
 python manage.py migrate
-python manage.py populate_products
+python manage.py update_products_data
+python manage.py update_product_images
 
 echo "Creating superuser..."
 python manage.py createsuperuser

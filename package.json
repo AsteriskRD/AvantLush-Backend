@@ -1,0 +1,15 @@
+{
+  "name": "avantlush-backend-main",
+  "version": "1.0.0",
+  "description": "Base URL: https://your-domain.com\r Endpoint: /api/waitlist/signup/",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cloudinary": "^2.5.1"
+  }
+}
