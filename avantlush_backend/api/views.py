@@ -11,6 +11,22 @@ from django.utils import timezone
 from django.utils.encoding import force_bytes, force_str
 from django.utils.html import strip_tags
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from django_filters import rest_framework as filters
+from django.db.models import Q
+from datetime import datetime
+import csv
+from django.http import HttpResponse
+
+from rest_framework import viewsets
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from django.utils import timezone
+from django.db.models import Count, Sum, F, Q
+from django.db.models.functions import TruncDate
+from datetime import timedelta
 
 from .models import SupportTicket, TicketResponse
 
@@ -96,11 +112,28 @@ from .serializers import (
     WishlistItemSerializer,
     WishlistSerializer,
     SupportTicketSerializer, 
-    TicketResponseSerializer
+    TicketResponseSerializer,
+    DashboardCartMetricsSerializer,
+    DashboardCustomerMetricsSerializer,
+    DashboardOrderMetricsSerializer,
+    DashboardSalesTrendSerializer,
+    DashboardRecentOrderSerializer,
+    ProductManagementSerializer
+    
 )
+
 
 # Local imports - Services
 from .services import CloverPaymentService
+from rest_framework import viewsets
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from django.utils import timezone
+from django.db.models import Count, Sum, F, Q
+from django.db.models.functions import TruncDate
+from datetime import timedelta
+
 class WaitlistRateThrottle(AnonRateThrottle):
     rate = '5/minute'  # Limit to 5 requests per minute per IP
 
@@ -1186,8 +1219,6 @@ class ReviewViewSet(viewsets.ModelViewSet):
         serializer = ReviewSummarySerializer(review)
         return Response(serializer.data)
     
-
-
 class CheckoutViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
     
@@ -1507,3 +1538,358 @@ class SupportTicketViewSet(viewsets.ModelViewSet):
                 'data': serializer.data
             })
         return Response(serializer.errors, status=400)
+    
+
+class DashboardViewSet(viewsets.ViewSet):
+    permission_classes = [IsAuthenticated]
+    
+    @action(detail=False, methods=['GET'])
+    def cart_metrics(self, request):
+        """Get abandoned cart rate and related metrics"""
+        time_period = request.query_params.get('period', 'week')
+        date_threshold = self._get_date_threshold(time_period)
+        
+        total_carts = Cart.objects.filter(
+            created_at__gte=date_threshold
+        ).count()
+        
+        abandoned_carts = Cart.objects.filter(
+            created_at__gte=date_threshold,
+            items__isnull=False
+        ).exclude(
+            user__orders__created_at__gte=F('created_at')
+        ).distinct().count()
+        
+        abandoned_rate = (abandoned_carts / total_carts * 100) if total_carts > 0 else 0
+        
+        data = {
+            'abandoned_rate': round(abandoned_rate, 2),
+            'total_carts': total_carts,
+            'abandoned_carts': abandoned_carts,
+            'period': time_period
+        }
+        
+        serializer = DashboardCartMetricsSerializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['GET'])
+    def customer_metrics(self, request):
+        """Get customer-related metrics"""
+        time_period = request.query_params.get('period', 'week')
+        date_threshold = self._get_date_threshold(time_period)
+        
+        total_customers = CustomUser.objects.count()
+        active_customers = CustomUser.objects.filter(
+            orders__created_at__gte=date_threshold
+        ).distinct().count()
+        
+        previous_customers = CustomUser.objects.filter(
+            date_joined__lt=date_threshold
+        ).count()
+        
+        growth_rate = ((total_customers - previous_customers) / previous_customers * 100) if previous_customers > 0 else 0
+        
+        data = {
+            'total_customers': total_customers,
+            'active_customers': active_customers,
+            'growth_rate': round(growth_rate, 2),
+            'period': time_period
+        }
+        
+        serializer = DashboardCustomerMetricsSerializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['GET'])
+    def order_metrics(self, request):
+        """Get order-related metrics"""
+        time_period = request.query_params.get('period', 'week')
+        date_threshold = self._get_date_threshold(time_period)
+        
+        orders = Order.objects.filter(created_at__gte=date_threshold)
+        orders_by_status = orders.values('status').annotate(
+            count=Count('id')
+        )
+        
+        order_totals = orders.aggregate(
+            total_revenue=Sum('total'),
+            total_orders=Count('id')
+        )
+        
+        data = {
+            'orders_by_status': orders_by_status,
+            'total_revenue': order_totals['total_revenue'] or 0,
+            'total_orders': order_totals['total_orders'],
+            'period': time_period
+        }
+        
+        serializer = DashboardOrderMetricsSerializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['GET'])
+    def sales_trend(self, request):
+        """Get sales trend data"""
+        time_period = request.query_params.get('period', 'week')
+        date_threshold = self._get_date_threshold(time_period)
+        
+        sales_data = Order.objects.filter(
+            created_at__gte=date_threshold,
+            status__in=['PROCESSING', 'SHIPPED', 'DELIVERED']
+        ).annotate(
+            date=TruncDate('created_at')
+        ).values('date').annotate(
+            revenue=Sum('total'),
+            orders=Count('id')
+        ).order_by('date')
+        
+        serializer = DashboardSalesTrendSerializer(sales_data, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['GET'])
+    def recent_orders(self, request):
+        """Get recent orders with details"""
+        orders = Order.objects.select_related('user').prefetch_related(
+            'items__product'
+        ).order_by('-created_at')[:10]
+        
+        orders_data = []
+        for order in orders:
+            order_data = {
+                'id': order.id,
+                'user_email': order.user.email,
+                'total': order.total,
+                'status': order.status,
+                'created_at': order.created_at,
+                'items': [
+                    {
+                        'product_name': item.product.name,
+                        'quantity': item.quantity,
+                        'price': item.price
+                    } for item in order.items.all()
+                ]
+            }
+            orders_data.append(order_data)
+        
+        serializer = DashboardRecentOrderSerializer(orders_data, many=True)
+        return Response(serializer.data)
+
+    def _get_date_threshold(self, period):
+        """Helper method to get date threshold based on period"""
+        now = timezone.now()
+        thresholds = {
+            'day': now - timedelta(days=1),
+            'week': now - timedelta(weeks=1),
+            'month': now - timedelta(days=30),
+            'year': now - timedelta(days=365)
+        }
+        return thresholds.get(period, thresholds['week'])
+
+class ProductFilter(django_filters.FilterSet):
+    tab = django_filters.CharFilter(method='filter_tab')
+    search = django_filters.CharFilter(method='filter_search')
+    
+    class Meta:
+        model = Product
+        fields = ['tab', 'search']
+
+    def filter_tab(self, queryset, name, value):
+        if value == 'all':
+            return queryset
+        elif value == 'published':
+            return queryset.filter(status='published')
+        elif value == 'low_stock':
+            return queryset.filter(stock_quantity__lte=10)  # Threshold is adjustable 
+        elif value == 'draft':
+            return queryset.filter(status='draft')
+        return queryset
+
+    def filter_search(self, queryset, name, value):
+        return queryset.filter(
+            Q(name__icontains=value) |
+            Q(sku__icontains=value)
+        )
+# Update the ProductViewSet
+class ProductViewSet(viewsets.ModelViewSet):
+    queryset = Product.objects.all()
+    serializer_class = ProductManagementSerializer
+    filterset_class = ProductFilter
+    filter_backends = [django_filters.DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    permission_classes = [IsAuthenticated]  # Add authentication if needed
+
+    def get_serializer_class(self):
+        if self.action in ['list', 'retrieve'] and self.request.query_params.get('view') == 'management':
+            return ProductManagementSerializer
+        return super().get_serializer_class()
+
+    def list(self, request, *args, **kwargs):
+        # Apply filters
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        # Compute tab counts
+        tab_counts = {
+            'all': Product.objects.count(),
+            'published': Product.objects.filter(status='published').count(),
+            'low_stock': Product.objects.filter(stock_quantity__lte=10).count(),
+            'draft': Product.objects.filter(status='draft').count()
+        }
+        
+        # Paginate and serialize
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            response = self.get_paginated_response(serializer.data)
+            response.data['tab_counts'] = tab_counts
+            return response
+
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({
+            'results': serializer.data,
+            'tab_counts': tab_counts
+        })
+
+    @action(detail=False, methods=['get'])
+    def export(self, request):
+        # Get filtered queryset
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="products_export.csv"'
+        
+        writer = csv.writer(response)
+        writer.writerow([
+            'Product ID', 
+            'Product Name', 
+            'SKU', 
+            'Category', 
+            'Stock Quantity', 
+            'Price', 
+            'Status', 
+            'Added Date'
+        ])
+        
+        for product in queryset:
+            writer.writerow([
+                product.id,
+                product.name,
+                product.sku,
+                product.category.name if product.category else 'N/A',
+                product.stock_quantity,
+                str(product.price),
+                product.get_status_display(),
+                product.created_at.strftime('%d %b %Y')
+            ])
+        
+        return response
+
+    @action(detail=False, methods=['post'])
+    def bulk_update_status(self, request):
+        product_ids = request.data.get('product_ids', [])
+        new_status = request.data.get('status')
+        
+        if not new_status or not product_ids:
+            return Response({
+                'error': 'Missing required parameters',
+                'details': {
+                    'product_ids': 'List of product IDs is required',
+                    'status': 'New status is required'
+                }
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Validate status
+        valid_statuses = [choice[0] for choice in Product.STATUS_CHOICES]
+        if new_status not in valid_statuses:
+            return Response({
+                'error': 'Invalid status',
+                'valid_statuses': valid_statuses
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Perform bulk update
+        updated_count = Product.objects.filter(id__in=product_ids).update(status=new_status)
+        
+        return Response({
+            'status': 'success',
+            'updated_count': updated_count,
+            'total_requested': len(product_ids)
+        })
+
+    @action(detail=False, methods=['get'])
+    def tab_counts(self, request):
+        """
+        Endpoint to get product counts for each tab
+        """
+        return Response({
+            'all': Product.objects.count(),
+            'published': Product.objects.filter(status='published').count(),
+            'low_stock': Product.objects.filter(stock_quantity__lte=10).count(),
+            'draft': Product.objects.filter(status='draft').count()
+        })
+
+    @action(detail=True, methods=['PATCH'])
+    def update_status(self, request, pk=None):
+        """
+        Update status for a single product
+        """
+        product = self.get_object()
+        new_status = request.data.get('status')
+        
+        if not new_status:
+            return Response({
+                'error': 'Status is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        valid_statuses = [choice[0] for choice in Product.STATUS_CHOICES]
+        if new_status not in valid_statuses:
+            return Response({
+                'error': 'Invalid status',
+                'valid_statuses': valid_statuses
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        product.status = new_status
+        product.save()
+        
+        serializer = self.get_serializer(product)
+        return Response(serializer.data)
+    def create(self, request, *args, **kwargs):
+        # Handle variations during product creation
+        variations_data = request.data.pop('variations', [])
+        
+        # Create product
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        product = serializer.save()
+        
+        # Create variations
+        for variation_data in variations_data:
+            ProductVariation.objects.create(
+                product=product,
+                variation_type=variation_data.get('variation_type'),
+                variation_value=variation_data.get('variation_value')
+            )
+        
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    def update(self, request, *args, **kwargs):
+        # Similar to create, but for updating
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        
+        # Handle variations
+        variations_data = request.data.pop('variations', [])
+        
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        product = serializer.save()
+        
+        # Update variations
+        # This is a simple approach - you might want more sophisticated variation management
+        product.variations.all().delete()
+        for variation_data in variations_data:
+            ProductVariation.objects.create(
+                product=product,
+                variation_type=variation_data.get('variation_type'),
+                variation_value=variation_data.get('variation_value')
+            )
+        
+        return Response(serializer.data)

@@ -109,6 +109,9 @@ class Product(models.Model):
     STATUS_CHOICES = [
         ('active', 'Active'),
         ('inactive', 'Inactive'),
+        ('published', 'Published'),
+        ('draft', 'Draft'),
+        ('low_stock', 'Low Stock'),
         ('out_of_stock', 'Out of Stock')
     ]
     
@@ -126,15 +129,48 @@ class Product(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    tags = models.ManyToManyField('Tag', blank=True)
-    categories = models.ManyToManyField('Category', blank=True, related_name='secondary_products')
 
+    # New fields for detailed product management
+    description = models.TextField(blank=True, null=True)
+    category = models.ForeignKey('Category', on_delete=models.SET_NULL, null=True, related_name='products')
+    tags = models.ManyToManyField('Tag', blank=True)
+    
+    # Pricing fields
+    base_price = models.DecimalField(max_digits=10, decimal_places=2)
+    discount_type = models.CharField(max_length=20, choices=[
+        ('percentage', 'Percentage'),
+        ('fixed', 'Fixed Amount')
+    ], null=True, blank=True)
+    discount_percentage = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    vat_amount = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    
+    # Inventory fields
+    barcode = models.CharField(max_length=100, null=True, blank=True)
+    
+    # Shipping fields
+    is_physical_product = models.BooleanField(default=True)
+    weight = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    height = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    length = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    width = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     class Meta:
         ordering = ['-created_at']
 
     def __str__(self):
         return self.name
 
+class ProductVariation(models.Model):
+    product = models.ForeignKey(
+        Product, 
+        related_name='variations', 
+        on_delete=models.CASCADE
+    )
+    variation_type = models.CharField(max_length=100)
+    variation = models.CharField(max_length=100)
+
+    def __str__(self):
+        return f"{self.product.name} - {self.variation_type}: {self.variation}"
+    
 class Article(models.Model):
     title = models.CharField(max_length=255)
     content = models.TextField()

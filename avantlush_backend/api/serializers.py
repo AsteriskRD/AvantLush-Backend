@@ -19,7 +19,10 @@ from .models import Review, ReviewTag, ReviewHelpfulVote
 from .models import PromoCode, ShippingMethod
 from rest_framework import serializers
 from .models import SupportTicket, TicketResponse
-
+from rest_framework import serializers
+from .models import Order, CustomUser, Cart, Product
+from rest_framework import serializers
+from .models import Product, Category
 from .models import (
     CustomUser,  
     WaitlistEntry, 
@@ -36,7 +39,10 @@ from .models import (
     Address,
     TicketResponse,
     SupportTicket,
-    Payment
+    Payment,
+    ProductVariation, 
+    Tag,
+    Category
 )   
 
 User = get_user_model()
@@ -458,3 +464,194 @@ class SupportTicketSerializer(serializers.ModelSerializer):
         fields = ['id', 'subject', 'message', 'status', 'priority', 'order', 
                  'created_at', 'updated_at', 'responses']
         read_only_fields = ['created_at', 'updated_at']
+
+class DashboardCartMetricsSerializer(serializers.Serializer):
+    abandoned_rate = serializers.FloatField()
+    total_carts = serializers.IntegerField()
+    abandoned_carts = serializers.IntegerField()
+    period = serializers.CharField()
+
+class DashboardCustomerMetricsSerializer(serializers.Serializer):
+    total_customers = serializers.IntegerField()
+    active_customers = serializers.IntegerField()
+    growth_rate = serializers.FloatField()
+    period = serializers.CharField()
+
+class DashboardOrderStatusSerializer(serializers.Serializer):
+    status = serializers.CharField()
+    count = serializers.IntegerField()
+
+class DashboardOrderMetricsSerializer(serializers.Serializer):
+    orders_by_status = DashboardOrderStatusSerializer(many=True)
+    total_revenue = serializers.DecimalField(max_digits=10, decimal_places=2)
+    total_orders = serializers.IntegerField()
+    period = serializers.CharField()
+
+class DashboardSalesTrendSerializer(serializers.Serializer):
+    date = serializers.DateField()
+    revenue = serializers.DecimalField(max_digits=10, decimal_places=2)
+    orders = serializers.IntegerField()
+
+class DashboardRecentOrderItemSerializer(serializers.Serializer):
+    product_name = serializers.CharField()
+    quantity = serializers.IntegerField()
+    price = serializers.DecimalField(max_digits=10, decimal_places=2)
+
+class DashboardRecentOrderSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    user_email = serializers.EmailField()
+    total = serializers.DecimalField(max_digits=10, decimal_places=2)
+    status = serializers.CharField()
+    created_at = serializers.DateTimeField()
+    items = DashboardRecentOrderItemSerializer(many=True)
+
+class ProductVariationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProductVariation  # Assuming you'll add this model
+        fields = ['variation_type', 'variation']
+
+class ProductManagementSerializer(serializers.ModelSerializer):
+    # General Information Fields
+    category_name = serializers.CharField(source='category.name', read_only=True)
+    tags = serializers.PrimaryKeyRelatedField(
+        queryset=Tag.objects.all(), 
+        many=True, 
+        required=False
+    )
+
+    # Pricing Fields
+    base_price = serializers.DecimalField(
+        max_digits=10, 
+        decimal_places=2, 
+        required=False, 
+        source='price'
+    )
+    discount_type = serializers.ChoiceField(
+        choices=['percentage', 'fixed'], 
+        required=False
+    )
+    discount_percentage = serializers.DecimalField(
+        max_digits=5, 
+        decimal_places=2, 
+        required=False
+    )
+    vat_amount = serializers.DecimalField(
+        max_digits=5, 
+        decimal_places=2, 
+        required=False
+    )
+
+    # Inventory Fields
+    barcode = serializers.CharField(required=False, allow_blank=True)
+    variations = ProductVariationSerializer(many=True, required=False)
+
+    # Shipping Fields
+    is_physical_product = serializers.BooleanField(default=True)
+    weight = serializers.DecimalField(
+        max_digits=10, 
+        decimal_places=2, 
+        required=False
+    )
+    height = serializers.DecimalField(
+        max_digits=10, 
+        decimal_places=2, 
+        required=False
+    )
+    length = serializers.DecimalField(
+        max_digits=10, 
+        decimal_places=2, 
+        required=False
+    )
+    width = serializers.DecimalField(
+        max_digits=10, 
+        decimal_places=2, 
+        required=False
+    )
+
+    # Additional Fields
+    variants_count = serializers.SerializerMethodField()
+    status_display = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Product
+        fields = [
+            # General Information
+            'id', 'name', 'description', 'category', 'category_name', 
+            'tags', 'status', 'status_display', 'images',
+
+            # Pricing
+            'base_price', 'discount_type', 'discount_percentage', 
+            'vat_amount',
+
+            # Inventory
+            'sku', 'barcode', 'stock_quantity', 'variations',
+
+            # Shipping
+            'is_physical_product', 'weight', 'height', 
+            'length', 'width',
+
+            # Additional
+            'created_at', 'variants_count'
+        ]
+        read_only_fields = ['created_at', 'id']
+        extra_kwargs = {
+            'status': {'required': False, 'default': 'draft'}
+        }
+
+    def get_variants_count(self, obj):
+        # Implement based on your variation model
+        return obj.variations.count() if hasattr(obj, 'variations') else 0
+
+    def get_status_display(self, obj):
+        status_mapping = {
+            'published': 'Published',
+            'draft': 'Draft',
+            'inactive': 'Inactive',
+            'out_of_stock': 'Low Stock'
+        }
+        return status_mapping.get(obj.status, obj.status)
+
+    def create(self, validated_data):
+        # Handle variations during product creation
+        variations_data = validated_data.pop('variations', [])
+        
+        # Create product
+        product = Product.objects.create(**validated_data)
+        
+        # Create variations
+        for variation_data in variations_data:
+            ProductVariation.objects.create(
+                product=product,
+                variation_type=variation_data.get('variation_type'),
+                variation=variation_data.get('variation')
+            )
+        
+        return product
+
+    def update(self, instance, validated_data):
+        # Handle variations during product update
+        variations_data = validated_data.pop('variations', [])
+        
+        # Update product fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        
+        # Update variations
+        # First, clear existing variations
+        instance.variations.all().delete()
+        
+        # Create new variations
+        for variation_data in variations_data:
+            ProductVariation.objects.create(
+                product=instance,
+                variation_type=variation_data.get('variation_type'),
+                variation=variation_data.get('variation')
+            )
+        
+        return instance
+        
+class ProductVariationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProductVariation  
+        fields = ['variation_type', 'variation']
