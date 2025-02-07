@@ -23,6 +23,7 @@ from rest_framework import serializers
 from .models import Order, CustomUser, Cart, Product
 from rest_framework import serializers
 from .models import Product, Category
+
 from .models import (
     CustomUser,  
     WaitlistEntry, 
@@ -321,11 +322,97 @@ class CartSerializer(serializers.ModelSerializer):
         model = Cart
         fields = ['id', 'user', 'items', 'created_at', 'updated_at']
 
+
 class OrderItemSerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(source='product.name')
+    product_sku = serializers.CharField(source='product.sku')
+    
     class Meta:
         model = OrderItem
-        fields = ['id', 'product', 'quantity', 'price']
+        fields = ['id', 'product', 'product_name', 'product_sku', 'quantity', 
+                 'unit_price', 'total_price', 'variants']
 
+class PaymentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Payment
+        fields = ['id', 'method', 'status', 'amount', 'transaction_id', 
+                 'payment_date', 'card_last_four']
+
+class OrderSerializer(serializers.ModelSerializer):
+    items = OrderItemSerializer(many=True, read_only=True)
+    payment = PaymentSerializer(read_only=True)
+    customer_email = serializers.EmailField(source='user.email', read_only=True)
+    customer_name = serializers.SerializerMethodField()
+    status_display = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Order
+        fields = ['id', 'order_number', 'customer_email', 'customer_name',
+                 'items', 'total', 'status', 'status_display', 'payment',
+                 'shipping_address', 'billing_address', 'created_at', 
+                 'updated_at', 'notes']
+        read_only_fields = ['id', 'order_number', 'created_at', 'updated_at']
+
+    def get_customer_name(self, obj):
+        if obj.user.first_name or obj.user.last_name:
+            return f"{obj.user.first_name} {obj.user.last_name}".strip()
+        return obj.user.email
+
+    def get_status_display(self, obj):
+        return obj.get_status_display()
+
+class OrderCreateSerializer(serializers.ModelSerializer):
+    items = serializers.ListField(
+        child=serializers.DictField(),
+        write_only=True
+    )
+    payment_method = serializers.CharField(write_only=True)
+    
+    class Meta:
+        model = Order
+        fields = ['items', 'payment_method', 'shipping_address', 
+                 'billing_address', 'notes']
+
+    def create(self, validated_data):
+        items_data = validated_data.pop('items')
+        payment_method = validated_data.pop('payment_method')
+        
+        # Create order
+        order = Order.objects.create(
+            user=self.context['request'].user,
+            **validated_data
+        )
+        
+        # Create order items
+        total = 0
+        for item_data in items_data:
+            product = Product.objects.get(id=item_data['product_id'])
+            quantity = item_data['quantity']
+            unit_price = product.price
+            
+            OrderItem.objects.create(
+                order=order,
+                product=product,
+                quantity=quantity,
+                unit_price=unit_price,
+                total_price=unit_price * quantity,
+                variants=item_data.get('variants', {})
+            )
+            total += unit_price * quantity
+        
+        # Update order total
+        order.total = total
+        order.save()
+        
+        # Create payment
+        Payment.objects.create(
+            order=order,
+            method=payment_method,
+            amount=total,
+            status='pending'
+        )
+        
+        return order
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
     user = serializers.PrimaryKeyRelatedField(read_only=True)
@@ -577,7 +664,8 @@ class ProductManagementSerializer(serializers.ModelSerializer):
         fields = [
             # General Information
             'id', 'name', 'description', 'category', 'category_name', 
-            'tags', 'status', 'status_display', 'images',
+            'tags', 'status', 'status_display', 'main_image', 'images',
+        
 
             # Pricing
             'base_price', 'discount_type', 'discount_percentage', 
@@ -655,3 +743,13 @@ class ProductVariationSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProductVariation  
         fields = ['variation_type', 'variation']
+        
+class TagSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Tag
+        fields = ['id', 'name', 'slug']
+
+class CategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Category
+        fields = ['id', 'name', 'slug']

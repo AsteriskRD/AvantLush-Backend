@@ -49,6 +49,7 @@ router.register(r'support-tickets', SupportTicketViewSet, basename='support-tick
 router.register(r'dashboard', DashboardViewSet, basename='dashboard')
 router.register(r'product-management', ProductViewSet, basename='product-management')
 
+
 # URL patterns
 urlpatterns = [
     # Authentication & User Management
@@ -72,6 +73,20 @@ urlpatterns = [
     path('products/export/', ProductViewSet.as_view({'get': 'export'}), name='product-export'),
     path('products/bulk-update-status/', ProductViewSet.as_view({'post': 'bulk_update_status'}), name='product-bulk-update'),
 
+    ## DASBOARD
+    path('products/<int:pk>/upload-image/', 
+        ProductViewSet.as_view({'post': 'upload-image'}),
+        name='product-upload-image'),
+    path('products/<int:pk>/remove-image/<str:image_id>/',
+        ProductViewSet.as_view({'delete': 'remove-image'}),
+        name='product-remove-image'),
+    path('products/tags/', 
+        ProductViewSet.as_view({'get': 'tags'}),
+        name='product-tags'),
+    path('products/categories/', 
+        ProductViewSet.as_view({'get': 'categories'}),
+        name='product-categories'),
+
     # Cart Management
     path('cart/summary/', CartViewSet.as_view({'get': 'summary'})),
     path('cart/add-item/', CartViewSet.as_view({'post': 'add_item'})),
@@ -87,6 +102,8 @@ urlpatterns = [
 
     # Support & Checkout
     path('support/submit/', SupportTicketViewSet.as_view({'post': 'submit'})),
+
+    # Dashboard Image uploads
 
     # External App URLs
     path('api/', include('checkout.urls')),

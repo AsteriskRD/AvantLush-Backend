@@ -20,3 +20,4 @@ google-auth-oauthlib>=1.2.0
 django-filter
 stripe
 celery
+Pillow django-cleanup

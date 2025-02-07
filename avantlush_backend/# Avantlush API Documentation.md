@@ -1137,3 +1137,172 @@ CopyGET /api/products/?tab=all
 GET /api/products/?tab=published
 GET /api/products/?tab=low_stock
 GET /api/products/?tab=draft
+
+____________________________________________________
+# AvantLush Dashboard API Documentation
+
+## Base URL
+`https://avantlush-backend-13.onrender.com/api/dashboard/`
+
+## Authentication
+- All endpoints require authentication via Bearer token
+- Status 401 will be returned if unauthorized
+
+## 1. Cart Metrics
+**GET** `/cart_metrics/`
+
+Query Parameters:
+- `period`: string, optional (day|week|month|year), default: 'week'
+
+Success Response (200):
+```json
+{
+    "success": true,
+    "data": {
+        "abandoned_rate": 25.5,
+        "total_carts": 100,
+        "abandoned_carts": 25,
+        "period": "week"
+    }
+}
+
+Error Response (401):
+
+{
+    "success": false,
+    "message": "Authentication credentials were not provided"
+}
+
+2. Customer Metrics
+GET /customer_metrics/
+
+Query Parameters:
+
+period: string, optional (day|week|month|year), default: 'week'
+Success Response (200):
+
+{
+    "success": true,
+    "data": {
+        "total_customers": 500,
+        "active_customers": 150,
+        "growth_rate": 12.5,
+        "period": "week"
+    }
+}
+
+ Order Metrics
+GET /order_metrics/
+
+Query Parameters:
+
+period: string, optional (day|week|month|year), default: 'week'
+Success Response (200):
+
+{
+    "success": true,
+    "data": {
+        "orders_by_status": [
+            {
+                "status": "PENDING",
+                "count": 5
+            },
+            {
+                "status": "PROCESSING",
+                "count": 10
+            },
+            {
+                "status": "SHIPPED",
+                "count": 15
+            },
+            {
+                "status": "DELIVERED",
+                "count": 20
+            }
+        ],
+        "total_revenue": "15000.00",
+        "total_orders": 50,
+        "period": "week"
+    }
+}
+
+4. Sales Trend
+GET /sales_trend/
+
+Query Parameters:
+
+period: string, optional (day|week|month|year), default: 'week'
+Success Response (200):
+
+{
+    "success": true,
+    "data": [
+        {
+            "date": "2024-03-01",
+            "revenue": "5000.00",
+            "orders": 25
+        },
+        {
+            "date": "2024-03-02", 
+            "revenue": "6500.00",
+            "orders": 32
+        }
+    ]
+}
+
+5. Recent Orders
+GET /recent_orders/
+
+Success Response (200):
+
+{
+    "success": true,
+    "data": [
+        {
+            "id": 1,
+            "user_email": "customer@example.com",
+            "total": "299.99",
+            "status": "PROCESSING",
+            "created_at": "2024-03-10T14:30:00Z",
+            "items": [
+                {
+                    "product_name": "Product Name",
+                    "quantity": 2,
+                    "price": "149.99"
+                }
+            ]
+        }
+    ]
+}
+
+Common Error Responses:
+
+401 Unauthorized:
+
+{
+    "success": false,
+    "message": "Authentication credentials were not provided"
+}
+
+400 Bad Request:
+
+{
+    "success": false,
+    "message": "Invalid period parameter",
+    "valid_periods": ["day", "week", "month", "year"]
+}
+
+500 Server Error:
+
+{
+    "success": false,
+    "message": "An error occurred while processing your request"
+}
+
+Rate Limiting
+5 requests per minute per IP address
+Status 429 will be returned if rate limit is exceeded
+Data Formats
+All timestamps are in ISO 8601 format
+All monetary values are decimal strings with 2 decimal places
+All percentage values are floats

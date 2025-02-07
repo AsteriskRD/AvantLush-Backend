@@ -19,6 +19,10 @@ from datetime import datetime
 import csv
 from django.http import HttpResponse
 
+from rest_framework.parsers import MultiPartParser, FormParser
+from django.core.files.storage import default_storage
+from django.core.files.base import ContentFile
+
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -87,7 +91,9 @@ from .models import (
     ShippingMethod,
     WaitlistEntry,
     Wishlist,
-    WishlistItem
+    WishlistItem,
+    Tag,
+    Category
 )
 
 # Local imports - Serializers
@@ -118,10 +124,14 @@ from .serializers import (
     DashboardOrderMetricsSerializer,
     DashboardSalesTrendSerializer,
     DashboardRecentOrderSerializer,
-    ProductManagementSerializer
+    ProductManagementSerializer,
+    TagSerializer,
+    CategorySerializer
     
 )
 
+# Filters impors
+from .filter import OrderFilter
 
 # Local imports - Services
 from .services import CloverPaymentService
@@ -520,35 +530,6 @@ def login(request):
         'errors': serializer.errors
     }, status=status.HTTP_400_BAD_REQUEST)
 
-class ProductViewSet(viewsets.ModelViewSet):
-    serializer_class = ProductSerializer
-    filter_backends = [filters.SearchFilter, filters.OrderingFilter, DjangoFilterBackend]
-    search_fields = ['name', 'description', 'sku']
-    ordering_fields = ['price', 'created_at', 'name']
-    filterset_fields = ['category', 'status', 'is_featured']
-    pagination_class = PageNumberPagination
-    permission_classes = [IsAuthenticatedOrReadOnly]
-
-    def get_queryset(self):
-        queryset = Product.objects.all()
-        
-        # Price range filtering
-        min_price = self.request.query_params.get('min_price')
-        max_price = self.request.query_params.get('max_price')
-        if min_price:
-            queryset = queryset.filter(price__gte=min_price)
-        if max_price:
-            queryset = queryset.filter(price__lte=max_price)
-            
-        # Stock status filtering
-        in_stock = self.request.query_params.get('in_stock')
-        if in_stock is not None:
-            if in_stock.lower() == 'true':
-                queryset = queryset.filter(stock_quantity__gt=0)
-            elif in_stock.lower() == 'false':
-                queryset = queryset.filter(stock_quantity=0)
-                
-        return queryset
 
     @action(detail=False, methods=['get'])
     def featured(self, request):
@@ -677,6 +658,37 @@ def reset_password(request, uidb64, token):
             'message': f'Invalid reset link: {str(e)}'
         }, status=status.HTTP_400_BAD_REQUEST)
     
+
+class ProductViewSet(viewsets.ModelViewSet):
+    serializer_class = ProductSerializer
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter, DjangoFilterBackend]
+    search_fields = ['name', 'description', 'sku']
+    ordering_fields = ['price', 'created_at', 'name']
+    filterset_fields = ['category', 'status', 'is_featured']
+    pagination_class = PageNumberPagination
+    permission_classes = [IsAuthenticatedOrReadOnly]
+
+    def get_queryset(self):
+        queryset = Product.objects.all()
+        
+        # Price range filtering
+        min_price = self.request.query_params.get('min_price')
+        max_price = self.request.query_params.get('max_price')
+        if min_price:
+            queryset = queryset.filter(price__gte=min_price)
+        if max_price:
+            queryset = queryset.filter(price__lte=max_price)
+            
+        # Stock status filtering
+        in_stock = self.request.query_params.get('in_stock')
+        if in_stock is not None:
+            if in_stock.lower() == 'true':
+                queryset = queryset.filter(stock_quantity__gt=0)
+            elif in_stock.lower() == 'false':
+                queryset = queryset.filter(stock_quantity=0)
+                
+        return queryset
+
 class ProfileViewSet(viewsets.ModelViewSet):
     serializer_class = ProfileSerializer
     permission_classes = [IsAuthenticated]
@@ -964,81 +976,157 @@ class CartItemViewSet(viewsets.ModelViewSet):
         return Response(status=status.HTTP_204_NO_CONTENT)
     
 class OrderViewSet(viewsets.ModelViewSet):
-    serializer_class = OrderSerializer
-    permission_classes = [IsAuthenticated]
+    queryset = Order.objects.all().select_related('user', 'payment').prefetch_related('items__product')
+    filterset_class = OrderFilter
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['order_number', 'user__email', 'user__first_name', 'user__last_name']
+    ordering_fields = ['created_at', 'total', 'status']
+    ordering = ['-created_at']
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return OrderCreateSerializer
+        return OrderSerializer
 
     def get_queryset(self):
-        queryset = Order.objects.filter(user=self.request.user)
-        status = self.request.query_params.get('status', None)
-        if status:
-            queryset = queryset.filter(status=status)
+        queryset = super().get_queryset()
+        if not self.request.user.is_staff:
+            queryset = queryset.filter(user=self.request.user)
         return queryset
-    @action(detail=True, methods=['POST'])
-    def add_tracking_event(self, request, pk=None):
-        """Add a new tracking event to the order"""
-        order = self.get_object()
-        serializer = OrderTrackingSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save(order=order)
-            # Send notification to user
-            notify_order_update.delay(order.id, request.data.get('status'))
-            return Response(serializer.data)
-        return Response(serializer.errors, status=400)
+
+    @action(detail=False, methods=['POST'])
+    def bulk_action(self, request):
+        order_ids = request.data.get('order_ids', [])
+        action_type = request.data.get('action')
+        
+        if not order_ids or not action_type:
+            return Response({
+                'error': 'order_ids and action are required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        orders = Order.objects.filter(id__in=order_ids)
+        
+        if action_type == 'update_status':
+            new_status = request.data.get('status')
+            if not new_status:
+                return Response({
+                    'error': 'status is required for update_status action'
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+            orders.update(status=new_status)
+            
+        elif action_type == 'delete':
+            orders.delete()
+            
+        return Response({'status': 'success', 'processed': len(order_ids)})
 
     @action(detail=False, methods=['GET'])
-    def filter_by_date(self, request):
-        """Filter orders by date range"""
-        start_date = request.query_params.get('start_date')
-        end_date = request.query_params.get('end_date')
+    def export(self, request):
+        queryset = self.filter_queryset(self.get_queryset())
         
-        queryset = self.get_queryset()
-        if start_date:
-            queryset = queryset.filter(created_at__gte=start_date)
-        if end_date:
-            queryset = queryset.filter(created_at__lte=end_date)
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = f'attachment; filename="orders-{timezone.now().strftime("%Y%m%d")}.csv"'
+        
+        writer = csv.writer(response)
+        writer.writerow([
+            'Order ID', 'Date', 'Customer', 'Email', 'Items', 
+            'Total', 'Status', 'Payment Method', 'Payment Status'
+        ])
+        
+        for order in queryset:
+            items_str = ', '.join([
+                f"{item.product.name} (x{item.quantity})"
+                for item in order.items.all()
+            ])
             
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
-    
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+            writer.writerow([
+                order.order_number,
+                order.created_at.strftime('%Y-%m-%d %H:%M'),
+                order.get_customer_name(),
+                order.user.email,
+                items_str,
+                order.total,
+                order.get_status_display(),
+                order.payment.method if order.payment else 'N/A',
+                order.payment.status if order.payment else 'N/A'
+            ])
+        
+        return response
 
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        order = self.perform_create(serializer)
+    @action(detail=False, methods=['GET'])
+    def summary(self, request):
+        queryset = self.get_queryset()
+        today = timezone.now().date()
+        
+        # Status summary
+        status_summary = queryset.values('status').annotate(
+            count=Count('id'),
+            total_value=Sum('total')
+        )
+        
+        # Today's orders
+        today_orders = queryset.filter(
+            created_at__date=today
+        ).aggregate(
+            count=Count('id'),
+            total_value=Sum('total')
+        )
+        
+        # Payment method distribution
+        payment_methods = queryset.values(
+            'payment__method'
+        ).annotate(
+            count=Count('id'),
+            total_value=Sum('total')
+        )
+        
+        return Response({
+            'status_summary': status_summary,
+            'today_summary': today_orders,
+            'payment_methods': payment_methods
+        })
 
-        # cross-sell products to the order
-        cart_items = CartItem.objects.filter(cart__user=request.user)
-        for cart_item in cart_items:
-            recommendations = ProductRecommendation.objects.filter(product=cart_item.product)
-            for recommendation in recommendations:
-                OrderItem.objects.create(
-                    order=order,
-                    product=recommendation.recommended_product,
-                    quantity=1,
-                    price=recommendation.recommended_product.price
-                )
-
-        headers = self.get_success_headers(serializer.data)
-        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
-
-    def update(self, request, *args, **kwargs):
-        partial = kwargs.pop('partial', False)
-        instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
-        serializer.is_valid(raise_exception=True)
-        self.perform_update(serializer)
-        return Response(serializer.data)
-
-    @action(detail=True, methods=['patch'])
-    def update_status(self, request, pk=None):
+    @action(detail=True, methods=['POST'])
+    def add_note(self, request, pk=None):
         order = self.get_object()
-        serializer = self.get_serializer(order, data={'status': request.data.get('status')}, partial=True)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data)
-    
+        note = request.data.get('note')
+        
+        if not note:
+            return Response({
+                'error': 'Note content is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        if order.notes:
+            order.notes += f"\n[{timezone.now().strftime('%Y-%m-%d %H:%M')}] {note}"
+        else:
+            order.notes = f"[{timezone.now().strftime('%Y-%m-%d %H:%M')}] {note}"
+        
+        order.save()
+        return Response({'status': 'success'})
+
+    @action(detail=True, methods=['POST'])
+    def update_payment(self, request, pk=None):
+        order = self.get_object()
+        payment_status = request.data.get('status')
+        transaction_id = request.data.get('transaction_id')
+        
+        if not payment_status:
+            return Response({
+                'error': 'Payment status is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not order.payment:
+            return Response({
+                'error': 'No payment found for this order'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        order.payment.status = payment_status
+        if transaction_id:
+            order.payment.transaction_id = transaction_id
+        order.payment.save()
+        
+        return Response({'status': 'success'})
+        
 # Product Search and Filtering Views
 class ProductSearchView(generics.ListAPIView):
     serializer_class = ProductSerializer
@@ -1783,6 +1871,7 @@ class ProductViewSet(viewsets.ModelViewSet):
         
         return response
 
+    
     @action(detail=False, methods=['post'])
     def bulk_update_status(self, request):
         product_ids = request.data.get('product_ids', [])
@@ -1892,4 +1981,80 @@ class ProductViewSet(viewsets.ModelViewSet):
                 variation_value=variation_data.get('variation_value')
             )
         
+        return Response(serializer.data)
+    @action(detail=True, methods=['POST'], url_path='upload-image')
+    def upload_image(self, request, pk=None):
+        """Handle image uploads for products"""
+        product = self.get_object()
+        
+        if 'image' not in request.FILES:
+            return Response(
+                {'error': 'No image file provided'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        image = request.FILES['image']
+        image_type = request.data.get('type', 'main')
+        
+        if image_type == 'main':
+            # Handle main image
+            if product.main_image:
+                product.main_image.delete()
+            product.main_image = image
+        else:
+            # Handle additional images
+            current_images = product.images or []
+            image_path = default_storage.save(
+                f'products/additional/{image.name}',
+                ContentFile(image.read())
+            )
+            current_images.append(image_path)
+            product.images = current_images
+            
+        product.save()
+        return Response({'message': 'Image uploaded successfully'})
+
+    @action(detail=True, methods=['DELETE'], url_path='remove-image/(?P<image_id>[^/.]+)')
+    def remove_image(self, request, pk=None, image_id=None):
+        """Handle image removal for products"""
+        product = self.get_object()
+        
+        if image_id == 'main':
+            if product.main_image:
+                product.main_image.delete()
+                product.main_image = None
+        else:
+            try:
+                image_index = int(image_id)
+                current_images = product.images
+                if 0 <= image_index < len(current_images):
+                    # Remove from storage and list
+                    default_storage.delete(current_images[image_index])
+                    current_images.pop(image_index)
+                    product.images = current_images
+                else:
+                    return Response(
+                        {'error': 'Image index out of range'},
+                        status=status.HTTP_404_NOT_FOUND
+                    )
+            except ValueError:
+                return Response(
+                    {'error': 'Invalid image ID'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+                
+        product.save()
+        return Response({'message': 'Image removed successfully'})
+    @action(detail=False, methods=['GET'])
+    def tags(self, request):
+        """Get all available tags for product management"""
+        tags = Tag.objects.all()
+        serializer = TagSerializer(tags, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['GET'])
+    def categories(self, request):
+        """Get all available categories for product management"""
+        categories = Category.objects.all()
+        serializer = CategorySerializer(categories, many=True)
         return Response(serializer.data)

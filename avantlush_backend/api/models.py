@@ -130,6 +130,11 @@ class Product(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    main_image = models.ImageField(
+    upload_to='products/main/',
+    null=True,
+    blank=True
+)
     # New fields for detailed product management
     description = models.TextField(blank=True, null=True)
     category = models.ForeignKey('Category', on_delete=models.SET_NULL, null=True, related_name='products')
@@ -381,6 +386,8 @@ class Payment(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     gateway_response = models.JSONField(null=True, blank=True)
+    method = models.CharField(max_length=50, null=True, blank=True)
+    status = models.CharField(max_length=50, null=True, blank=True)
 
     def __str__(self):
         return f"Payment {self.transaction_id} for Order {self.order.id}"
