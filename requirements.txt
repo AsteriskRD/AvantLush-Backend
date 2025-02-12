@@ -19,4 +19,4 @@ django-filter==24.3
 stripe==11.5.0
 celery==5.4.0
 django-cleanup==9.0.0
-paypalrestsdk==2.0.0
+paypalrestsdk==1.13.3
