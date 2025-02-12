@@ -26,7 +26,7 @@ from .models import Product, Category
 
 from .models import (
     CustomUser,  
-    WaitlistEntry, 
+    WaitlistEntry,
     Product,
     Category, 
     Article, 
@@ -43,7 +43,9 @@ from .models import (
     Payment,
     ProductVariation, 
     Tag,
-    Category
+    Category,
+    models,
+    Customer
 )   
 
 User = get_user_model()
@@ -178,9 +180,55 @@ class AppleAuthSerializer(SocialLoginSerializer):
         return social_login
 
 class CustomUserDetailsSerializer(UserDetailsSerializer):
+    """
+    Custom serializer for the User model that inherits from dj-rest-auth's UserDetailsSerializer
+    Extends the default serializer to include custom fields from CustomUser model
+    """
+    # Add any custom fields from your CustomUser model
+    uuid = serializers.UUIDField(read_only=True)
+    location = serializers.CharField(required=False, allow_blank=True)
+    
     class Meta(UserDetailsSerializer.Meta):
-        fields = ('email', 'first_name', 'last_name')
-        read_only_fields = ('email',)
+        model = CustomUser
+        fields = UserDetailsSerializer.Meta.fields + (
+            'uuid',
+            'location',
+            # Add any other custom fields from your CustomUser model
+        )
+        read_only_fields = UserDetailsSerializer.Meta.read_only_fields + (
+            'uuid',
+        )
+    
+    def update(self, instance, validated_data):
+        """
+        Override update method to handle custom fields
+        """
+        # Handle custom fields first
+        instance.location = validated_data.get('location', instance.location)
+        
+        # Let the parent class handle the rest of the fields
+        instance = super().update(instance, validated_data)
+        
+        return instance
+class CustomerDetailSerializer(serializers.ModelSerializer):
+    orders_count = serializers.SerializerMethodField()
+    total_balance = serializers.SerializerMethodField()
+    status = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Customer
+        fields = ['id', 'name', 'email', 'phone', 'created_at', 
+                 'orders_count', 'total_balance', 'status']
+
+    def get_orders_count(self, obj):
+        return Order.objects.filter(customer=obj).count()
+
+    def get_total_balance(self, obj):
+        return Order.objects.filter(customer=obj).aggregate(
+            total=Sum('total'))['total'] or 0
+
+    def get_status(self, obj):
+        return 'Active' if obj.user.is_active else 'Blocked'
 
 class CustomRegisterSerializer(RegisterSerializer):
     username = None  # Remove username field
@@ -322,7 +370,11 @@ class CartSerializer(serializers.ModelSerializer):
         model = Cart
         fields = ['id', 'user', 'items', 'created_at', 'updated_at']
 
-
+class PaymentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Payment
+        fields = ['id', 'method', 'amount', 'status', 'created_at']
+        
 class OrderItemSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source='product.name')
     product_sku = serializers.CharField(source='product.sku')
@@ -331,12 +383,6 @@ class OrderItemSerializer(serializers.ModelSerializer):
         model = OrderItem
         fields = ['id', 'product', 'product_name', 'product_sku', 'quantity', 
                  'unit_price', 'total_price', 'variants']
-
-class PaymentSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Payment
-        fields = ['id', 'method', 'status', 'amount', 'transaction_id', 
-                 'payment_date', 'card_last_four']
 
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
@@ -347,17 +393,20 @@ class OrderSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Order
-        fields = ['id', 'order_number', 'customer_email', 'customer_name',
-                 'items', 'total', 'status', 'status_display', 'payment',
-                 'shipping_address', 'billing_address', 'created_at', 
-                 'updated_at', 'notes']
+        fields = [
+            'id', 'order_number', 'customer_email', 'customer_name',
+            'items', 'total', 'status', 'status_display', 'payment',
+            'shipping_address', 'billing_address', 'created_at', 
+            'updated_at', 'notes', 'payment_type', 'order_type',
+            'order_date', 'order_time'  # Added these fields from OrderDetailSerializer
+        ]
         read_only_fields = ['id', 'order_number', 'created_at', 'updated_at']
-
+    
     def get_customer_name(self, obj):
         if obj.user.first_name or obj.user.last_name:
             return f"{obj.user.first_name} {obj.user.last_name}".strip()
         return obj.user.email
-
+    
     def get_status_display(self, obj):
         return obj.get_status_display()
 
@@ -370,9 +419,12 @@ class OrderCreateSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Order
-        fields = ['items', 'payment_method', 'shipping_address', 
-                 'billing_address', 'notes']
-
+        fields = [
+            'items', 'payment_method', 'shipping_address',
+            'billing_address', 'notes', 'payment_type', 'order_type',
+            'order_date', 'order_time', 'status'  # Added fields from OrderDetailSerializer
+        ]
+    
     def create(self, validated_data):
         items_data = validated_data.pop('items')
         payment_method = validated_data.pop('payment_method')
@@ -413,20 +465,12 @@ class OrderCreateSerializer(serializers.ModelSerializer):
         )
         
         return order
-class OrderSerializer(serializers.ModelSerializer):
-    items = OrderItemSerializer(many=True, read_only=True)
-    user = serializers.PrimaryKeyRelatedField(read_only=True)
-    class Meta:
-        model = Order
-        fields = ['id', 'user', 'items', 'status', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'user', 'created_at', 'updated_at']
 
 class OrderTrackingSerializer(serializers.ModelSerializer):
     class Meta:
         model = OrderTracking
         fields = ['id', 'status', 'location', 'description', 'timestamp']
         read_only_fields = ['timestamp']
-
 class WishlistSerializer(serializers.ModelSerializer):
     class Meta:
         model = Wishlist
@@ -753,3 +797,34 @@ class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
         fields = ['id', 'name', 'slug']
+
+class CustomerSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Customer
+        fields = ['id', 'name', 'email', 'phone']
+
+class CustomerCreateSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True, required=False)
+    
+    class Meta:
+        model = Customer
+        fields = ['name', 'email', 'phone', 'password']
+
+    def create(self, validated_data):
+        password = validated_data.pop('password', None)
+        
+        # Create user if password is provided
+        user = None
+        if password:
+            user = CustomUser.objects.create_user(
+                email=validated_data['email'],
+                password=password
+            )
+
+        # Create customer
+        customer = Customer.objects.create(
+            user=user,
+            **validated_data
+        )
+        
+        return customer

@@ -202,8 +202,30 @@ class CartItem(models.Model):
     def __str__(self):
         return f"{self.quantity} x {self.product.name} in {self.cart}"
 
-
+class Customer(models.Model):
+    user = models.ForeignKey('CustomUser', on_delete=models.CASCADE, null=True, blank=True)
+    name = models.CharField(max_length=255)
+    email = models.EmailField()
+    phone = models.CharField(max_length=20, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return self.name
+    
 class Order(models.Model):
+    PAYMENT_TYPE_CHOICES = [
+        ('CASH', 'Cash'),
+        ('CREDIT', 'Credit Card'),
+        ('DEBIT', 'Debit Card'),
+        ('TRANSFER', 'Bank Transfer'),
+    ]
+    
+    ORDER_TYPE_CHOICES = [
+        ('STANDARD', 'Standard'),
+        ('EXPRESS', 'Express'),
+        ('PICKUP', 'Pickup'),
+    ]
+    
     STATUS_CHOICES = [
         ('PENDING', 'Pending'),
         ('PROCESSING', 'Processing'),
@@ -211,44 +233,95 @@ class Order(models.Model):
         ('DELIVERED', 'Delivered'),
         ('CANCELLED', 'Cancelled'),
     ]
-    
-    # Existing fields
+
+    PAYMENT_STATUS_CHOICES = [
+        ('PENDING', 'Pending'),
+        ('PAID', 'Paid'),
+        ('FAILED', 'Failed'),
+        ('REFUNDED', 'Refunded'),
+    ]
+
+    # Customer Information
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='orders')
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    customer = models.ForeignKey(Customer, on_delete=models.CASCADE, null=True)
     
-    # New fields for checkout
+    # Order Details
+    order_number = models.CharField(max_length=50, unique=True, editable=False)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    order_type = models.CharField(max_length=20, choices=ORDER_TYPE_CHOICES, default='STANDARD')
+    order_date = models.DateField(auto_now_add=True)
+    order_time = models.TimeField(auto_now_add=True)
+    note = models.TextField(blank=True)
+
+    # Payment Information
+    payment_type = models.CharField(max_length=20, choices=PAYMENT_TYPE_CHOICES)
+    payment_status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='PENDING')
+    
+    # Financial Details
+    subtotal = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    shipping_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    tax = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    discount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    
+    # Shipping Information
     shipping_address = models.TextField()
     shipping_city = models.CharField(max_length=100)
     shipping_state = models.CharField(max_length=100)
     shipping_country = models.CharField(max_length=100)
     shipping_zip = models.CharField(max_length=20)
-    shipping_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    subtotal = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    discount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    payment_method = models.CharField(max_length=50, null=True)
-    payment_status = models.CharField(max_length=50, default='PENDING')
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def save(self, *args, **kwargs):
+        if not self.order_number:
+            # Generate order number: ORD-YYYYMMDD-XXXX
+            last_order = Order.objects.order_by('-id').first()
+            if last_order:
+                last_id = last_order.id
+            else:
+                last_id = 0
+            self.order_number = f"ORD-{timezone.now().strftime('%Y%m%d')}-{str(last_id + 1).zfill(4)}"
+        
+        # Calculate total
+        self.total = (
+            self.subtotal +
+            self.shipping_cost +
+            self.tax -
+            self.discount
+        )
+        super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"Order #{self.id} by {self.user.email}"
+        return f"Order {self.order_number} - {self.customer.name}"
+
+    class Meta:
+        ordering = ['-created_at']
+
 
 class OrderItem(models.Model):
     order = models.ForeignKey(Order, related_name='items', on_delete=models.CASCADE)
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
     quantity = models.PositiveIntegerField(default=1)
-    price = models.DecimalField(max_digits=10, decimal_places=2)  # Price at time of order
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    subtotal = models.DecimalField(max_digits=10, decimal_places=2)
     
-    def __str__(self):
-        return f"{self.quantity} x {self.product.name}"
-
-    @property
-    def total(self):
-        return self.quantity * self.price
+    def save(self, *args, **kwargs):
+        self.subtotal = self.quantity * self.price
+        super().save(*args, **kwargs)
         
+        # Update order subtotal
+        order_items = self.order.items.all()
+        self.order.subtotal = sum(item.subtotal for item in order_items)
+        self.order.save()
+
+    def __str__(self):
+        return f"{self.quantity}x {self.product.name} in Order {self.order.order_number}"
+
+
 class OrderTracking(models.Model):
-    """Model to store detailed order tracking history"""
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='tracking_history')
     status = models.CharField(max_length=50)
     location = models.CharField(max_length=255)
@@ -258,6 +331,8 @@ class OrderTracking(models.Model):
     class Meta:
         ordering = ['-timestamp']
 
+    def __str__(self):
+        return f"Tracking for {self.order.order_number} - {self.status}"
 
 # Wishlist Model
 class Wishlist(models.Model):
@@ -482,3 +557,5 @@ class TicketResponse(models.Model):
 
     def __str__(self):
         return f"Response to ticket #{self.ticket.id}"
+    
+    

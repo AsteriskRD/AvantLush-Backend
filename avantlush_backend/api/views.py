@@ -93,7 +93,8 @@ from .models import (
     Wishlist,
     WishlistItem,
     Tag,
-    Category
+    Category,
+    Customer,
 )
 
 # Local imports - Serializers
@@ -126,7 +127,13 @@ from .serializers import (
     DashboardRecentOrderSerializer,
     ProductManagementSerializer,
     TagSerializer,
-    CategorySerializer
+    CategorySerializer,
+    ReviewSummarySerializer,
+    OrderCreateSerializer,
+    OrderItemSerializer,
+    CustomerSerializer,
+    CustomerDetailSerializer
+    
     
 )
 
@@ -143,6 +150,9 @@ from django.utils import timezone
 from django.db.models import Count, Sum, F, Q
 from django.db.models.functions import TruncDate
 from datetime import timedelta
+from django_filters import FilterSet
+from django_filters import DateFromToRangeFilter
+from django_filters import FilterSet, NumberFilter
 
 class WaitlistRateThrottle(AnonRateThrottle):
     rate = '5/minute'  # Limit to 5 requests per minute per IP
@@ -994,6 +1004,26 @@ class OrderViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(user=self.request.user)
         return queryset
 
+    @action(detail=False, methods=['GET'])
+    def customers(self, request):
+        """Get list of customers for dropdown"""
+        customers = Customer.objects.all()
+        serializer = CustomerSerializer(customers, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['POST'])
+    def add_item(self, request, pk=None):
+        """Add item to existing order"""
+        order = self.get_object()
+        item_data = request.data
+        item_data['order'] = order.id
+        
+        item_serializer = OrderItemSerializer(data=item_data)
+        if item_serializer.is_valid():
+            item_serializer.save()
+            return Response(item_serializer.data)
+        return Response(item_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
     @action(detail=False, methods=['POST'])
     def bulk_action(self, request):
         order_ids = request.data.get('order_ids', [])
@@ -1125,8 +1155,44 @@ class OrderViewSet(viewsets.ModelViewSet):
             order.payment.transaction_id = transaction_id
         order.payment.save()
         
-        return Response({'status': 'success'})
+        return Response({'status': 'success'})      
+    @action(detail=False, methods=['POST'])
+    def create_order(self, request):
+        """Create a new order with items"""
+        # Validate order data
+        order_serializer = OrderCreateSerializer(data=request.data)
+        if not order_serializer.is_valid():
+            return Response(order_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        # Create order
+        order = order_serializer.save()
+
+        # Add items to order
+        items_data = request.data.get('items', [])
+        for item_data in items_data:
+            item_data['order'] = order.id
+            item_serializer = OrderItemSerializer(data=item_data)
+            if item_serializer.is_valid():
+                item_serializer.save()
+            else:
+                order.delete()
+                return Response(item_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(OrderSerializer(order).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['POST'])
+    def update_status(self, request, pk=None):
+        """Update order status"""
+        order = self.get_object()
+        new_status = request.data.get('status')
         
+        if not new_status:
+            return Response({'error': 'Status is required'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        order.status = new_status
+        order.save()
+        return Response(OrderSerializer(order).data)  
+    
 # Product Search and Filtering Views
 class ProductSearchView(generics.ListAPIView):
     serializer_class = ProductSerializer
@@ -2058,3 +2124,134 @@ class ProductViewSet(viewsets.ModelViewSet):
         categories = Category.objects.all()
         serializer = CategorySerializer(categories, many=True)
         return Response(serializer.data)
+class CustomerPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+class CustomerFilterSet(FilterSet):
+    created_at = DateFromToRangeFilter()
+    orders_count = NumberFilter(method='filter_orders_count')
+    balance = NumberFilter(method='filter_balance')
+
+    class Meta:
+        model = Customer
+        fields = ['created_at', 'orders_count', 'balance']
+
+    def filter_orders_count(self, queryset, name, value):
+        return queryset.annotate(
+            orders_count=Count('order')
+        ).filter(orders_count=value)
+
+    def filter_balance(self, queryset, name, value):
+        return queryset.annotate(
+            balance=Sum('order__total')
+        ).filter(balance=value)
+
+class CustomerViewSet(viewsets.ModelViewSet):
+    queryset = Customer.objects.all()
+    serializer_class = CustomerDetailSerializer
+    pagination_class = CustomerPagination
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_class = CustomerFilterSet
+    search_fields = ['name', 'email', 'phone']
+    ordering_fields = ['created_at', 'name', 'orders_count', 'balance']
+    ordering = ['-created_at']
+
+    def get_queryset(self):
+        queryset = super().get_queryset().annotate(
+            orders_count=Count('order'),
+            balance=Sum('order__total')
+        )
+        
+        status = self.request.query_params.get('status')
+        if status:
+            if status.lower() == 'active':
+                queryset = queryset.filter(user__is_active=True)
+            elif status.lower() == 'blocked':
+                queryset = queryset.filter(user__is_active=False)
+        return queryset
+
+    @action(detail=False, methods=['POST'])
+    def bulk_action(self, request):
+        action = request.data.get('action')
+        customer_ids = request.data.get('customer_ids', [])
+        select_all = request.data.get('select_all', False)
+        exclude_ids = request.data.get('exclude_ids', [])
+
+        if select_all:
+            queryset = self.get_queryset()
+            if exclude_ids:
+                queryset = queryset.exclude(id__in=exclude_ids)
+            customer_ids = list(queryset.values_list('id', flat=True))
+
+        if not customer_ids and not select_all:
+            return Response({
+                'error': 'No customers selected'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if action == 'update_status':
+            new_status = request.data.get('status')
+            if new_status not in ['active', 'blocked']:
+                return Response({
+                    'error': 'Invalid status'
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+            Customer.objects.filter(id__in=customer_ids).update(
+                user__is_active=(new_status == 'active')
+            )
+
+        elif action == 'delete':
+            Customer.objects.filter(id__in=customer_ids).delete()
+
+        return Response({'status': 'success', 'affected': len(customer_ids)})
+
+    @action(detail=False, methods=['GET'])
+    def export(self, request):
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = f'attachment; filename="customers-{timezone.now().strftime("%Y%m%d")}.csv"'
+        
+        writer = csv.writer(response)
+        writer.writerow(['ID', 'Name', 'Email', 'Phone', 'Status', 'Orders', 'Total Balance'])
+        
+        for customer in queryset:
+            orders_count = Order.objects.filter(customer=customer).count()
+            total_balance = Order.objects.filter(customer=customer).aggregate(
+                total=Sum('total'))['total'] or 0
+            
+            writer.writerow([
+                customer.id,
+                customer.name,
+                customer.email,
+                customer.phone,
+                'Active' if customer.user.is_active else 'Blocked',
+                orders_count,
+                total_balance
+            ])
+        
+        return response
+
+    @action(detail=True, methods=['GET'])
+    def statistics(self, request, pk=None):
+        customer = self.get_object()
+        orders = Order.objects.filter(customer=customer)
+        
+        total_orders = orders.count()
+        total_spent = orders.aggregate(total=Sum('total'))['total'] or 0
+        recent_orders = orders.order_by('-created_at')[:5]
+        
+        return Response({
+            'total_orders': total_orders,
+            'total_spent': total_spent,
+            'recent_orders': OrderSerializer(recent_orders, many=True).data
+        })
+
+    @action(detail=False, methods=['POST'])
+    def add_customer(self, request):
+        serializer = CustomerCreateSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

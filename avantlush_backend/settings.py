@@ -226,6 +226,7 @@ REST_AUTH = {
     'JWT_AUTH_REFRESH_COOKIE': 'refresh-token',
     'USER_DETAILS_SERIALIZER': 'avantlush_backend.api.serializers.CustomUserDetailsSerializer',
     'LOGIN_SERIALIZER': 'avantlush_backend.api.serializers.LoginSerializer',
+    'USER_DETAILS_SERIALIZER': 'avantlush_backend.api.serializers.CustomUserDetailsSerializer',
 }
 
 # JWT settings
@@ -289,7 +290,7 @@ REST_FRAMEWORK = {
         'rest_framework.authentication.SessionAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': (
-        'rest_framework.permissions.IsAuthenticated',
+        'rest_framework.permissions.AllowAny',
     ),
     'DEFAULT_FILTER_BACKENDS': [
         'django_filters.rest_framework.DjangoFilterBackend',
@@ -297,7 +298,13 @@ REST_FRAMEWORK = {
         'rest_framework.filters.OrderingFilter',
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 12
+    'PAGE_SIZE': 12,
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '5/minute',
+    }
 }
 
 CORS_ALLOW_ALL_ORIGINS = True  # For development only
@@ -327,9 +334,13 @@ CORS_EXPOSE_HEADERS = ['Content-Type', 'X-CSRFToken']
 CORS_ALLOW_CREDENTIALS = True
 
 # CORS settings
-CORS_ALLOWED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:5173,http://localhost:3000').split(',')
-CORS_ALLOW_CREDENTIALS = True
-
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'http://127.0.0.1:5173',
+    'https://avantlush.com',
+    'https://avantlush-backend-13.onrender.com'
+]
 # Security settings
 SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'False') == 'True'
 SESSION_COOKIE_SECURE = True
@@ -348,15 +359,6 @@ EMAIL_HOST_PASSWORD = 'qxzipmbwcjhhjpmv'
 DEFAULT_FROM_EMAIL = 'avalusht@gmail.com'
 EMAIL_TIMEOUT = 20
 SERVER_EMAIL = 'avalusht@gmail.com'
-
-REST_FRAMEWORK = {
-    'DEFAULT_THROTTLE_CLASSES': [
-        'rest_framework.throttling.AnonRateThrottle',
-    ],
-    'DEFAULT_THROTTLE_RATES': {
-        'anon': '5/minute',
-    }
-}
 
 #CACHES = {
 #    'default': {

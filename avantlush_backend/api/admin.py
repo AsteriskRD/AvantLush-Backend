@@ -15,7 +15,8 @@ from .models import (
     CartItem,
     Order,
     Profile,
-    Address
+    Address,
+    OrderTracking
 )
 
 admin.site.register(SupportTicket)
@@ -96,27 +97,18 @@ class CartItemAdmin(admin.ModelAdmin):
 class OrderItemInline(admin.TabularInline):
     model = OrderItem
     extra = 0
+    readonly_fields = ('subtotal',)
 
-@admin.register(Order)
-class OrderAdmin(admin.ModelAdmin):
-    list_display = ('id', 'user', 'status', 'total', 'created_at')
-    list_filter = ('status', 'created_at', 'payment_status')
-    search_fields = ('user__email', 'shipping_address')
-    ordering = ('-created_at',)
-    inlines = [OrderItemInline]
-    
-    fieldsets = (
-        ('Basic Information', {
-            'fields': ('user', 'status', 'payment_status')
-        }),
-        ('Shipping Information', {
-            'fields': ('shipping_address', 'shipping_city', 'shipping_state', 
-                      'shipping_country', 'shipping_zip')
-        }),
-        ('Payment Information', {
-            'fields': ('subtotal', 'shipping_cost', 'discount', 'total', 'payment_method')
-        }),
-    )
+class OrderTrackingInline(admin.TabularInline):
+    model = OrderTracking
+    extra = 0
+    readonly_fields = ('timestamp',)
+
+class OrderTrackingInline(admin.TabularInline):
+    model = OrderTracking
+    extra = 0
+    readonly_fields = ('timestamp',)
+
 # Profile Admin
 @admin.register(Profile)
 class ProfileAdmin(admin.ModelAdmin):
@@ -132,3 +124,4 @@ class AddressAdmin(admin.ModelAdmin):
 
 # Register CustomUser
 admin.site.register(CustomUser, CustomUserAdmin)
+

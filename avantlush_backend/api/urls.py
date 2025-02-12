@@ -28,7 +28,9 @@ from .views import (
     ProductSearchView,
     ProductRecommendationView,
     ReviewViewSet,
-    DashboardViewSet
+    DashboardViewSet,
+    CustomerViewSet,
+    
 )
 
 # Router setup
@@ -48,6 +50,7 @@ router.register(r'checkout', CheckoutViewSet, basename='checkout')
 router.register(r'support-tickets', SupportTicketViewSet, basename='support-ticket')
 router.register(r'dashboard', DashboardViewSet, basename='dashboard')
 router.register(r'product-management', ProductViewSet, basename='product-management')
+router.register(r'customers', CustomerViewSet, basename='customer')
 
 
 # URL patterns
