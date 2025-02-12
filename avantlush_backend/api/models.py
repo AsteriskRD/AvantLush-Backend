@@ -115,7 +115,7 @@ class Product(models.Model):
         ('out_of_stock', 'Out of Stock')
     ]
     
-    category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='primary_products')
+    # Basic fields
     name = models.CharField(max_length=255)
     description = models.TextField()
     price = models.DecimalField(max_digits=10, decimal_places=2)
@@ -129,14 +129,15 @@ class Product(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
+    
+    # Image field
     main_image = models.ImageField(
-    upload_to='products/main/',
-    null=True,
-    blank=True
-)
-    # New fields for detailed product management
-    description = models.TextField(blank=True, null=True)
+        upload_to='products/main/',
+        null=True,
+        blank=True
+    )
+    
+    # Category and relations
     category = models.ForeignKey('Category', on_delete=models.SET_NULL, null=True, related_name='products')
     tags = models.ManyToManyField('Tag', blank=True)
     
@@ -158,6 +159,7 @@ class Product(models.Model):
     height = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     length = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     width = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+
     class Meta:
         ordering = ['-created_at']
 
