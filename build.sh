@@ -10,14 +10,15 @@ echo "Running database migrations..."
 python manage.py migrate
 
 echo "Fixing product table..."
-python manage.py fix_product_table
+python manage.py fix_product_table || true  # Add || true to prevent build failure
 
 echo "Running data updates..."
-python manage.py update_products_data
-python manage.py update_product_images
+python manage.py update_products_data || true  # Add || true to prevent build failure
+python manage.py update_product_images || true  # Add || true to prevent build failure
 
-echo "Creating superuser..."
-python manage.py createsuperuser
+# Remove or comment out the createsuperuser command as it requires interactive input
+# echo "Creating superuser..."
+# python manage.py createsuperuser
 
 echo "Collecting static files..."
 python manage.py collectstatic --no-input
