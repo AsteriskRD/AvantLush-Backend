@@ -8,6 +8,11 @@ pip install -r requirements.txt
 
 echo "Running database migrations..."
 python manage.py migrate
+
+echo "Fixing product table..."
+python manage.py fix_product_table
+
+echo "Running data updates..."
 python manage.py update_products_data
 python manage.py update_product_images
 

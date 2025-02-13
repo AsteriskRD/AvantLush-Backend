@@ -1,11 +1,8 @@
 from django.core.management.base import BaseCommand
 from avantlush_backend.api.models import Product
-from django.core.files.base import ContentFile
-from django.conf import settings
-import os
 
 class Command(BaseCommand):
-    help = 'Update product images with new filenames'
+    help = 'Update product images with Cloudinary URLs'
 
     def handle(self, *args, **kwargs):
         image_mapping = {
@@ -29,12 +26,10 @@ class Command(BaseCommand):
                 product = Product.objects.get(name=name)
                 # Update the JSONField images
                 product.images = new_images
-                # Set main_image to first image if available, but handle gracefully if field doesn't exist yet
-                try:
-                    if new_images:
-                        product.main_image = new_images[0]
-                except Exception as e:
-                    self.stdout.write(self.style.WARNING(f'Could not set main_image for "{name}": {str(e)}'))
+                
+                # Set main image to first image if available
+                if new_images:
+                    product.main_image = new_images[0]
                 
                 product.save()
                 self.stdout.write(self.style.SUCCESS(f'Updated images for "{name}"'))
