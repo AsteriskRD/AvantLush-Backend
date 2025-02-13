@@ -284,6 +284,7 @@ class Command(BaseCommand):
                 defaults={
                     "description": product_data["description"],
                     "price": product_data["price"],
+                    "base_price": product_data["price"],
                     "category": product_data["category"],
                     "images": product_data["images"],
                     "stock_quantity": product_data["stock_quantity"],
