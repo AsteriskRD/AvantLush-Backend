@@ -6,9 +6,11 @@ echo "Installing Python dependencies..."
 pip install --upgrade pip
 pip install -r requirements.txt
 
+echo "Resetting database migrations..."
+python manage.py migrate api zero
+
 echo "Running database migrations..."
 python manage.py migrate
-
 
 echo "Populating initial product data..."
 python manage.py populate_products || true
