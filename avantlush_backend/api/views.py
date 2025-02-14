@@ -1871,7 +1871,8 @@ class ProductViewSet(viewsets.ModelViewSet):
     serializer_class = ProductManagementSerializer
     filterset_class = ProductFilter
     filter_backends = [django_filters.DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    permission_classes = [IsAuthenticated]  # Add authentication if needed
+    authentication_classes = []
+    permission_classes = [AllowAny]  # Add authentication if needed
 
     def get_serializer_class(self):
         if self.action in ['list', 'retrieve'] and self.request.query_params.get('view') == 'management':
