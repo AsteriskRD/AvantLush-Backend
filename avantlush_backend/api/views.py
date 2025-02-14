@@ -676,6 +676,7 @@ class ProductViewSet(viewsets.ModelViewSet):
     ordering_fields = ['price', 'created_at', 'name']
     filterset_fields = ['category', 'status', 'is_featured']
     pagination_class = PageNumberPagination
+    authentication_classes = []
     permission_classes = [AllowAny]
 
     def get_queryset(self):
