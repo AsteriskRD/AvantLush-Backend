@@ -272,7 +272,7 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'static')
 STATICFILES_DIRS = [
-    ('rest_framework', "C:/Users/Johnson Samuel/OneDrive/Documents/Re. Avantlush/AvantLush/static/rest_framework"),
+    os.path.join(BASE_DIR, 'static')
 ]
 
 
