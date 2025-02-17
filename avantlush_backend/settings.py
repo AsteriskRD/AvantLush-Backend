@@ -56,14 +56,15 @@ INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
+    'django.contrib.staticfiles',  
+    'django.contrib.sites',
+    
+    # Cloudinary
     'cloudinary_storage',
     'cloudinary',
-    'django.contrib.staticfiles',
-    'django.contrib.sites',
     
     # Local
     'avantlush_backend.api',  
-
      
     # Third party
     'rest_framework',
@@ -72,8 +73,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'rest_framework_simplejwt',
     'drf_yasg',
-     'checkout',
-
+    'checkout',
     
     # Allauth and registration
     'allauth',
@@ -83,7 +83,6 @@ INSTALLED_APPS = [
     'allauth.socialaccount.providers.apple',
     'dj_rest_auth',
     'dj_rest_auth.registration',
-
 ]
 
 MIDDLEWARE = [
@@ -273,7 +272,6 @@ STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 STATICFILES_DIRS = [
     os.path.join(BASE_DIR, 'static'),
-    os.path.join(BASE_DIR, '.venv', 'Lib', 'site-packages', 'rest_framework', 'static')  # Fixed Windows path
 ]
 
 # Use WhiteNoise for static files in production
