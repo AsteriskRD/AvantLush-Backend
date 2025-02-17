@@ -17,6 +17,7 @@ import dj_database_url
 import cloudinary
 import cloudinary.uploader
 import cloudinary.api
+from pathlib import WindowsPath
 import os
 
 load_dotenv()  # Load environment variables
@@ -30,8 +31,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'your-default-secret-key-for-dev')
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DEBUG', 'False') == 'True'
+DEBUG = True  # Temporarily set to True for testing
 
 ALLOWED_HOSTS = [
     'localhost',
@@ -268,14 +268,22 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.0/howto/static-files/
 
+# Static files (CSS, JavaScript, Images)
 STATIC_URL = '/static/'
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+STATIC_ROOT = os.path.join(BASE_DIR, 'static')
 STATICFILES_DIRS = [
-    os.path.join(BASE_DIR, 'static'),
+    ('rest_framework', "C:/Users/Johnson Samuel/OneDrive/Documents/Re. Avantlush/AvantLush/static/rest_framework"),
 ]
 
+
 # Use WhiteNoise for static files in production
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+print("BASE_DIR:", BASE_DIR)
+print("STATIC_ROOT:", os.path.join(BASE_DIR, 'staticfiles'))
+print("STATICFILES_DIRS:", [os.path.join(BASE_DIR, 'static')])
+print(f"Does static dir exist? {os.path.exists(BASE_DIR / 'static')}")
+print(f"Does staticfiles dir exist? {os.path.exists(STATIC_ROOT)}")
 # Media files (uploaded images, videos)
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
@@ -408,3 +416,9 @@ LOGGING = {
         },
     },
 }
+
+
+print("Current directory:", os.getcwd())
+print("BASE_DIR:", BASE_DIR)
+print("STATIC_ROOT:", STATIC_ROOT)
+print("STATICFILES_DIRS:", STATICFILES_DIRS)
