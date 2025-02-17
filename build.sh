@@ -20,8 +20,8 @@ python manage.py update_products_data || true  # Add || true to prevent build fa
 python manage.py update_product_images || true  # Add || true to prevent build failure
 
 # Remove or comment out the createsuperuser command as it requires interactive input
-# echo "Creating superuser..."
-# python manage.py createsuperuser
+echo "Creating superuser..."
+python manage.py createsuperuser
 
 echo "Collecting static files..."
 python manage.py collectstatic --no-input

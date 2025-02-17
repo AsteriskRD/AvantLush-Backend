@@ -272,12 +272,12 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 STATICFILES_DIRS = [
-    os.path.join(BASE_DIR, 'static')
+    os.path.join(BASE_DIR, 'static'),
+    os.path.join(BASE_DIR, '.venv', 'Lib', 'site-packages', 'rest_framework', 'static')  # Fixed Windows path
 ]
 
-
 # Use WhiteNoise for static files in production
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
 
 print("BASE_DIR:", BASE_DIR)
 print("STATIC_ROOT:", os.path.join(BASE_DIR, 'staticfiles'))
