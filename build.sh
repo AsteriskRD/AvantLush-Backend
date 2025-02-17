@@ -19,9 +19,10 @@ echo "Running data updates..."
 python manage.py update_products_data || true  # Add || true to prevent build failure
 python manage.py update_product_images || true  # Add || true to prevent build failure
 
-# Remove or comment out the createsuperuser command as it requires interactive input
+#create superuser
 echo "Creating superuser..."
-python manage.py createsuperuser
+python manage.py ensure_superuser
+echo "Superuser creation completed"
 
 echo "Collecting static files..."
 python manage.py collectstatic --no-input
