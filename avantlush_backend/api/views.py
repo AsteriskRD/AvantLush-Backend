@@ -17,6 +17,7 @@ from django_filters import rest_framework as filters
 from django.db.models import Q
 from datetime import datetime
 import csv
+from django.apps import apps
 from django.http import HttpResponse
 
 from rest_framework.parsers import MultiPartParser, FormParser
@@ -856,7 +857,7 @@ class CartViewSet(viewsets.ModelViewSet):
     def add_item(self, request):
         """Add item to cart"""
         cart = self.get_cart()
-        product_id = request.data.get('product_id')
+        product_id = request.data.get('product')
         quantity = int(request.data.get('quantity', 1))
         
         try:
@@ -1201,6 +1202,10 @@ class ProductSearchView(generics.ListAPIView):
     search_fields = ['name', 'description', 'sku', 'tags__name', 'categories__name']
     filterset_fields = ['category', 'tags', 'is_featured', 'status']
 
+    def get_queryset(self):
+        Product = apps.get_model('api', 'Product')  # Note: using 'api' instead of full path
+        return Product.objects.all()
+    
 # Wishlist Views
 class WishlistViewSet(viewsets.ModelViewSet):
     serializer_class = WishlistSerializer

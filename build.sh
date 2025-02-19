@@ -9,15 +9,16 @@ pip install -r requirements.txt
 echo "Running database migrations..."
 python manage.py migrate
 
-echo "Populating initial product data..."
-python manage.py populate_products || true
 
-echo "Fixing product table..."
-python manage.py fix_product_table || true  # Add || true to prevent build failure
+#echo "Populating initial product data..."
+#python manage.py populate_products || true
 
-echo "Running data updates..."
-python manage.py update_products_data || true  # Add || true to prevent build failure
-python manage.py update_product_images || true  # Add || true to prevent build failure
+#echo "Fixing product table..."
+#python manage.py fix_product_table || true  # Add || true to prevent build failure
+
+#echo "Running data updates..."
+#python manage.py update_products_data || true  # Add || true to prevent build failure
+#python manage.py update_product_images || true  # Add || true to prevent build failure
 
 #create superuser
 echo "Creating superuser..."

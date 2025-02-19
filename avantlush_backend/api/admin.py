@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.utils.html import format_html
 from django.contrib.admin import SimpleListFilter
+from cloudinary.forms import CloudinaryFileField
 from django import forms
 from .models import (
     WaitlistEntry,
@@ -74,6 +75,16 @@ class ProductVariationInline(admin.TabularInline):
 
 # Product Admin Form
 class ProductAdminForm(forms.ModelForm):
+    main_image = CloudinaryFileField(
+        options = {
+            'folder': 'products/',
+            'allowed_formats': ['jpg', 'png'],
+            'crop': 'limit',
+            'width': 1000,
+            'height': 1000,
+        },
+        required=False
+    )
     class Meta:
         model = Product
         fields = '__all__'

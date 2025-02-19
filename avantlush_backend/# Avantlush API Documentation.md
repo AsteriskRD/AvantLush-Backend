@@ -371,6 +371,7 @@ Success Response (200):
 
 Add Item to Cart
 URL: /cart/add-item/
+
 Method: POST
 Auth: Required
 Body:

@@ -103,6 +103,7 @@ class Category(models.Model):
         verbose_name_plural = 'categories'
     
     def __str__(self):
+        
         return self.name
 
 class Product(models.Model):
@@ -131,7 +132,7 @@ class Product(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     # Image field
-    main_image = CloudinaryField('image', null=True, blank=True)
+    main_image = CloudinaryField('image', null=True, blank=True, folder='products/')
     
     # Category and relations
     category = models.ForeignKey('Category', on_delete=models.SET_NULL, null=True, related_name='products')
