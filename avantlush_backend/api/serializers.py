@@ -332,6 +332,12 @@ class AddressSerializer(serializers.ModelSerializer):
 
 class ProductSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source='category.name', read_only=True)
+    main_image = serializers.SerializerMethodField()
+    
+    def get_main_image(self, obj):
+        if obj.main_image:
+            return obj.main_image.url
+        return None
     
     class Meta:
         model = Product
@@ -339,9 +345,9 @@ class ProductSerializer(serializers.ModelSerializer):
             'id', 'name', 'slug', 'description', 'price', 
             'category', 'category_name', 'images', 'stock_quantity',
             'is_featured', 'sku', 'status', 'created_at', 'updated_at',
-            'rating', 'num_ratings'
+            'rating', 'num_ratings', 'main_image'  # Added main_image here
         ]
-    
+
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
@@ -702,7 +708,13 @@ class ProductManagementSerializer(serializers.ModelSerializer):
     # Additional Fields
     variants_count = serializers.SerializerMethodField()
     status_display = serializers.SerializerMethodField()
-
+    main_image = serializers.SerializerMethodField()
+    
+    def get_main_image(self, obj):
+        if obj.main_image:
+            return obj.main_image.url
+        return None
+    
     class Meta:
         model = Product
         fields = [
