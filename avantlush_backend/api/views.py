@@ -1879,6 +1879,7 @@ class ProductViewSet(viewsets.ModelViewSet):
     authentication_classes = []
     permission_classes = [AllowAny]  # Add authentication if needed
     search_fields = ['name', 'description', 'category__name']
+    parser_classes = (MultiPartParser, FormParser)
     
     def get_serializer_class(self):
         if self.action in ['list', 'retrieve'] and self.request.query_params.get('view') == 'management':
@@ -2132,6 +2133,82 @@ class ProductViewSet(viewsets.ModelViewSet):
         categories = Category.objects.all()
         serializer = CategorySerializer(categories, many=True)
         return Response(serializer.data)
+    @action(detail=True, methods=['POST'], url_path='upload-images')
+    def upload_images(self, request, pk=None):
+        """Handle multiple image uploads for products"""
+        product = self.get_object()
+        
+        if 'images' not in request.FILES:
+            return Response(
+                {'error': 'No images provided'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        uploaded_urls = []
+        errors = []
+        
+        for image in request.FILES.getlist('images'):
+            try:
+                # Upload to Cloudinary
+                upload_result = upload(
+                    image,
+                    folder=f'products/{product.id}/',
+                    resource_type="image"
+                )
+                
+                # Get the secure URL from the upload result
+                image_url = upload_result['secure_url']
+                uploaded_urls.append(image_url)
+                
+            except Exception as e:
+                errors.append(f"Failed to upload {image.name}: {str(e)}")
+        
+        if uploaded_urls:
+            # Get current images and append new ones
+            current_images = product.images or []
+            current_images.extend(uploaded_urls)
+            product.images = current_images
+            product.save()
+        
+        response_data = {
+            'uploaded_images': uploaded_urls,
+            'total_uploaded': len(uploaded_urls),
+            'all_images': product.images  # Return all images including the new ones
+        }
+        
+        if errors:
+            response_data['errors'] = errors
+            
+        return Response(response_data)
+
+    @action(detail=True, methods=['DELETE'], url_path='remove-images')
+    def remove_images(self, request, pk=None):
+        """Handle removal of multiple images"""
+        product = self.get_object()
+        image_urls = request.data.get('image_urls', [])
+        
+        if not image_urls:
+            return Response(
+                {'error': 'No image URLs provided'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        current_images = product.images or []
+        removed_urls = []
+        
+        for url in image_urls:
+            if url in current_images:
+                current_images.remove(url)
+                removed_urls.append(url)
+        
+        product.images = current_images
+        product.save()
+        
+        return Response({
+            'message': 'Images removed successfully',
+            'removed_images': removed_urls,
+            'remaining_images': product.images
+        })
 class CustomerPagination(PageNumberPagination):
     page_size = 10
     page_size_query_param = 'page_size'

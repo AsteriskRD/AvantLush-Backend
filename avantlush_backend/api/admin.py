@@ -23,6 +23,22 @@ from .models import (
     TicketResponse
 )
 
+class MultipleFileInput(forms.ClearableFileInput):
+    allow_multiple_selected = True
+
+class MultipleFileField(forms.FileField):
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault("widget", MultipleFileInput())
+        super().__init__(*args, **kwargs)
+
+    def clean(self, data, initial=None):
+        single_file_clean = super().clean
+        if isinstance(data, (list, tuple)):
+            result = [single_file_clean(d, initial) for d in data]
+        else:
+            result = single_file_clean(data, initial)
+        return result
+    
 # Support Ticket Admin
 admin.site.register(SupportTicket)
 admin.site.register(TicketResponse)
@@ -48,7 +64,6 @@ class CustomUserAdmin(UserAdmin):
         ('Important dates', {'fields': ('last_login', 'date_joined')}),
     )
 
-# Stock Filter
 class StockFilter(SimpleListFilter):
     title = 'stock status'
     parameter_name = 'stock_status'
@@ -68,12 +83,12 @@ class StockFilter(SimpleListFilter):
         if self.value() == 'in':
             return queryset.filter(stock_quantity__gte=10)
 
-# Product Variation Inline
+# Product Variation Inline (keeping your existing inline)
 class ProductVariationInline(admin.TabularInline):
     model = ProductVariation
     extra = 1
 
-# Product Admin Form
+# Updated Product Admin Form
 class ProductAdminForm(forms.ModelForm):
     main_image = CloudinaryFileField(
         options = {
@@ -85,14 +100,18 @@ class ProductAdminForm(forms.ModelForm):
         },
         required=False
     )
+    
+    image_uploads = MultipleFileField(
+        required=False,
+        label='Additional Images'
+    )
     class Meta:
         model = Product
         fields = '__all__'
         widgets = {
             'description': forms.Textarea(attrs={'rows': 4}),
         }
-
-# Product Admin
+# Updated Product Admin
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
     form = ProductAdminForm
@@ -100,9 +119,23 @@ class ProductAdmin(admin.ModelAdmin):
     
     def image_preview(self, obj):
         if obj.main_image:
-            return format_html('<img src="{}" width="50" height="50" />', obj.main_image.url)
-        return "No image"
-    image_preview.short_description = 'Preview'
+            return format_html('<img src="{}" width="50" height="50" style="margin-right: 5px;" />', obj.main_image.url)
+        return "No main image"
+    image_preview.short_description = 'Main Image'
+    
+    def display_additional_images(self, obj):
+        if not obj.images:
+            return "No additional images"
+        
+        html = []
+        for img_url in obj.images[:3]:  # Show first 3 images
+            html.append(f'<img src="{img_url}" width="50" height="50" style="margin-right: 5px;" />')
+        
+        if len(obj.images) > 3:
+            html.append(f'<span>+{len(obj.images) - 3} more</span>')
+            
+        return format_html(''.join(html))
+    display_additional_images.short_description = 'Additional Images'
     
     def product_category(self, obj):
         return obj.category.name if obj.category else '-'
@@ -110,6 +143,7 @@ class ProductAdmin(admin.ModelAdmin):
     
     list_display = (
         'image_preview',
+        'display_additional_images',
         'name',
         'sku',
         'price',
@@ -155,9 +189,10 @@ class ProductAdmin(admin.ModelAdmin):
         ('Images', {
             'fields': (
                 'main_image',
+                'image_uploads',
                 'images',
             ),
-            'description': 'Upload product images. Main image will be displayed as the primary product image.'
+            'description': 'Upload product images. Main image will be displayed as the primary product image. Use image_uploads for additional product images.'
         }),
         ('Pricing', {
             'fields': (
@@ -200,11 +235,28 @@ class ProductAdmin(admin.ModelAdmin):
     save_on_top = True
     
     def save_model(self, request, obj, form, change):
+        files = request.FILES.getlist('image_uploads')
+        if files:
+            from cloudinary.uploader import upload
+            uploaded_urls = []
+            
+            for file in files:
+                result = upload(
+                    file,
+                    folder='products/',
+                    resource_type='auto'
+                )
+                uploaded_urls.append(result['secure_url'])
+            
+            # Update the images JSON field
+            current_images = obj.images or []
+            obj.images = current_images + uploaded_urls
+        
         if not obj.slug:
             from django.utils.text import slugify
             obj.slug = slugify(obj.name)
+        
         super().save_model(request, obj, form, change)
-
 # Other model registrations
 @admin.register(WaitlistEntry)
 class WaitlistEntryAdmin(admin.ModelAdmin):

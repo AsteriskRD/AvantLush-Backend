@@ -656,6 +656,13 @@ class ProductManagementSerializer(serializers.ModelSerializer):
         required=False
     )
 
+    # Add this new field to handle multiple image uploads
+    image_files = serializers.ListField(
+        child=serializers.FileField(max_length=1000000, allow_empty_file=False, use_url=False),
+        write_only=True,
+        required=False
+    )
+
     # Pricing Fields
     base_price = serializers.DecimalField(
         max_digits=10, 
@@ -678,42 +685,11 @@ class ProductManagementSerializer(serializers.ModelSerializer):
         required=False
     )
 
-    # Inventory Fields
-    barcode = serializers.CharField(required=False, allow_blank=True)
+    # Rest of your fields...
     variations = ProductVariationSerializer(many=True, required=False)
-
-    # Shipping Fields
-    is_physical_product = serializers.BooleanField(default=True)
-    weight = serializers.DecimalField(
-        max_digits=10, 
-        decimal_places=2, 
-        required=False
-    )
-    height = serializers.DecimalField(
-        max_digits=10, 
-        decimal_places=2, 
-        required=False
-    )
-    length = serializers.DecimalField(
-        max_digits=10, 
-        decimal_places=2, 
-        required=False
-    )
-    width = serializers.DecimalField(
-        max_digits=10, 
-        decimal_places=2, 
-        required=False
-    )
-
-    # Additional Fields
     variants_count = serializers.SerializerMethodField()
     status_display = serializers.SerializerMethodField()
     main_image = serializers.SerializerMethodField()
-    
-    def get_main_image(self, obj):
-        if obj.main_image:
-            return obj.main_image.url
-        return None
     
     class Meta:
         model = Product
@@ -721,19 +697,15 @@ class ProductManagementSerializer(serializers.ModelSerializer):
             # General Information
             'id', 'name', 'description', 'category', 'category_name', 
             'tags', 'status', 'status_display', 'main_image', 'images',
-        
-
+            'image_files',  # Add the new field here
             # Pricing
             'base_price', 'discount_type', 'discount_percentage', 
             'vat_amount',
-
             # Inventory
             'sku', 'barcode', 'stock_quantity', 'variations',
-
             # Shipping
             'is_physical_product', 'weight', 'height', 
             'length', 'width',
-
             # Additional
             'created_at', 'variants_count'
         ]
@@ -742,8 +714,12 @@ class ProductManagementSerializer(serializers.ModelSerializer):
             'status': {'required': False, 'default': 'draft'}
         }
 
+    def get_main_image(self, obj):
+        if obj.main_image:
+            return obj.main_image.url
+        return None
+
     def get_variants_count(self, obj):
-        # Implement based on your variation model
         return obj.variations.count() if hasattr(obj, 'variations') else 0
 
     def get_status_display(self, obj):
@@ -755,9 +731,21 @@ class ProductManagementSerializer(serializers.ModelSerializer):
         }
         return status_mapping.get(obj.status, obj.status)
 
+    def handle_image_upload(self, image):
+        try:
+            result = upload(
+                image,
+                folder='products/',
+                resource_type='auto'
+            )
+            return result['secure_url']
+        except Exception as e:
+            raise serializers.ValidationError(f"Failed to upload image: {str(e)}")
+
     def create(self, validated_data):
-        # Handle variations during product creation
+        # Handle variations and image files
         variations_data = validated_data.pop('variations', [])
+        image_files = validated_data.pop('image_files', None)
         
         # Create product
         product = Product.objects.create(**validated_data)
@@ -769,32 +757,53 @@ class ProductManagementSerializer(serializers.ModelSerializer):
                 variation_type=variation_data.get('variation_type'),
                 variation=variation_data.get('variation')
             )
+
+        # Handle image uploads if any
+        if image_files:
+            uploaded_urls = []
+            for image_file in image_files:
+                url = self.handle_image_upload(image_file)
+                uploaded_urls.append(url)
+            
+            # Update the images JSON field
+            current_images = product.images or []
+            product.images = current_images + uploaded_urls
+            product.save()
         
         return product
 
     def update(self, instance, validated_data):
-        # Handle variations during product update
+        # Handle variations and image files
         variations_data = validated_data.pop('variations', [])
+        image_files = validated_data.pop('image_files', None)
         
         # Update product fields
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
-        instance.save()
         
         # Update variations
-        # First, clear existing variations
         instance.variations.all().delete()
-        
-        # Create new variations
         for variation_data in variations_data:
             ProductVariation.objects.create(
                 product=instance,
                 variation_type=variation_data.get('variation_type'),
                 variation=variation_data.get('variation')
             )
-        
+
+        # Handle image uploads if any
+        if image_files:
+            uploaded_urls = []
+            for image_file in image_files:
+                url = self.handle_image_upload(image_file)
+                uploaded_urls.append(url)
+            
+            # Update the images JSON field
+            current_images = instance.images or []
+            instance.images = current_images + uploaded_urls
+            
+        instance.save()
         return instance
-        
+            
 class ProductVariationSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProductVariation  
