@@ -45,7 +45,8 @@ from .models import (
     Tag,
     Category,
     models,
-    Customer
+    Customer,
+    ProductVariantImage
 )   
 
 User = get_user_model()
@@ -136,27 +137,27 @@ class ResetPasswordSerializer(serializers.Serializer):
             raise serializers.ValidationError(list(e.messages))
         return value
 
-class GoogleAuthSerializer(SocialLoginSerializer):
+from rest_framework import serializers
+
+class GoogleAuthSerializer(serializers.Serializer):
     token = serializers.CharField(required=True)
-    username = None  # Remove username field
+    email = serializers.EmailField(required=True)
+    location = serializers.CharField(required=False, default='Nigeria')
 
     def validate_token(self, value):
         if not value:
             raise serializers.ValidationError("Google token is required")
         return value
+    
+    def validate_email(self, value):
+        if not value:
+            raise serializers.ValidationError("Email is required")
+        return value
 
     def validate(self, attrs):
-        attrs = super().validate(attrs)
-        if 'user' in attrs and not attrs['user'].email:
-            raise serializers.ValidationError('Email is required')
+        if not attrs.get('location'):
+            attrs['location'] = 'Nigeria'
         return attrs
-
-    def get_social_login(self, adapter, app, token, response):
-        request = self.context.get('request')
-        social_login = adapter.complete_login(request, app, token, response=response)
-        social_login.token = token
-        return social_login
-
 class AppleAuthSerializer(SocialLoginSerializer):
     token = serializers.CharField(required=True)
     code = serializers.CharField(required=False)  # Apple specific
@@ -642,10 +643,111 @@ class DashboardRecentOrderSerializer(serializers.Serializer):
     created_at = serializers.DateTimeField()
     items = DashboardRecentOrderItemSerializer(many=True)
 
-class ProductVariationSerializer(serializers.ModelSerializer):
+
+class TagSerializer(serializers.ModelSerializer):
     class Meta:
-        model = ProductVariation  # Assuming you'll add this model
-        fields = ['variation_type', 'variation']
+        model = Tag
+        fields = ['id', 'name', 'slug']
+
+class CategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Category
+        fields = ['id', 'name', 'slug']
+
+class ProductVariantImageSerializer(serializers.ModelSerializer):
+    image_url = serializers.SerializerMethodField()
+
+    def get_image_url(self, obj):
+        return obj.image.url if obj.image else None
+
+    class Meta:
+        model = ProductVariantImage
+        fields = ['id', 'image_url', 'is_primary']
+
+class ProductVariationSerializer(serializers.ModelSerializer):
+    images = ProductVariantImageSerializer(many=True, read_only=True)
+    variant_image_url = serializers.SerializerMethodField()
+    image_files = serializers.ListField(
+        child=serializers.FileField(max_length=1000000, allow_empty_file=False, use_url=False),
+        write_only=True,
+        required=False
+    )
+    final_price = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProductVariation
+        fields = [
+            'id', 'variation_type', 'variation', 'price_adjustment',
+            'stock_quantity', 'sku', 'is_default', 'images', 'image_files',
+            'variant_image_url', 'final_price', 'variant_image'
+        ]
+
+    def get_variant_image_url(self, obj):
+        return obj.variant_image.url if obj.variant_image else None
+
+    def get_final_price(self, obj):
+        # Calculate the final price by adding the base price of the product 
+        # and the price adjustment of the variant
+        base_price = obj.product.base_price if obj.product else 0
+        price_adjustment = obj.price_adjustment if obj.price_adjustment else 0
+        return float(base_price) + float(price_adjustment)
+
+    def create(self, validated_data):
+        image_files = validated_data.pop('image_files', [])
+        variant = super().create(validated_data)
+        
+        # Handle image uploads
+        for index, image_file in enumerate(image_files):
+            try:
+                # Upload main variant image
+                if index == 0:
+                    # Direct assignment to CloudinaryField
+                    variant.variant_image = image_file
+                    variant.save()
+
+                # Create additional variant images
+                result = upload(
+                    image_file,
+                    folder=f'product_variants/{variant.product.id}/{variant.id}/',
+                    resource_type='auto'
+                )
+                ProductVariantImage.objects.create(
+                    variant=variant,
+                    image=image_file,  # Pass the file directly, not the URL
+                    is_primary=(index == 0)
+                )
+                
+            except Exception as e:
+                raise serializers.ValidationError(f"Failed to upload image: {str(e)}")
+        
+        return variant
+
+    def update(self, instance, validated_data):
+        image_files = validated_data.pop('image_files', [])
+        variant = super().update(instance, validated_data)
+        
+        if image_files:
+            # Optional: Clear existing images
+            instance.images.all().delete()
+            
+            for index, image_file in enumerate(image_files):
+                try:
+                    # Update main variant image
+                    if index == 0:
+                        variant.variant_image = image_file
+                        variant.save()
+
+                    # Create additional variant images
+                    ProductVariantImage.objects.create(
+                        variant=variant,
+                        image=image_file,  # Pass the file directly
+                        is_primary=(index == 0)
+                    )
+                    
+                except Exception as e:
+                    raise serializers.ValidationError(f"Failed to upload image: {str(e)}")
+        
+        return variant
 
 class ProductManagementSerializer(serializers.ModelSerializer):
     # General Information Fields
@@ -685,7 +787,7 @@ class ProductManagementSerializer(serializers.ModelSerializer):
         required=False
     )
 
-    # Rest of your fields...
+    
     variations = ProductVariationSerializer(many=True, required=False)
     variants_count = serializers.SerializerMethodField()
     status_display = serializers.SerializerMethodField()
@@ -804,21 +906,6 @@ class ProductManagementSerializer(serializers.ModelSerializer):
         instance.save()
         return instance
             
-class ProductVariationSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = ProductVariation  
-        fields = ['variation_type', 'variation']
-        
-class TagSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Tag
-        fields = ['id', 'name', 'slug']
-
-class CategorySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Category
-        fields = ['id', 'name', 'slug']
-
 class CustomerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Customer

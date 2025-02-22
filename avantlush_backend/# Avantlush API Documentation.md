@@ -1,7 +1,7 @@
 # Avantlush API Documentation
 
 ## Base URL
-Production: `https://avantlush-backend-13.onrender.com/api/`
+Production: https://avantlush-backend-2s6k.onrender.com
 Development: `http://localhost:8000/api/`
 
 ## Authentication

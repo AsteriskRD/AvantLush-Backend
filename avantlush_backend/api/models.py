@@ -133,7 +133,7 @@ class Product(models.Model):
     
     # Image field
     main_image = CloudinaryField('image', null=True, blank=True, folder='products/')
-    
+    image_uploads = CloudinaryField('image', folder='products/variants/', blank=True, null=True)
     # Category and relations
     category = models.ForeignKey('Category', on_delete=models.SET_NULL, null=True, related_name='products')
     tags = models.ManyToManyField('Tag', blank=True)
@@ -164,16 +164,31 @@ class Product(models.Model):
         return self.name
 
 class ProductVariation(models.Model):
-    product = models.ForeignKey(
-        Product, 
-        related_name='variations', 
-        on_delete=models.CASCADE
-    )
-    variation_type = models.CharField(max_length=100)
-    variation = models.CharField(max_length=100)
+    product = models.ForeignKey(Product, related_name='variations', on_delete=models.CASCADE)
+    variation_type = models.CharField(max_length=100)  # e.g., 'color', 'size'
+    variation = models.CharField(max_length=100)  # e.g., 'red', 'large'
+    price_adjustment = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    stock_quantity = models.PositiveIntegerField(default=0)
+    sku = models.CharField(max_length=100, unique=True)
+    is_default = models.BooleanField(default=False)
+    variant_image = CloudinaryField('image', folder='product_variants/', null=True, blank=True)
+
+    class Meta:
+        unique_together = ['product', 'variation_type', 'variation']
 
     def __str__(self):
         return f"{self.product.name} - {self.variation_type}: {self.variation}"
+    
+class ProductVariantImage(models.Model):
+    variant = models.ForeignKey('ProductVariation', related_name='images', on_delete=models.CASCADE)
+    image = CloudinaryField('image', folder='product_variants/')
+    is_primary = models.BooleanField(default=False)
+    
+    class Meta:
+        ordering = ['-is_primary', 'id']
+
+    def __str__(self):
+        return f"Image for {self.variant}"
     
 class Article(models.Model):
     title = models.CharField(max_length=255)

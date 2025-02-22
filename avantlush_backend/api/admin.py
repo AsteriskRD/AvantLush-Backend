@@ -1,9 +1,13 @@
 from django.contrib import admin
+from django.contrib import messages
 from django.contrib.auth.admin import UserAdmin
 from django.utils.html import format_html
 from django.contrib.admin import SimpleListFilter
 from cloudinary.forms import CloudinaryFileField
+from cloudinary.models import CloudinaryField
 from django import forms
+from django.db import models
+from django.forms import FileInput
 from .models import (
     WaitlistEntry,
     CustomUser,
@@ -20,50 +24,48 @@ from .models import (
     Address,
     OrderTracking,
     SupportTicket,
-    TicketResponse
+    TicketResponse,
+    ProductVariantImage,
 )
 
-class MultipleFileInput(forms.ClearableFileInput):
-    allow_multiple_selected = True
-
-class MultipleFileField(forms.FileField):
-    def __init__(self, *args, **kwargs):
-        kwargs.setdefault("widget", MultipleFileInput())
-        super().__init__(*args, **kwargs)
-
-    def clean(self, data, initial=None):
-        single_file_clean = super().clean
-        if isinstance(data, (list, tuple)):
-            result = [single_file_clean(d, initial) for d in data]
-        else:
-            result = single_file_clean(data, initial)
-        return result
-    
-# Support Ticket Admin
-admin.site.register(SupportTicket)
-admin.site.register(TicketResponse)
-
-# Custom User Admin
-class CustomUserAdmin(UserAdmin):
-    list_display = ('email', 'location', 'is_active', 'date_joined', 'is_staff')
-    search_fields = ('email', 'location')
-    ordering = ('-date_joined',)
-    list_filter = ('is_active', 'is_staff', 'location')
-    
-    add_fieldsets = (
-        (None, {
-            'classes': ('wide',),
-            'fields': ('email', 'password1', 'password2', 'location'),
-        }),
-    )
-    
-    fieldsets = (
-        (None, {'fields': ('email', 'password')}),
-        ('Personal info', {'fields': ('location',)}),
-        ('Permissions', {'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
-        ('Important dates', {'fields': ('last_login', 'date_joined')}),
+# Product Forms
+class ProductAdminForm(forms.ModelForm):
+    main_image = CloudinaryFileField(
+        options={
+            'folder': 'products/',
+            'allowed_formats': ['jpg', 'png'],
+            'crop': 'limit',
+            'width': 1000,
+            'height': 1000,
+        },
+        required=False
     )
 
+    class Meta:
+        model = Product
+        fields = '__all__'
+        widgets = {
+            'description': forms.Textarea(attrs={'rows': 4}),
+        }
+from django.forms.widgets import ClearableFileInput
+class ProductVariationForm(forms.ModelForm):
+    variant_images = CloudinaryFileField(
+        options={
+            'folder': 'product_variants/',
+            'allowed_formats': ['jpg', 'png'],
+            'crop': 'limit',
+            'width': 1000,
+            'height': 1000,
+        },
+        required=False
+    )
+    
+    class Meta:
+        model = ProductVariation
+        fields = ['variation_type', 'variation', 'price_adjustment', 
+                 'stock_quantity', 'sku', 'is_default']
+
+# Filters
 class StockFilter(SimpleListFilter):
     title = 'stock status'
     parameter_name = 'stock_status'
@@ -83,35 +85,40 @@ class StockFilter(SimpleListFilter):
         if self.value() == 'in':
             return queryset.filter(stock_quantity__gte=10)
 
-# Product Variation Inline (keeping your existing inline)
-class ProductVariationInline(admin.TabularInline):
-    model = ProductVariation
+# Inlines
+class ProductVariantImageInline(admin.TabularInline):
+    model = ProductVariantImage
     extra = 1
+    fields = ('image', 'is_primary')
 
-# Updated Product Admin Form
-class ProductAdminForm(forms.ModelForm):
-    main_image = CloudinaryFileField(
-        options = {
-            'folder': 'products/',
-            'allowed_formats': ['jpg', 'png'],
-            'crop': 'limit',
-            'width': 1000,
-            'height': 1000,
-        },
-        required=False
+class ProductVariationInline(admin.StackedInline):
+    model = ProductVariation
+    form = ProductVariationForm
+    extra = 1
+    fields = (
+        ('variation_type', 'variation'),
+        ('price_adjustment', 'stock_quantity'),
+        ('sku', 'is_default'),
+        'variant_image',
     )
-    
-    image_uploads = MultipleFileField(
-        required=False,
-        label='Additional Images'
-    )
-    class Meta:
-        model = Product
-        fields = '__all__'
-        widgets = {
-            'description': forms.Textarea(attrs={'rows': 4}),
-        }
-# Updated Product Admin
+
+    def get_formset(self, request, obj=None, **kwargs):
+        formset = super().get_formset(request, obj, **kwargs)
+        formset.form.base_fields['variant_image'].widget = forms.ClearableFileInput()
+        return formset
+
+    def display_images(self, obj):
+        if not obj.pk:
+            return "Save to view image"
+            
+        image = ProductVariantImage.objects.filter(variant=obj, is_primary=True).first()
+        if not image:
+            return "No image"
+            
+        return format_html('<img src="{}" width="50" height="50" />', image.image.url)
+    display_images.short_description = 'Current Image'
+
+# Admin Classes
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
     form = ProductAdminForm
@@ -128,7 +135,7 @@ class ProductAdmin(admin.ModelAdmin):
             return "No additional images"
         
         html = []
-        for img_url in obj.images[:3]:  # Show first 3 images
+        for img_url in obj.images[:3]:
             html.append(f'<img src="{img_url}" width="50" height="50" style="margin-right: 5px;" />')
         
         if len(obj.images) > 3:
@@ -192,7 +199,7 @@ class ProductAdmin(admin.ModelAdmin):
                 'image_uploads',
                 'images',
             ),
-            'description': 'Upload product images. Main image will be displayed as the primary product image. Use image_uploads for additional product images.'
+            'description': 'Upload product images. Main image will be displayed as the primary product image.'
         }),
         ('Pricing', {
             'fields': (
@@ -235,29 +242,91 @@ class ProductAdmin(admin.ModelAdmin):
     save_on_top = True
     
     def save_model(self, request, obj, form, change):
-        files = request.FILES.getlist('image_uploads')
+        files = request.FILES.getlist('variant_images')
         if files:
             from cloudinary.uploader import upload
-            uploaded_urls = []
+            
+            # Get or create default variant if none exists
+            default_variant, created = ProductVariation.objects.get_or_create(
+                product=obj,
+                variation_type='default',
+                variation='default',
+                defaults={'is_default': True}
+            )
             
             for file in files:
                 result = upload(
                     file,
-                    folder='products/',
+                    folder=f'products/variants/{obj.id}/',
                     resource_type='auto'
                 )
-                uploaded_urls.append(result['secure_url'])
-            
-            # Update the images JSON field
-            current_images = obj.images or []
-            obj.images = current_images + uploaded_urls
-        
-        if not obj.slug:
-            from django.utils.text import slugify
-            obj.slug = slugify(obj.name)
+                ProductVariantImage.objects.create(
+                    variant=default_variant,
+                    image=result['secure_url']
+                )
         
         super().save_model(request, obj, form, change)
-# Other model registrations
+
+    def save_formset(self, request, form, formset, change):
+        instances = formset.save(commit=False)
+        
+        for instance in instances:
+            instance.save()
+            
+            if isinstance(instance, ProductVariation):
+                form_index = next((i for i, f in enumerate(formset.forms) 
+                                if f.instance == instance), None)
+                if form_index is not None:
+                    form = formset.forms[form_index]
+                    image_file = form.cleaned_data.get('variant_image')
+                    
+                    if image_file:
+                        from cloudinary.uploader import upload
+                        try:
+                            # Delete existing primary image if any
+                            ProductVariantImage.objects.filter(
+                                variant=instance, 
+                                is_primary=True
+                            ).delete()
+                            
+                            # Upload new image
+                            result = upload(
+                                image_file,
+                                folder=f'product_variants/{instance.product.id}/{instance.id}/',
+                                resource_type='auto'
+                            )
+                            
+                            # Create new primary image
+                            ProductVariantImage.objects.create(
+                                variant=instance,
+                                image=result['secure_url'],
+                                is_primary=True
+                            )
+                        except Exception as e:
+                            messages.error(request, f"Failed to upload image: {str(e)}")
+        
+        formset.save_m2m()
+# Other Admin Registrations
+class CustomUserAdmin(UserAdmin):
+    list_display = ('email', 'location', 'is_active', 'date_joined', 'is_staff')
+    search_fields = ('email', 'location')
+    ordering = ('-date_joined',)
+    list_filter = ('is_active', 'is_staff', 'location')
+    
+    add_fieldsets = (
+        (None, {
+            'classes': ('wide',),
+            'fields': ('email', 'password1', 'password2', 'location'),
+        }),
+    )
+    
+    fieldsets = (
+        (None, {'fields': ('email', 'password')}),
+        ('Personal info', {'fields': ('location',)}),
+        ('Permissions', {'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
+        ('Important dates', {'fields': ('last_login', 'date_joined')}),
+    )
+
 @admin.register(WaitlistEntry)
 class WaitlistEntryAdmin(admin.ModelAdmin):
     list_display = ('email', 'timestamp')
@@ -315,5 +384,12 @@ class AddressAdmin(admin.ModelAdmin):
     list_filter = ('is_default', 'state')
     search_fields = ('user__email', 'street_address', 'city', 'state')
 
-# Register CustomUser
+@admin.register(ProductVariantImage)
+class ProductVariantImageAdmin(admin.ModelAdmin):
+    list_display = ['variant', 'image', 'is_primary']
+    list_filter = ['is_primary', 'variant']
+
+# Final registrations
 admin.site.register(CustomUser, CustomUserAdmin)
+admin.site.register(SupportTicket)
+admin.site.register(TicketResponse)

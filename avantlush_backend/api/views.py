@@ -1880,6 +1880,12 @@ class ProductViewSet(viewsets.ModelViewSet):
     permission_classes = [AllowAny]  # Add authentication if needed
     search_fields = ['name', 'description', 'category__name']
     parser_classes = (MultiPartParser, FormParser)
+
+    def get_queryset(self):
+        return Product.objects.prefetch_related(
+            'variations',
+            'variations__images'
+        ).all()
     
     def get_serializer_class(self):
         if self.action in ['list', 'retrieve'] and self.request.query_params.get('view') == 'management':
