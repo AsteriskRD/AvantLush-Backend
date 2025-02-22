@@ -1297,7 +1297,52 @@ class ProductRecommendationView(generics.ListAPIView):
 
     def get_queryset(self):
         product_id = self.kwargs['product_id']
-        return ProductRecommendation.objects.filter(product_id=product_id)
+        try:
+            product = Product.objects.get(id=product_id)
+            
+            # Track view if user is authenticated
+            if self.request.user.is_authenticated:
+                ProductView.objects.create(
+                    product=product,
+                    user=self.request.user
+                )
+
+            # Get recommendation type from query params
+            rec_type = self.request.query_params.get('type', 'similar')
+            
+            if rec_type == 'similar':
+                return product.get_similar_products()
+            elif rec_type == 'complementary':
+                return product.get_complementary_products()
+            elif rec_type == 'personalized' and self.request.user.is_authenticated:
+                # Get personalized recommendations based on viewing history
+                viewed_categories = ProductView.objects.filter(
+                    user=self.request.user
+                ).values_list('product__category', flat=True).distinct()
+                
+                return Product.objects.filter(
+                    Q(category__in=viewed_categories) |
+                    Q(tags__in=product.tags.all())
+                ).exclude(
+                    id=product_id
+                ).distinct()[:4]
+            else:
+                return product.get_similar_products()
+
+        except Product.DoesNotExist:
+            return Product.objects.none()
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+        
+        response_data = {
+            'status': 'success',
+            'count': len(serializer.data),
+            'recommendations': serializer.data
+        }
+        
+        return Response(response_data, status=status.HTTP_200_OK)
 
 class ReviewFilter(django_filters.FilterSet):
     rating = django_filters.NumberFilter()
@@ -2133,6 +2178,12 @@ class ProductViewSet(viewsets.ModelViewSet):
         serializer = TagSerializer(tags, many=True)
         return Response(serializer.data)
 
+    @action(detail=False, methods=['get'])
+    def featured(self, request):
+        featured_products = Product.objects.filter(is_featured=True)
+        serializer = self.get_serializer(featured_products, many=True)
+        return Response(serializer.data)
+    
     @action(detail=False, methods=['GET'])
     def categories(self, request):
         """Get all available categories for product management"""
@@ -2215,6 +2266,37 @@ class ProductViewSet(viewsets.ModelViewSet):
             'removed_images': removed_urls,
             'remaining_images': product.images
         })
+
+class ProductReviewViewSet(viewsets.ModelViewSet):
+    serializer_class = ReviewSerializer
+    
+    def get_queryset(self):
+        # Filter reviews by product_id
+        product_id = self.kwargs.get('product_id')
+        return Review.objects.filter(product_id=product_id)
+    
+    def perform_create(self, serializer):
+        product_id = self.kwargs.get('product_id')
+        product = get_object_or_404(Product, id=product_id)
+        serializer.save(user=self.request.user, product=product)
+
+    @action(detail=False, methods=['get'])
+    def summary(self, request, product_id=None):
+        """Get review summary statistics for a product"""
+        reviews = self.get_queryset()
+        summary = {
+            'average_rating': reviews.aggregate(Avg('rating'))['rating__avg'] or 0,
+            'total_reviews': reviews.count(),
+            'rating_breakdown': {
+                5: reviews.filter(rating=5).count(),
+                4: reviews.filter(rating=4).count(),
+                3: reviews.filter(rating=3).count(),
+                2: reviews.filter(rating=2).count(),
+                1: reviews.filter(rating=1).count(),
+            }
+        }
+        return Response(summary)
+    
 class CustomerPagination(PageNumberPagination):
     page_size = 10
     page_size_query_param = 'page_size'

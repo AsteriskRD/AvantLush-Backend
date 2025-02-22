@@ -162,6 +162,33 @@ class Product(models.Model):
 
     def __str__(self):
         return self.name
+    
+    def get_similar_products(self, limit=4):
+        """Get similar products based on category and price range"""
+        price_range = 0.2  # 20% above and below
+        return Product.objects.filter(
+            category=self.category,
+            status='active',
+            price__gte=self.price * (1 - price_range),
+            price__lte=self.price * (1 + price_range)
+        ).exclude(id=self.id)[:limit]
+
+    def get_complementary_products(self, limit=4):
+        """Get products that are commonly bought together"""
+        return Product.objects.filter(
+            orderitem__order__items__product=self
+        ).exclude(id=self.id).annotate(
+            purchase_count=models.Count('id')
+        ).order_by('-purchase_count')[:limit]
+
+
+class ProductView(models.Model):
+    product = models.ForeignKey(Product, on_delete=models.CASCADE)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    viewed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-viewed_at']
 
 class ProductVariation(models.Model):
     product = models.ForeignKey(Product, related_name='variations', on_delete=models.CASCADE)

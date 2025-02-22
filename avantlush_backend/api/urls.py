@@ -30,6 +30,7 @@ from .views import (
     ReviewViewSet,
     DashboardViewSet,
     CustomerViewSet,
+    ProductReviewViewSet,
     
 )
 
@@ -51,6 +52,7 @@ router.register(r'support-tickets', SupportTicketViewSet, basename='support-tick
 router.register(r'dashboard', DashboardViewSet, basename='dashboard')
 router.register(r'product-management', ProductViewSet, basename='product-management')
 router.register(r'customers', CustomerViewSet, basename='customer')
+router.register(r'products/(?P<product_id>\d+)/reviews', ProductReviewViewSet, basename='product-reviews')
 
 
 # URL patterns
@@ -76,6 +78,14 @@ urlpatterns = [
     path('products/export/', ProductViewSet.as_view({'get': 'export'}), name='product-export'),
     path('products/bulk-update-status/', ProductViewSet.as_view({'post': 'bulk_update_status'}), name='product-bulk-update'),
 
+    ##PRODUCT RECOMMENDATION
+    path('products/<int:product_id>/recommendations/', 
+         ProductRecommendationView.as_view(), 
+         name='product-recommendations'),
+    path('products/<int:product_id>/recommendations/<str:rec_type>/', 
+         ProductRecommendationView.as_view(), 
+         name='product-recommendations-by-type'),
+         
     ## DASBOARD
     path('products/<int:pk>/upload-image/', 
         ProductViewSet.as_view({'post': 'upload-image'}),

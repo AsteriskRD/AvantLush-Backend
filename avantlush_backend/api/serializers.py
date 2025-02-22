@@ -334,19 +334,22 @@ class AddressSerializer(serializers.ModelSerializer):
 class ProductSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source='category.name', read_only=True)
     main_image = serializers.SerializerMethodField()
-    
+    is_featured = serializers.BooleanField()  
+    is_physical_product = serializers.BooleanField()  
+
     def get_main_image(self, obj):
         if obj.main_image:
             return obj.main_image.url
         return None
-    
+
     class Meta:
         model = Product
         fields = [
             'id', 'name', 'slug', 'description', 'price', 
             'category', 'category_name', 'images', 'stock_quantity',
-            'is_featured', 'sku', 'status', 'created_at', 'updated_at',
-            'rating', 'num_ratings', 'main_image'  # Added main_image here
+            'is_featured', 'is_physical_product', 'sku', 'status', 
+            'created_at', 'updated_at', 'rating', 'num_ratings', 
+            'main_image'
         ]
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -497,8 +500,8 @@ class WishlistNotificationSerializer(serializers.ModelSerializer):
 
 class ProductRecommendationSerializer(serializers.ModelSerializer):
     class Meta:
-        model = ProductRecommendation
-        fields = ['id', 'product', 'recommended_product', 'score']
+        model = Product
+        fields = ['id', 'name', 'price', 'main_image', 'slug', 'rating', 'stock_quantity']
 
 
 class ReviewTagSerializer(serializers.ModelSerializer):
@@ -799,7 +802,7 @@ class ProductManagementSerializer(serializers.ModelSerializer):
             # General Information
             'id', 'name', 'description', 'category', 'category_name', 
             'tags', 'status', 'status_display', 'main_image', 'images',
-            'image_files',  # Add the new field here
+            'image_files',  'is_featured',
             # Pricing
             'base_price', 'discount_type', 'discount_percentage', 
             'vat_amount',
