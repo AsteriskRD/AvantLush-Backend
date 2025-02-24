@@ -508,11 +508,21 @@ class WishlistNotificationSerializer(serializers.ModelSerializer):
         read_only_fields = ['created_at']
 
 
+from cloudinary.utils import cloudinary_url
+
 class ProductRecommendationSerializer(serializers.ModelSerializer):
+    main_image = serializers.SerializerMethodField()
+    
     class Meta:
         model = Product
         fields = ['id', 'name', 'price', 'main_image', 'slug', 'rating', 'stock_quantity']
-
+    
+    def get_main_image(self, obj):
+        if obj.main_image:
+            # Get the full URL from Cloudinary
+            url, options = cloudinary_url(obj.main_image.public_id, format=obj.main_image.format)
+            return url
+        return None
 
 class ReviewTagSerializer(serializers.ModelSerializer):
     class Meta:
