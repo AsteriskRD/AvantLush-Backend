@@ -26,11 +26,11 @@ from .views import (
     AddressViewSet,
     ProductSearchView,
     ProductRecommendationView,
+    RecordProductViewView,  # Add the new view
     ReviewViewSet,
     DashboardViewSet,
     CustomerViewSet,
     ProductReviewViewSet,
-    
 )
 
 # Router setup
@@ -53,7 +53,6 @@ router.register(r'product-management', ProductViewSet, basename='product-managem
 router.register(r'customers', CustomerViewSet, basename='customer')
 router.register(r'products/(?P<product_id>\d+)/reviews', ProductReviewViewSet, basename='product-reviews')
 
-
 # URL patterns
 urlpatterns = [
     # Authentication & User Management
@@ -62,7 +61,6 @@ urlpatterns = [
     path('register/', register, name='register'),
     path('login/', login, name='login'),
     path('auth/google/', GoogleLoginView.as_view(), name='google_login'),
-    #path('auth/google/callback/', google_auth_callback, name='google_callback'),
     path('verify-email/<str:token>/<str:uidb64>/', verify_email, name='verify_email'),
     path('resend-verification/', resend_verification_email, name='resend_verification'),
     path('forgot-password/', forgot_password, name='forgot_password'),
@@ -70,22 +68,25 @@ urlpatterns = [
     
     # Product & Wishlist
     path('products/search/', ProductSearchView.as_view(), name='product-search'),
-    path('products/<int:product_id>/recommendations/', ProductRecommendationView.as_view(), name='product-recommendations'),
-    path('wishlist/move-to-cart/', WishlistViewSet.as_view({'post': 'move_to_cart'})),
-    path('wishlist/bulk-delete/', WishlistViewSet.as_view({'post': 'bulk_delete'})),
-    path('wishlist/stock-notifications/', WishlistViewSet.as_view({'get': 'stock_notifications'})),
-    path('products/export/', ProductViewSet.as_view({'get': 'export'}), name='product-export'),
-    path('products/bulk-update-status/', ProductViewSet.as_view({'post': 'bulk_update_status'}), name='product-bulk-update'),
-
-    ##PRODUCT RECOMMENDATION
+    
+    # NEW: Product View Recording
+    path('products/record-view/', RecordProductViewView.as_view(), name='record-product-view'),
+    
+    # Product Recommendations - Remove duplicate entry and keep the better structured ones
     path('products/<int:product_id>/recommendations/', 
          ProductRecommendationView.as_view(), 
          name='product-recommendations'),
     path('products/<int:product_id>/recommendations/<str:rec_type>/', 
          ProductRecommendationView.as_view(), 
          name='product-recommendations-by-type'),
+    
+    path('wishlist/move-to-cart/', WishlistViewSet.as_view({'post': 'move_to_cart'})),
+    path('wishlist/bulk-delete/', WishlistViewSet.as_view({'post': 'bulk_delete'})),
+    path('wishlist/stock-notifications/', WishlistViewSet.as_view({'get': 'stock_notifications'})),
+    path('products/export/', ProductViewSet.as_view({'get': 'export'}), name='product-export'),
+    path('products/bulk-update-status/', ProductViewSet.as_view({'post': 'bulk_update_status'}), name='product-bulk-update'),
          
-    ## DASBOARD
+    ## DASHBOARD
     path('products/<int:pk>/upload-image/', 
         ProductViewSet.as_view({'post': 'upload-image'}),
         name='product-upload-image'),
@@ -114,8 +115,6 @@ urlpatterns = [
 
     # Support & Checkout
     path('support/submit/', SupportTicketViewSet.as_view({'post': 'submit'})),
-
-    # Dashboard Image uploads
 
     # External App URLs
     path('api/', include('checkout.urls')),

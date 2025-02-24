@@ -1190,13 +1190,38 @@ class OrderViewSet(viewsets.ModelViewSet):
 class ProductSearchView(generics.ListAPIView):
     serializer_class = ProductSerializer
     filter_backends = [filters.SearchFilter, DjangoFilterBackend]
-    search_fields = ['name', 'description', 'sku', 'tags__name', 'categories__name']
+    search_fields = ['name', 'description', 'sku', 'tags__name', 'category__name']
     filterset_fields = ['category', 'tags', 'is_featured', 'status']
-
-    def get_queryset(self):
-        Product = apps.get_model('api', 'Product')  # Note: using 'api' instead of full path
-        return Product.objects.all()
     
+    def get_queryset(self):
+        Product = apps.get_model('api', 'Product')
+        queryset = Product.objects.filter(status='active')
+        
+        # Additional filtering logic
+        price_min = self.request.query_params.get('price_min')
+        price_max = self.request.query_params.get('price_max')
+        
+        if price_min:
+            queryset = queryset.filter(price__gte=float(price_min))
+        if price_max:
+            queryset = queryset.filter(price__lte=float(price_max))
+            
+        # Record user view if a single product is being viewed
+        product_id = self.request.query_params.get('product_id')
+        if product_id and self.request.user.is_authenticated:
+            try:
+                product = Product.objects.get(id=product_id)
+                ProductView = apps.get_model('api', 'ProductView')
+                ProductView.objects.create(
+                    product=product,
+                    user=self.request.user,
+                    viewed_at=timezone.now()
+                )
+            except Product.DoesNotExist:
+                pass
+                
+        return queryset
+        
 # Wishlist Views
 class WishlistViewSet(viewsets.ModelViewSet):
     serializer_class = WishlistSerializer
@@ -1285,68 +1310,72 @@ class WishlistItemViewSet(viewsets.ModelViewSet):
 # Product Recommendation View
 class ProductRecommendationView(generics.ListAPIView):
     serializer_class = ProductRecommendationSerializer
-
-    def get_immediate_recommendations(self, product, limit=4):
-        """Get recommendations that work without any historical data"""
-        return Product.objects.filter(
-            category=product.category,
-            status='active'
-        ).exclude(
-            id=product.id
-        ).order_by('?')[:limit]
+    
+    def get_immediate_recommendations(self, product=None, limit=4):
+        """Get any active products as a last resort fallback"""
+        Product = apps.get_model('api', 'Product')
+        queryset = Product.objects.filter(status='active')
+        
+        # If we have a product, exclude it from results
+        if product:
+            queryset = queryset.exclude(id=product.id)
+            
+        # Order by something sensible
+        queryset = queryset.order_by('-is_featured', '-created_at')[:limit]
+        
+        # If we still don't have results, just get any products
+        if not queryset.exists():
+            queryset = Product.objects.all().order_by('-id')[:limit]
+            
+        return queryset
     
     def get_queryset(self):
-        product_id = self.kwargs['product_id']
+        product_id = self.kwargs.get('product_id')
+        rec_type = self.request.query_params.get('type', 'similar')
+        Product = apps.get_model('api', 'Product')
+        
         try:
+            # Try to get the product
             product = Product.objects.get(id=product_id)
-            rec_type = self.request.query_params.get('type', 'similar')
-            
             recommendations = []
             
+            # Logic for different recommendation types
             if rec_type == 'similar':
-                # Price-based similarity
-                price_range = 0.2  # 20% above and below
+                # Get products in same category
                 recommendations = Product.objects.filter(
                     category=product.category,
-                    status='active',
-                    price__gte=product.price * (1 - price_range),
-                    price__lte=product.price * (1 + price_range)
+                    status='active'
                 ).exclude(id=product.id)
                 
             elif rec_type == 'complementary':
-                # Without purchase history, recommend products that:
-                # 1. Are from same category but different price points
-                # 2. Or are from related categories
-                recommendations = Product.objects.filter(
-                    Q(category=product.category, price__gt=product.price * 1.5) |  # More expensive items
-                    Q(category__in=product.category.related_categories.all())  # If you have related categories
-                ).exclude(id=product.id)
+                # Get complementary products if possible
+                if hasattr(product, 'get_complementary_products'):
+                    recommendations = product.get_complementary_products()
                 
-            elif rec_type == 'personalized':
-                if self.request.user.is_authenticated:
-                    # Without viewing history, recommend:
-                    # 1. Featured products
-                    # 2. Best-rated products
-                    # 3. Recently added products
+                # If no results, try products with different price points
+                if not recommendations.exists():
                     recommendations = Product.objects.filter(
                         status='active'
-                    ).exclude(id=product.id).order_by(
-                        '-is_featured',
-                        '-rating',
-                        '-created_at'
-                    )
-                else:
-                    recommendations = self.get_immediate_recommendations(product)
-
-            # If no recommendations found, fall back to immediate recommendations
+                    ).exclude(id=product.id).order_by('?')
+                
+            elif rec_type == 'personalized':
+                # Just get featured products for now
+                recommendations = Product.objects.filter(
+                    status='active',
+                    is_featured=True
+                ).exclude(id=product.id)
+            
+            # If we still don't have recommendations, get any active products
             if not recommendations.exists():
                 recommendations = self.get_immediate_recommendations(product)
-
+                
+            # Make sure we limit the results
             return recommendations[:4]
-
+            
         except Product.DoesNotExist:
-            return Product.objects.none()
-
+            # If product doesn't exist, return any active products
+            return self.get_immediate_recommendations(product=None)
+    
     def list(self, request, *args, **kwargs):
         queryset = self.get_queryset()
         serializer = self.get_serializer(queryset, many=True)
@@ -1359,6 +1388,40 @@ class ProductRecommendationView(generics.ListAPIView):
         
         return Response(response_data, status=status.HTTP_200_OK)
 
+# Add this view to track product views
+class RecordProductViewView(generics.CreateAPIView):
+    def create(self, request, *args, **kwargs):
+        Product = apps.get_model('api', 'Product')
+        ProductView = apps.get_model('api', 'ProductView')
+        
+        product_id = request.data.get('product_id')
+        
+        try:
+            product = Product.objects.get(id=product_id)
+            
+            if request.user.is_authenticated:
+                ProductView.objects.create(
+                    product=product,
+                    user=request.user,
+                    viewed_at=timezone.now()
+                )
+                
+                return Response({
+                    'status': 'success',
+                    'message': 'Product view recorded'
+                }, status=status.HTTP_201_CREATED)
+            else:
+                return Response({
+                    'status': 'error',
+                    'message': 'User not authenticated'
+                }, status=status.HTTP_401_UNAUTHORIZED)
+                
+        except Product.DoesNotExist:
+            return Response({
+                'status': 'error',
+                'message': 'Product not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
 class ReviewFilter(django_filters.FilterSet):
     rating = django_filters.NumberFilter()
     has_images = django_filters.BooleanFilter(method='filter_has_images')
