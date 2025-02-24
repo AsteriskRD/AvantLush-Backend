@@ -225,7 +225,7 @@ REST_AUTH_SERIALIZERS = {
 
 REST_AUTH = {
     'USE_JWT': True,
-    'JWT_AUTH_COOKIE': 'auth-token',
+    'JWT_AUTH_COOKIE': 'my-app-auth', 
     'JWT_AUTH_REFRESH_COOKIE': 'refresh-token',
     'USER_DETAILS_SERIALIZER': 'avantlush_backend.api.serializers.CustomUserDetailsSerializer',
     'LOGIN_SERIALIZER': 'avantlush_backend.api.serializers.LoginSerializer',

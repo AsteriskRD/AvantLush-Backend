@@ -19,6 +19,7 @@ from datetime import datetime
 import csv
 from django.apps import apps
 from django.http import HttpResponse
+from django.contrib.auth import get_user_model
 
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.core.files.storage import default_storage
@@ -133,7 +134,8 @@ from .serializers import (
     OrderCreateSerializer,
     OrderItemSerializer,
     CustomerSerializer,
-    CustomerDetailSerializer
+    CustomerDetailSerializer,
+    CustomerCreateSerializer
     
     
 )
@@ -158,12 +160,65 @@ from django_filters import FilterSet, NumberFilter
 class WaitlistRateThrottle(AnonRateThrottle):
     rate = '5/minute'  # Limit to 5 requests per minute per IP
 
-class GoogleLoginView(SocialLoginView):
-    adapter_class = GoogleOAuth2Adapter
-    callback_url = settings.GOOGLE_OAUTH2_CALLBACK_URL  # You'll need to add this to settings.py
-    client_class = OAuth2Client
+User = get_user_model()
+
+class GoogleLoginView(APIView):
+    permission_classes = [AllowAny]
     serializer_class = GoogleAuthSerializer
 
+    def post(self, request):
+        serializer = self.serializer_class(data=request.data)
+        if serializer.is_valid():
+            token = serializer.validated_data['token']
+            email = serializer.validated_data['email']
+            location = serializer.validated_data.get('location', 'Nigeria')
+
+            try:
+                # Verify the Google token
+                idinfo = id_token.verify_oauth2_token(
+                    token,
+                    requests.Request(),
+                    settings.SOCIAL_AUTH_GOOGLE_OAUTH2_KEY
+                )
+
+                if idinfo['email'] != email:
+                    return Response(
+                        {'error': 'Email verification failed'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+                # Get or create user
+                try:
+                    user = User.objects.get(email=email)
+                except User.DoesNotExist:
+                    user = User.objects.create_user(
+                        email=email,
+                        location=location,
+                        google_id=idinfo['sub']
+                    )
+
+                # Generate JWT tokens
+                refresh = RefreshToken.for_user(user)
+                
+                return Response({
+                    'user': {
+                        'email': user.email,
+                        'location': user.location,
+                    },
+                    'tokens': {
+                        'refresh': str(refresh),
+                        'access': str(refresh.access_token),
+                    }
+                })
+
+            except ValueError:
+                return Response(
+                    {'error': 'Invalid token'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
 class AppleLoginView(SocialLoginView):
     adapter_class = AppleOAuth2Adapter
     callback_url = settings.APPLE_OAUTH2_CALLBACK_URL
@@ -199,70 +254,6 @@ def api_root(request):
         }
     })
 
-@api_view(['POST'])
-def google_auth(request):
-    serializer = GoogleAuthSerializer(data=request.data)
-    if serializer.is_valid():
-        token = serializer.validated_data['token']
-        email = serializer.validated_data['email']
-        location = serializer.validated_data.get('location', 'Nigeria')
-
-        try:
-            # Verify the Google token
-            idinfo = id_token.verify_oauth2_token(
-                token,
-                requests.Request(),
-                settings.SOCIAL_AUTH_GOOGLE_OAUTH2_KEY  # Use settings for global constants
-            )
-
-            if idinfo['email'] != email:
-                return Response(
-                    {'error': 'Email verification failed'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-            # Get or create user
-            try:
-                user = User.objects.get(email=email)
-            except User.DoesNotExist:
-                user = User.objects.create_user(
-                    email=email,
-                    location=location,
-                    google_id=idinfo['sub']
-                )
-
-            # Create or get token
-            token, _ = Token.objects.get_or_create(user=user)
-
-            return Response({
-                'token': token.key,
-                'email': user.email,
-                'location': user.location
-            })
-
-        except ValueError:
-            return Response(
-                {'error': 'Invalid token'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-@api_view(['POST'])
-@permission_classes([AllowAny])
-def google_auth_callback(request):
-    """
-    Handle Google OAuth callback
-    """
-    serializer = GoogleAuthSerializer(data=request.data)
-    if serializer.is_valid():
-        user = serializer.save()
-        return Response({
-            'user_id': user.id,
-            'email': user.email,
-            'message': 'Successfully authenticated with Google'
-        })
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['POST'])
 @throttle_classes([WaitlistRateThrottle])
@@ -1295,39 +1286,63 @@ class WishlistItemViewSet(viewsets.ModelViewSet):
 class ProductRecommendationView(generics.ListAPIView):
     serializer_class = ProductRecommendationSerializer
 
+    def get_immediate_recommendations(self, product, limit=4):
+        """Get recommendations that work without any historical data"""
+        return Product.objects.filter(
+            category=product.category,
+            status='active'
+        ).exclude(
+            id=product.id
+        ).order_by('?')[:limit]
+    
     def get_queryset(self):
         product_id = self.kwargs['product_id']
         try:
             product = Product.objects.get(id=product_id)
-            
-            # Track view if user is authenticated
-            if self.request.user.is_authenticated:
-                ProductView.objects.create(
-                    product=product,
-                    user=self.request.user
-                )
-
-            # Get recommendation type from query params
             rec_type = self.request.query_params.get('type', 'similar')
             
+            recommendations = []
+            
             if rec_type == 'similar':
-                return product.get_similar_products()
-            elif rec_type == 'complementary':
-                return product.get_complementary_products()
-            elif rec_type == 'personalized' and self.request.user.is_authenticated:
-                # Get personalized recommendations based on viewing history
-                viewed_categories = ProductView.objects.filter(
-                    user=self.request.user
-                ).values_list('product__category', flat=True).distinct()
+                # Price-based similarity
+                price_range = 0.2  # 20% above and below
+                recommendations = Product.objects.filter(
+                    category=product.category,
+                    status='active',
+                    price__gte=product.price * (1 - price_range),
+                    price__lte=product.price * (1 + price_range)
+                ).exclude(id=product.id)
                 
-                return Product.objects.filter(
-                    Q(category__in=viewed_categories) |
-                    Q(tags__in=product.tags.all())
-                ).exclude(
-                    id=product_id
-                ).distinct()[:4]
-            else:
-                return product.get_similar_products()
+            elif rec_type == 'complementary':
+                # Without purchase history, recommend products that:
+                # 1. Are from same category but different price points
+                # 2. Or are from related categories
+                recommendations = Product.objects.filter(
+                    Q(category=product.category, price__gt=product.price * 1.5) |  # More expensive items
+                    Q(category__in=product.category.related_categories.all())  # If you have related categories
+                ).exclude(id=product.id)
+                
+            elif rec_type == 'personalized':
+                if self.request.user.is_authenticated:
+                    # Without viewing history, recommend:
+                    # 1. Featured products
+                    # 2. Best-rated products
+                    # 3. Recently added products
+                    recommendations = Product.objects.filter(
+                        status='active'
+                    ).exclude(id=product.id).order_by(
+                        '-is_featured',
+                        '-rating',
+                        '-created_at'
+                    )
+                else:
+                    recommendations = self.get_immediate_recommendations(product)
+
+            # If no recommendations found, fall back to immediate recommendations
+            if not recommendations.exists():
+                recommendations = self.get_immediate_recommendations(product)
+
+            return recommendations[:4]
 
         except Product.DoesNotExist:
             return Product.objects.none()

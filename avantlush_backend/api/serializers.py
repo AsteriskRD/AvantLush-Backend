@@ -138,6 +138,7 @@ class ResetPasswordSerializer(serializers.Serializer):
         return value
 
 from rest_framework import serializers
+from rest_framework import serializers
 
 class GoogleAuthSerializer(serializers.Serializer):
     token = serializers.CharField(required=True)
@@ -152,12 +153,21 @@ class GoogleAuthSerializer(serializers.Serializer):
     def validate_email(self, value):
         if not value:
             raise serializers.ValidationError("Email is required")
-        return value
+        return value.lower()  # Normalize email to lowercase
 
     def validate(self, attrs):
         if not attrs.get('location'):
             attrs['location'] = 'Nigeria'
         return attrs
+
+class GoogleAuthCallbackSerializer(serializers.Serializer):
+    code = serializers.CharField(required=True)
+    location = serializers.CharField(required=False, default='Nigeria')
+
+    def validate_code(self, value):
+        if not value:
+            raise serializers.ValidationError("Authorization code is required")
+        return value
 class AppleAuthSerializer(SocialLoginSerializer):
     token = serializers.CharField(required=True)
     code = serializers.CharField(required=False)  # Apple specific
