@@ -59,7 +59,9 @@ urlpatterns = [
     path('waitlist/signup/', waitlist_signup, name='waitlist_signup'),
     path('preview_email/', preview_email, name='preview_email'),
     path('register/', register, name='register'),
-    path('login/', login, name='login'),
+    #path('login/', login, name='login'),
+    path('auth/', include('dj_rest_auth.urls')),  # This includes login, logout, user details, etc.
+path('auth/registration/', include('dj_rest_auth.registration.urls')), 
     path('auth/google/', GoogleLoginView.as_view(), name='google_login'),
     path('verify-email/<str:token>/<str:uidb64>/', verify_email, name='verify_email'),
     path('resend-verification/', resend_verification_email, name='resend_verification'),

@@ -346,7 +346,7 @@ Success Response (200):
 ## Cart Management
 
 ### Get Cart Summary
-- **URL**: `/cart/summary/`
+- **URL**: `/cart/summary/`   (IMAGES NEEDED TO BE IMPLEMENTED)
 - **Method**: GET
 - **Auth**: Required
 - **Success Response (200)**:
@@ -370,7 +370,7 @@ Success Response (200):
 
 
 Add Item to Cart
-URL: /cart/add-item/
+URL: /cart/add-item/   (IMAGES NEEDED TO BE IMPLEMENTED)
 
 Method: POST
 Auth: Required

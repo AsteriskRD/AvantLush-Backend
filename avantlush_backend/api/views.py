@@ -533,11 +533,11 @@ def login(request):
     }, status=status.HTTP_400_BAD_REQUEST)
 
 
-    @action(detail=False, methods=['get'])
-    def featured(self, request):
-        featured_products = self.get_queryset().filter(is_featured=True)
-        serializer = self.get_serializer(featured_products, many=True)
-        return Response(serializer.data)
+@action(detail=False, methods=['get'])
+def featured(self, request):
+    featured_products = self.get_queryset().filter(is_featured=True)
+    serializer = self.get_serializer(featured_products, many=True)
+    return Response(serializer.data)
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
@@ -816,6 +816,10 @@ class ArticleViewSet(viewsets.ModelViewSet):
 
 class CartViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        """Return queryset of cart objects for the current user"""
+        return Cart.objects.filter(user=self.request.user)
     
     def get_serializer_class(self):
         if self.action in ['add_item', 'update_quantity']:

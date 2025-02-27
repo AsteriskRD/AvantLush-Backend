@@ -23,6 +23,7 @@ from rest_framework import serializers
 from .models import Order, CustomUser, Cart, Product
 from rest_framework import serializers
 from .models import Product, Category
+from django.contrib.auth import authenticate
 
 from .models import (
     CustomUser,  
@@ -116,13 +117,24 @@ class LoginSerializer(serializers.Serializer):
     def validate(self, data):
         """
         Custom validation to check if user exists and password is correct
-        Note: Actual authentication happens in the view
         """
         email = data.get('email')
+        password = data.get('password')
+        
         if not User.objects.filter(email=email).exists():
             raise serializers.ValidationError({
                 'email': 'No account found with this email address.'
             })
+        
+        # Add authentication and set the user in the data
+        user = authenticate(email=email, password=password)
+        if not user:
+            raise serializers.ValidationError({
+                'password': 'Invalid password for this account.'
+            })
+            
+        # This is what dj_rest_auth expects
+        data['user'] = user
         return data
 class ForgotPasswordSerializer(serializers.Serializer):
     email = serializers.EmailField()
