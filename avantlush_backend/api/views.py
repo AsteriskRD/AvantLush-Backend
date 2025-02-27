@@ -1236,29 +1236,26 @@ class WishlistViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
-
-class WishlistItemViewSet(viewsets.ModelViewSet):
-    serializer_class = WishlistItemSerializer
-    permission_classes = [IsAuthenticated]
-
-    def get_queryset(self):
-        return Wishlist.objects.filter(user=self.request.user)
-
-    @action(detail=False, methods=['POST'])
+    @action(detail=False, methods=['POST', 'GET'])
     def move_to_cart(self, request):
         """Move items from wishlist to cart"""
         try:
-            wishlist = Wishlist.objects.get(user=request.user)
+        
+            wishlist, created = Wishlist.objects.get_or_create(user=request.user)
             cart, _ = Cart.objects.get_or_create(user=request.user)
             
-            item_ids = request.data.get('item_ids', [])
+            # Rest of your code remains the same
+            if request.method == 'GET':
+                item_ids = request.query_params.getlist('item_ids', [])
+            else:
+                item_ids = request.data.get('item_ids', [])
+                
             items = WishlistItem.objects.filter(
                 wishlist=wishlist,
                 id__in=item_ids
             )
             
             for wishlist_item in items:
-                # Check if product is in stock
                 if wishlist_item.product.stock_quantity > 0:
                     CartItem.objects.create(
                         cart=cart,
@@ -1273,6 +1270,13 @@ class WishlistItemViewSet(viewsets.ModelViewSet):
                 {'error': str(e)},
                 status=status.HTTP_400_BAD_REQUEST
             )
+class WishlistItemViewSet(viewsets.ModelViewSet):
+    serializer_class = WishlistItemSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Wishlist.objects.filter(user=self.request.user)
+
 
     @action(detail=False, methods=['POST'])
     def bulk_delete(self, request):
