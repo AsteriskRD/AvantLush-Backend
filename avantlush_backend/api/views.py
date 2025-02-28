@@ -815,7 +815,7 @@ class ArticleViewSet(viewsets.ModelViewSet):
     serializer_class = ArticleSerializer
 
 class CartViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
     
     def get_queryset(self):
         """Return queryset of cart objects for the current user"""
@@ -954,7 +954,7 @@ class CartViewSet(viewsets.ModelViewSet):
     
 class CartItemViewSet(viewsets.ModelViewSet):
     serializer_class = CartItemSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     def get_queryset(self):
         return CartItem.objects.filter(cart__user=self.request.user)
