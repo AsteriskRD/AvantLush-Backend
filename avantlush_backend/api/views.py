@@ -1272,7 +1272,7 @@ class WishlistViewSet(viewsets.ModelViewSet):
             )
 class WishlistItemViewSet(viewsets.ModelViewSet):
     serializer_class = WishlistItemSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     def get_queryset(self):
         return Wishlist.objects.filter(user=self.request.user)
