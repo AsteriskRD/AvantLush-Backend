@@ -389,11 +389,23 @@ class CartItemSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source='product.name', read_only=True)
     product_price = serializers.DecimalField(source='product.price', max_digits=10, decimal_places=2, read_only=True)
     stock_status = serializers.CharField(source='product.status', read_only=True)
+    product_image = serializers.SerializerMethodField(read_only=True)
     
     class Meta:
         model = CartItem
-        fields = ['id', 'product', 'quantity', 'product_name', 'product_price', 'stock_status']
+        fields = ['id', 'product', 'quantity', 'product_name', 'product_price', 'stock_status', 'product_image']
+    
+    def get_product_image(self, obj):
+        # Check if product has a main image
+        if obj.product.main_image:
+            return obj.product.main_image.url
         
+        # If no main image, check if it has any images in the images list
+        elif obj.product.images and len(obj.product.images) > 0:
+            return obj.product.images[0]  # Return the first image URL
+            
+        return None  # Return None if no images are available
+            
 class CartSerializer(serializers.ModelSerializer):
     items = CartItemSerializer(many=True, read_only=True)
     user = serializers.PrimaryKeyRelatedField(read_only=True)

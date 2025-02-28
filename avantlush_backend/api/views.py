@@ -818,18 +818,38 @@ class CartViewSet(viewsets.ModelViewSet):
     permission_classes = [AllowAny]
     
     def get_queryset(self):
-        """Return queryset of cart objects for the current user"""
-        return Cart.objects.filter(user=self.request.user)
-    
+        """Return queryset of cart objects for the current user or session"""
+        # Get session key or create one
+        session_key = self.request.session.session_key
+        if not session_key:
+            self.request.session.save()
+            session_key = self.request.session.session_key
+            
+        # Try to get cart by user if authenticated, otherwise by session
+        if self.request.user.is_authenticated:
+            return Cart.objects.filter(user=self.request.user)
+        else:
+            return Cart.objects.filter(session_key=session_key)
+        
     def get_serializer_class(self):
         if self.action in ['add_item', 'update_quantity']:
             return CartItemSerializer
         return CartSerializer
 
     def get_cart(self):
-        """Get or create cart for current user"""
-        cart, created = Cart.objects.get_or_create(user=self.request.user)
+        """Get or create cart for current user or session"""
+        session_key = self.request.session.session_key
+        if not session_key:
+            self.request.session.save()
+            session_key = self.request.session.session_key
+            
+        if self.request.user.is_authenticated:
+            cart, created = Cart.objects.get_or_create(user=self.request.user)
+        else:
+            cart, created = Cart.objects.get_or_create(session_key=session_key, user=None)
+            
         return cart
+
 
     @action(detail=False, methods=['GET'])
     def summary(self, request):
@@ -883,7 +903,7 @@ class CartViewSet(viewsets.ModelViewSet):
                 {'error': 'Product not found'},
                 status=status.HTTP_404_NOT_FOUND
             )
-
+        
     @action(detail=False, methods=['POST'])
     def update_quantity(self, request):
         """Update item quantity in cart"""
@@ -957,30 +977,34 @@ class CartItemViewSet(viewsets.ModelViewSet):
     permission_classes = [AllowAny]
 
     def get_queryset(self):
-        return CartItem.objects.filter(cart__user=self.request.user)
+        # Get cart using the same logic as in CartViewSet
+        session_key = self.request.session.session_key
+        if not session_key:
+            self.request.session.save()
+            session_key = self.request.session.session_key
+            
+        if self.request.user.is_authenticated:
+            cart = Cart.objects.filter(user=self.request.user).first()
+        else:
+            cart = Cart.objects.filter(session_key=session_key).first()
+            
+        if cart:
+            return CartItem.objects.filter(cart=cart)
+        return CartItem.objects.none()
 
     def perform_create(self, serializer):
-        serializer.save(cart=self.request.user.cart)
-
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        cart_item = self.perform_create(serializer)
-        headers = self.get_success_headers(serializer.data)
-        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
-
-    def update(self, request, *args, **kwargs):
-        partial = kwargs.pop('partial', False)
-        instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
-        serializer.is_valid(raise_exception=True)
-        self.perform_update(serializer)
-        return Response(serializer.data)
-
-    def destroy(self, request, *args, **kwargs):
-        instance = self.get_object()
-        self.perform_destroy(instance)
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        # Get or create cart
+        session_key = self.request.session.session_key
+        if not session_key:
+            self.request.session.save()
+            session_key = self.request.session.session_key
+            
+        if self.request.user.is_authenticated:
+            cart, _ = Cart.objects.get_or_create(user=self.request.user)
+        else:
+            cart, _ = Cart.objects.get_or_create(session_key=session_key)
+            
+        serializer.save(cart=cart)
     
 class OrderViewSet(viewsets.ModelViewSet):
     queryset = Order.objects.all().select_related('user', 'payment').prefetch_related('items__product')
