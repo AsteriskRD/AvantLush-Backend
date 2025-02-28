@@ -1229,7 +1229,7 @@ class ProductSearchView(generics.ListAPIView):
 # Wishlist Views
 class WishlistViewSet(viewsets.ModelViewSet):
     serializer_class = WishlistSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     def get_queryset(self):
         return Wishlist.objects.filter(user=self.request.user)
