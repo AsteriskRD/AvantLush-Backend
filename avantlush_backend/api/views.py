@@ -814,7 +814,7 @@ class ArticleViewSet(viewsets.ModelViewSet):
     queryset = Article.objects.all()
     serializer_class = ArticleSerializer
 
-from django.db.models import Q
+
 class CartViewSet(viewsets.ModelViewSet):
     permission_classes = [AllowAny]
     
@@ -830,8 +830,8 @@ class CartViewSet(viewsets.ModelViewSet):
         if self.request.user.is_authenticated:
             # Check for both user cart and potential session cart
             user_carts = Cart.objects.filter(
-                models.Q(user=self.request.user) | 
-                models.Q(session_key=session_key, user__isnull=True)
+                Q(user=self.request.user) | 
+                Q(session_key=session_key, user__isnull=True)
             )
             return user_carts
         else:
