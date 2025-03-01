@@ -814,6 +814,7 @@ class ArticleViewSet(viewsets.ModelViewSet):
     queryset = Article.objects.all()
     serializer_class = ArticleSerializer
 
+from django.db.models import Q
 class CartViewSet(viewsets.ModelViewSet):
     permission_classes = [AllowAny]
     
