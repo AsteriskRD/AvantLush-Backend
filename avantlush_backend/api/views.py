@@ -827,10 +827,15 @@ class CartViewSet(viewsets.ModelViewSet):
             
         # Try to get cart by user if authenticated, otherwise by session
         if self.request.user.is_authenticated:
-            return Cart.objects.filter(user=self.request.user)
+            # Check for both user cart and potential session cart
+            user_carts = Cart.objects.filter(
+                models.Q(user=self.request.user) | 
+                models.Q(session_key=session_key, user__isnull=True)
+            )
+            return user_carts
         else:
-            return Cart.objects.filter(session_key=session_key)
-        
+            return Cart.objects.filter(session_key=session_key, user__isnull=True)
+            
     def get_serializer_class(self):
         if self.action in ['add_item', 'update_quantity']:
             return CartItemSerializer
@@ -843,13 +848,51 @@ class CartViewSet(viewsets.ModelViewSet):
             self.request.session.save()
             session_key = self.request.session.session_key
             
+        # If user is authenticated, find or create their cart
         if self.request.user.is_authenticated:
-            cart, created = Cart.objects.get_or_create(user=self.request.user)
+            # First check if they already have a cart
+            user_cart = Cart.objects.filter(user=self.request.user).first()
+            
+            # Check if there's also a session cart
+            session_cart = Cart.objects.filter(session_key=session_key, user__isnull=True).first()
+            
+            # If both exist, we need to merge them
+            if user_cart and session_cart:
+                # Move all items from session cart to user cart
+                for item in session_cart.items.all():
+                    # Check if the product already exists in user's cart
+                    existing_item = CartItem.objects.filter(cart=user_cart, product=item.product).first()
+                    if existing_item:
+                        # Update quantity if item already exists
+                        existing_item.quantity += item.quantity
+                        existing_item.save()
+                    else:
+                        # Move item to user cart
+                        item.cart = user_cart
+                        item.save()
+                
+                # Delete the session cart after merging
+                session_cart.delete()
+                return user_cart
+            
+            # If only user cart exists, return it
+            elif user_cart:
+                return user_cart
+            
+            # If only session cart exists, convert it to a user cart
+            elif session_cart:
+                session_cart.user = self.request.user
+                session_cart.save()
+                return session_cart
+            
+            # If no cart exists at all, create a new one for the user
+            else:
+                return Cart.objects.create(user=self.request.user)
+        
+        # If user is not authenticated, use session-based cart
         else:
             cart, created = Cart.objects.get_or_create(session_key=session_key, user=None)
-            
-        return cart
-
+            return cart
 
     @action(detail=False, methods=['GET'])
     def summary(self, request):
@@ -875,15 +918,11 @@ class CartViewSet(viewsets.ModelViewSet):
         product_id = request.data.get('product')
         quantity = int(request.data.get('quantity', 1))
         
+        print(f"Adding to cart - Product ID: {product_id}, Quantity: {quantity}")
+        print(f"Current cart: ID {cart.id}, User: {cart.user}, Session: {cart.session_key}")
+        
         try:
             product = Product.objects.get(id=product_id)
-            
-            # Temporarily bypass stock check for testing
-            # if product.stock_quantity < quantity:
-            #     return Response(
-            #         {'error': 'Not enough stock available'},
-            #         status=status.HTTP_400_BAD_REQUEST
-            #     )
             
             # Update or create cart item
             cart_item, created = CartItem.objects.get_or_create(
@@ -895,17 +934,35 @@ class CartViewSet(viewsets.ModelViewSet):
             if not created:
                 cart_item.quantity += quantity
                 cart_item.save()
+                print(f"Updated cart item: {cart_item.id}, New quantity: {cart_item.quantity}")
+            else:
+                print(f"Created new cart item: {cart_item.id}, Quantity: {cart_item.quantity}")
             
-            # Add debug information
-            print(f"Added to cart: Product {product_id}, Quantity {quantity}, Cart ID {cart.id}")
+            # Verify cart items after add
+            items_after = list(CartItem.objects.filter(cart=cart).values('id', 'product__name', 'quantity'))
+            print(f"Items in cart after add: {items_after}")
             
-            return Response(CartItemSerializer(cart_item).data)
+            # Check if frontend API endpoint is working by returning cart summary
+            summary = {
+                'cart_id': cart.id,
+                'total_items': CartItem.objects.filter(cart=cart).count(),
+                'item_added': CartItemSerializer(cart_item).data
+            }
+            
+            return Response(summary)
             
         except Product.DoesNotExist:
+            print(f"Product with ID {product_id} not found")
             return Response(
                 {'error': 'Product not found'},
                 status=status.HTTP_404_NOT_FOUND
-            )        
+            )
+        except Exception as e:
+            print(f"Error adding item to cart: {str(e)}")
+            return Response(
+                {'error': f'Failed to add item to cart: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
     @action(detail=False, methods=['POST'])
     def update_quantity(self, request):
         """Update item quantity in cart"""
@@ -980,20 +1037,38 @@ class CartItemViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         # Get cart using the same logic as in CartViewSet
-        session_key = self.request.session.session_key
-        if not session_key:
-            self.request.session.save()
-            session_key = self.request.session.session_key
-            
-        if self.request.user.is_authenticated:
-            cart = Cart.objects.filter(user=self.request.user).first()
-        else:
-            cart = Cart.objects.filter(session_key=session_key).first()
-            
+        cart = self.get_cart()  # Add this method to CartItemViewSet or call CartViewSet's method
         if cart:
             return CartItem.objects.filter(cart=cart)
         return CartItem.objects.none()
 
+    def get_cart(self):
+        """Get or create cart for current user or session"""
+        session_key = self.request.session.session_key
+        if not session_key:
+            self.request.session.save()
+            session_key = self.request.session.session_key
+        
+        if self.request.user.is_authenticated:
+            # Check for existing user cart first
+            user_cart = Cart.objects.filter(user=self.request.user).first()
+            if user_cart:
+                return user_cart
+                
+            # If no user cart, check for session cart and convert if exists
+            session_cart = Cart.objects.filter(session_key=session_key, user__isnull=True).first()
+            if session_cart:
+                session_cart.user = self.request.user
+                session_cart.save()
+                return session_cart
+                
+            # No carts exist, create one
+            return Cart.objects.create(user=self.request.user)
+        else:
+            # User is not authenticated, use session cart
+            cart, created = Cart.objects.get_or_create(session_key=session_key, user=None)
+            return cart
+    
     def perform_create(self, serializer):
         # Get or create cart
         session_key = self.request.session.session_key
@@ -1007,6 +1082,64 @@ class CartItemViewSet(viewsets.ModelViewSet):
             cart, _ = Cart.objects.get_or_create(session_key=session_key)
             
         serializer.save(cart=cart)
+
+    @action(detail=False, methods=['GET'])
+    def debug_info(self, request):
+        """Get debug information about the current cart state"""
+        session_key = request.session.session_key
+        if not session_key:
+            request.session.save()
+            session_key = request.session.session_key
+            
+        # Check for all possible carts
+        user_cart = None
+        if request.user.is_authenticated:
+            user_cart = Cart.objects.filter(user=request.user).first()
+        
+        session_cart = Cart.objects.filter(session_key=session_key, user__isnull=True).first()
+        
+        # Get items from both carts if they exist
+        user_items = []
+        if user_cart:
+            user_items = [
+                {
+                    'id': item.id,
+                    'product_id': item.product.id,
+                    'product_name': item.product.name,
+                    'quantity': item.quantity
+                }
+                for item in CartItem.objects.filter(cart=user_cart)
+            ]
+        
+        session_items = []
+        if session_cart:
+            session_items = [
+                {
+                    'id': item.id,
+                    'product_id': item.product.id,
+                    'product_name': item.product.name,
+                    'quantity': item.quantity
+                }
+                for item in CartItem.objects.filter(cart=session_cart)
+            ]
+        
+        debug_data = {
+            'session_key': session_key,
+            'is_authenticated': request.user.is_authenticated,
+            'user_id': request.user.id if request.user.is_authenticated else None,
+            'user_cart': {
+                'id': user_cart.id if user_cart else None,
+                'items_count': len(user_items),
+                'items': user_items
+            } if user_cart else None,
+            'session_cart': {
+                'id': session_cart.id if session_cart else None,
+                'items_count': len(session_items),
+                'items': session_items
+            } if session_cart else None
+        }
+        
+        return Response(debug_data)
     
 class OrderViewSet(viewsets.ModelViewSet):
     queryset = Order.objects.all().select_related('user', 'payment').prefetch_related('items__product')
