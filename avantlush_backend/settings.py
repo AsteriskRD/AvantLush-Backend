@@ -38,7 +38,8 @@ ALLOWED_HOSTS = [
     '127.0.0.1',
     '.onrender.com',
     '.ngrok-free.app',
-    'https://avantlush-backend-13.onrender.com'  # This will allow all ngrok domains
+    'https://avantlush-backend-13.onrender.com', 
+    'Avantlush-backend-2s6k.onrender.com '
 ]
 
 #Https handling
@@ -367,7 +368,8 @@ CORS_ALLOWED_ORIGINS = [
     'http://localhost:3000',
     'http://127.0.0.1:5173',
     'https://avantlush.com',
-    'https://avantlush-backend-13.onrender.com'
+    'https://avantlush-backend-13.onrender.com',
+    'Avantlush-backend-2s6k.onrender.com'
 ]
 # Security settings
 SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'False') == 'True'
