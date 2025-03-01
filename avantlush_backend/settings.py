@@ -363,14 +363,14 @@ CORS_EXPOSE_HEADERS = ['Content-Type', 'X-CSRFToken']
 CORS_ALLOW_CREDENTIALS = True
 
 # CORS settings
-CORS_ALLOWED_ORIGINS = [
-    'http://localhost:5173',
-    'http://localhost:3000',
-    'http://127.0.0.1:5173',
-    'https://avantlush.com',
-    'https://avantlush-backend-13.onrender.com',
-    'https://avantlush-backend-2s6k.onrender.com'  # Fixed
-]
+#CORS_ALLOWED_ORIGINS = [
+#    'http://localhost:5173',
+#    'http://localhost:3000',
+#    'http://127.0.0.1:5173',
+#    'https://avantlush.com',
+#    'https://avantlush-backend-13.onrender.com',
+#    'https://avantlush-backend-2s6k.onrender.com'  # Fixed
+#]
 # Security settings
 SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'False') == 'True'
 SESSION_COOKIE_SECURE = True
