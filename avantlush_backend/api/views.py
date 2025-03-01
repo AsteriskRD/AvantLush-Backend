@@ -869,43 +869,43 @@ class CartViewSet(viewsets.ModelViewSet):
         })
 
     @action(detail=False, methods=['POST'])
-def add_item(self, request):
-    """Add item to cart"""
-    cart = self.get_cart()
-    product_id = request.data.get('product')
-    quantity = int(request.data.get('quantity', 1))
-    
-    try:
-        product = Product.objects.get(id=product_id)
+    def add_item(self, request):
+        """Add item to cart"""
+        cart = self.get_cart()
+        product_id = request.data.get('product')
+        quantity = int(request.data.get('quantity', 1))
         
-        # Temporarily bypass stock check for testing
-        # if product.stock_quantity < quantity:
-        #     return Response(
-        #         {'error': 'Not enough stock available'},
-        #         status=status.HTTP_400_BAD_REQUEST
-        #     )
-        
-        # Update or create cart item
-        cart_item, created = CartItem.objects.get_or_create(
-            cart=cart,
-            product=product,
-            defaults={'quantity': quantity}
-        )
-        
-        if not created:
-            cart_item.quantity += quantity
-            cart_item.save()
-        
-        # Add debug information
-        print(f"Added to cart: Product {product_id}, Quantity {quantity}, Cart ID {cart.id}")
-        
-        return Response(CartItemSerializer(cart_item).data)
-        
-    except Product.DoesNotExist:
-        return Response(
-            {'error': 'Product not found'},
-            status=status.HTTP_404_NOT_FOUND
-        )        
+        try:
+            product = Product.objects.get(id=product_id)
+            
+            # Temporarily bypass stock check for testing
+            # if product.stock_quantity < quantity:
+            #     return Response(
+            #         {'error': 'Not enough stock available'},
+            #         status=status.HTTP_400_BAD_REQUEST
+            #     )
+            
+            # Update or create cart item
+            cart_item, created = CartItem.objects.get_or_create(
+                cart=cart,
+                product=product,
+                defaults={'quantity': quantity}
+            )
+            
+            if not created:
+                cart_item.quantity += quantity
+                cart_item.save()
+            
+            # Add debug information
+            print(f"Added to cart: Product {product_id}, Quantity {quantity}, Cart ID {cart.id}")
+            
+            return Response(CartItemSerializer(cart_item).data)
+            
+        except Product.DoesNotExist:
+            return Response(
+                {'error': 'Product not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )        
     @action(detail=False, methods=['POST'])
     def update_quantity(self, request):
         """Update item quantity in cart"""
