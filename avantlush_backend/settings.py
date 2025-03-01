@@ -73,6 +73,7 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
     'corsheaders',
     'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
     'drf_yasg',
     'checkout',
     
@@ -226,17 +227,19 @@ REST_AUTH_SERIALIZERS = {
 
 REST_AUTH = {
     'USE_JWT': True,
-    'JWT_AUTH_COOKIE': 'my-app-auth', 
-    'JWT_AUTH_REFRESH_COOKIE': 'refresh-token',
+    'JWT_AUTH_COOKIE': 'my-app-auth',
+    'JWT_AUTH_REFRESH_COOKIE': 'my-refresh-token',
+    'JWT_AUTH_HTTPONLY': False,  # Set to False if needs to access the token in JavaScript
     'USER_DETAILS_SERIALIZER': 'avantlush_backend.api.serializers.CustomUserDetailsSerializer',
     'LOGIN_SERIALIZER': 'avantlush_backend.api.serializers.LoginSerializer',
-    'USER_DETAILS_SERIALIZER': 'avantlush_backend.api.serializers.CustomUserDetailsSerializer',
 }
 
 # JWT settings
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
 }
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -389,7 +392,7 @@ if DEBUG:
     CSRF_COOKIE_SECURE = False
     SESSION_COOKIE_SAMESITE = 'Lax'
     CSRF_COOKIE_SAMESITE = 'Lax'
-    
+
 # Email settings
 # Development configuration for testing
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'

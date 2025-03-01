@@ -816,34 +816,81 @@ class ArticleViewSet(viewsets.ModelViewSet):
 
 
 class CartViewSet(viewsets.ModelViewSet):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]  # Changed from AllowAny to IsAuthenticated
     
     def get_queryset(self):
-        """Return queryset of cart objects for the current session"""
-        # Get session key or create one
         session_key = self.request.session.session_key
         if not session_key:
             self.request.session.save()
             session_key = self.request.session.session_key
             
-        # Only use session-based cart for simplicity
-        return Cart.objects.filter(session_key=session_key)
-            
+        # If the user is authenticated, also check for user-linked carts
+        if self.request.user.is_authenticated:
+            return Cart.objects.filter(
+                Q(session_key=session_key) | Q(user=self.request.user)
+            ).prefetch_related('items')
+        else:
+            return Cart.objects.filter(session_key=session_key).prefetch_related('items')
+    
     def get_serializer_class(self):
         if self.action in ['add_item', 'update_quantity']:
             return CartItemSerializer
         return CartSerializer
 
     def get_cart(self):
-        """Get or create cart for current session"""
+        """Get or create cart for current session and/or user"""
         session_key = self.request.session.session_key
         if not session_key:
             self.request.session.save()
             session_key = self.request.session.session_key
         
-        # Always use session-based cart, ignoring authentication
-        cart, created = Cart.objects.get_or_create(session_key=session_key)
-        return cart
+        # If user is authenticated, try to find their cart
+        if self.request.user.is_authenticated:
+            # Try to get a cart tied to the user
+            user_cart = Cart.objects.filter(user=self.request.user).first()
+            
+            # If no user cart, check for session cart
+            session_cart = Cart.objects.filter(session_key=session_key).first()
+            
+            if user_cart:
+                # If both user cart and session cart exist, merge them
+                if session_cart and session_cart.id != user_cart.id:
+                    # Transfer items from session cart to user cart
+                    for item in session_cart.items.all():
+                        # Check if this product already exists in user cart
+                        existing_item = CartItem.objects.filter(
+                            cart=user_cart, 
+                            product=item.product
+                        ).first()
+                        
+                        if existing_item:
+                            # Update quantity of existing item
+                            existing_item.quantity += item.quantity
+                            existing_item.save()
+                        else:
+                            # Create new item in user cart
+                            item.cart = user_cart
+                            item.save()
+                    
+                    # Delete the session cart after merging
+                    session_cart.delete()
+                
+                return user_cart
+            elif session_cart:
+                # Link the existing session cart to the user
+                session_cart.user = self.request.user
+                session_cart.save()
+                return session_cart
+            else:
+                # Create a new cart for the user
+                return Cart.objects.create(
+                    user=self.request.user,
+                    session_key=session_key
+                )
+        else:
+            # For anonymous users, just use session
+            cart, created = Cart.objects.get_or_create(session_key=session_key)
+            return cart
 
     @action(detail=False, methods=['GET'])
     def summary(self, request):
@@ -855,6 +902,7 @@ class CartViewSet(viewsets.ModelViewSet):
         shipping = Decimal('0.00')  # Can be calculated based on your logic
         
         return Response({
+            'cart_id': cart.id,
             'items': CartItemSerializer(items, many=True).data,
             'subtotal': subtotal,
             'shipping': shipping,
@@ -985,22 +1033,66 @@ class CartViewSet(viewsets.ModelViewSet):
     
 class CartItemViewSet(viewsets.ModelViewSet):
     serializer_class = CartItemSerializer
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]  #Changed from AllowAny to IsAuthenticated
 
     def get_queryset(self):
         cart = self.get_cart()
         return CartItem.objects.filter(cart=cart)
 
     def get_cart(self):
-        """Get or create cart for current session"""
+        """Get or create cart for current session and/or user"""
         session_key = self.request.session.session_key
         if not session_key:
             self.request.session.save()
             session_key = self.request.session.session_key
         
-        # Only use session-based cart, ignoring authentication
-        cart, created = Cart.objects.get_or_create(session_key=session_key)
-        return cart
+        # If user is authenticated, try to find their cart
+        if self.request.user.is_authenticated:
+            # Try to get a cart tied to the user
+            user_cart = Cart.objects.filter(user=self.request.user).first()
+            
+            # If no user cart, check for session cart
+            session_cart = Cart.objects.filter(session_key=session_key).first()
+            
+            if user_cart:
+                # If both user cart and session cart exist, merge them
+                if session_cart and session_cart.id != user_cart.id:
+                    # Transfer items from session cart to user cart
+                    for item in session_cart.items.all():
+                        # Check if this product already exists in user cart
+                        existing_item = CartItem.objects.filter(
+                            cart=user_cart, 
+                            product=item.product
+                        ).first()
+                        
+                        if existing_item:
+                            # Update quantity of existing item
+                            existing_item.quantity += item.quantity
+                            existing_item.save()
+                        else:
+                            # Create new item in user cart
+                            item.cart = user_cart
+                            item.save()
+                    
+                    # Delete the session cart after merging
+                    session_cart.delete()
+                
+                return user_cart
+            elif session_cart:
+                # Link the existing session cart to the user
+                session_cart.user = self.request.user
+                session_cart.save()
+                return session_cart
+            else:
+                # Create a new cart for the user
+                return Cart.objects.create(
+                    user=self.request.user,
+                    session_key=session_key
+                )
+        else:
+            # For anonymous users, just use session
+            cart, created = Cart.objects.get_or_create(session_key=session_key)
+            return cart
     
     def perform_create(self, serializer):
         cart = self.get_cart()

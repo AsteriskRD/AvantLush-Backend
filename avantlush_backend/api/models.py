@@ -229,28 +229,28 @@ class Article(models.Model):
         return self.title
 
 class Cart(models.Model):
-    user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name='cart', null=True, blank=True)
-    session_key = models.CharField(max_length=255, null=True, blank=True)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='carts',
+        null=True,
+        blank=True
+    )
+    session_key = models.CharField(max_length=40)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        if self.user:
-            return f"Cart for {self.user.email}"
-        return f"Cart for session {self.session_key}"
-        
+    
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=['session_key'],
-                condition=models.Q(session_key__isnull=False),
-                name='unique_session_cart'
-            ),
+                fields=['user', 'session_key'],
+                name='unique_user_session'
+            )
         ]
-        indexes = [
-            models.Index(fields=['session_key']),
-        ]
-
+        
+    def __str__(self):
+        return f"Cart {self.id} - User: {self.user.email if self.user else 'Anonymous'}"
+    
 class CartItem(models.Model):
     cart = models.ForeignKey(Cart, related_name='items', on_delete=models.CASCADE)
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
