@@ -91,7 +91,7 @@ MIDDLEWARE = [
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
+    #'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -421,3 +421,6 @@ print("Current directory:", os.getcwd())
 print("BASE_DIR:", BASE_DIR)
 print("STATIC_ROOT:", STATIC_ROOT)
 print("STATICFILES_DIRS:", STATICFILES_DIRS)
+
+SESSION_COOKIE_SAMESITE = 'None'  # Required for cross-site requests
+CSRF_COOKIE_SAMESITE = 'None'     # Required for cross-site requests
