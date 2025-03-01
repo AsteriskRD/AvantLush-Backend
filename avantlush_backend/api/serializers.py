@@ -395,6 +395,10 @@ class CartItemSerializer(serializers.ModelSerializer):
         model = CartItem
         fields = ['id', 'product', 'quantity', 'product_name', 'product_price', 'stock_status', 'product_image']
     
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        representation['cart_item_id'] = representation.pop('id')
+        return representation
     def get_product_image(self, obj):
         # Check if product has a main image
         if obj.product.main_image:
@@ -414,6 +418,11 @@ class CartSerializer(serializers.ModelSerializer):
         model = Cart
         fields = ['id', 'user', 'items', 'created_at', 'updated_at']
 
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        representation['cart_id'] = representation.pop('id')
+        return representation
+    
 class PaymentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Payment

@@ -8,6 +8,7 @@ Development: `http://localhost:8000/api/`
 All authenticated endpoints require JWT token:
 ```bash
 Authorization: Bearer <your_jwt_token>
+In Development stage for now, all authenticated endpoints are open for testing purposes.
 
 1. Authentication Endpoints
 Waitlist Signup
@@ -376,8 +377,8 @@ Method: POST
 Auth: Required
 Body:
 {
-    "product_id": 1,
-    "quantity": 2
+  "product": 1,
+  "quantity": 2
 }
 
 Success Response (200):
@@ -402,8 +403,8 @@ Error Response (400):
 - **Body**:
 ```json
 {
-    "item_id": 1,
-    "quantity": 3
+  "item_id": 4,
+  "quantity": 3
 }
 
 {
@@ -464,6 +465,8 @@ Success Response (200):
     "message": "Discount applied successfully"
 }
 
+ALL CART RELATED ENDPOINTS UPDATED 
+--------------------------------------------------------------------------------------------
 ## Wishlist Management
 
 ### Get Wishlist
