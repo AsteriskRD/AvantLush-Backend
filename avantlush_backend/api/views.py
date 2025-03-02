@@ -29,6 +29,8 @@ from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework_simplejwt.tokens import AccessToken
+from rest_framework_simplejwt.exceptions import TokenError
 from django.utils import timezone
 from django.db.models import Count, Sum, F, Q
 from django.db.models.functions import TruncDate
@@ -660,7 +662,57 @@ def reset_password(request, uidb64, token):
             'message': f'Invalid reset link: {str(e)}'
         }, status=status.HTTP_400_BAD_REQUEST)
     
+class TokenValidationView(APIView):
+    """
+    API endpoint to check if a JWT token is still valid and get its expiry time.
+    """
+    permission_classes = [AllowAny]
 
+    def post(self, request):
+        token = request.data.get('token')
+        
+        if not token:
+            return Response({
+                'success': False,
+                'message': 'Token is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Decode the token without verifying signature first
+            access_token = AccessToken(token)
+            
+            # Check if the token is expired
+            expiry_timestamp = access_token.payload.get('exp')
+            current_timestamp = datetime.now().timestamp()
+            
+            if expiry_timestamp < current_timestamp:
+                return Response({
+                    'success': False,
+                    'message': 'Token has expired',
+                    'expired': True
+                }, status=status.HTTP_401_UNAUTHORIZED)
+            
+            # Calculate remaining time in seconds
+            remaining_time = expiry_timestamp - current_timestamp
+            
+            # Token is valid
+            return Response({
+                'success': True,
+                'message': 'Token is valid',
+                'expires_at': datetime.fromtimestamp(expiry_timestamp).isoformat(),
+                'expires_in_seconds': int(remaining_time)
+            }, status=status.HTTP_200_OK)
+            
+        except TokenError as e:
+            return Response({
+                'success': False,
+                'message': f'Invalid token: {str(e)}'
+            }, status=status.HTTP_401_UNAUTHORIZED)
+        except Exception as e:
+            return Response({
+                'success': False,
+                'message': f'Error validating token: {str(e)}'
+            }, status=status.HTTP_400_BAD_REQUEST)
 class ProductViewSet(viewsets.ModelViewSet):
     serializer_class = ProductSerializer
     filter_backends = [filters.SearchFilter, filters.OrderingFilter, DjangoFilterBackend]

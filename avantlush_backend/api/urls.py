@@ -31,6 +31,7 @@ from .views import (
     DashboardViewSet,
     CustomerViewSet,
     ProductReviewViewSet,
+    TokenValidationView,
 )
 
 # Router setup
@@ -61,12 +62,13 @@ urlpatterns = [
     path('register/', register, name='register'),
     #path('login/', login, name='login'),
     path('auth/', include('dj_rest_auth.urls')),  # This includes login, logout, user details, etc.
-path('auth/registration/', include('dj_rest_auth.registration.urls')), 
+    path('auth/registration/', include('dj_rest_auth.registration.urls')), 
     path('auth/google/', GoogleLoginView.as_view(), name='google_login'),
     path('verify-email/<str:token>/<str:uidb64>/', verify_email, name='verify_email'),
     path('resend-verification/', resend_verification_email, name='resend_verification'),
     path('forgot-password/', forgot_password, name='forgot_password'),
     path('reset-password/<str:uidb64>/<str:token>/', reset_password, name='reset_password'),
+    path('auth/validate-token/', TokenValidationView.as_view(), name='validate-token'),
     
     # Product & Wishlist
     path('products/search/', ProductSearchView.as_view(), name='product-search'),
