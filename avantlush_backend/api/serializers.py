@@ -525,15 +525,80 @@ class OrderTrackingSerializer(serializers.ModelSerializer):
         fields = ['id', 'status', 'location', 'description', 'timestamp']
         read_only_fields = ['timestamp']
 class WishlistSerializer(serializers.ModelSerializer):
+    products = serializers.SerializerMethodField()
+    
     class Meta:
         model = Wishlist
         fields = ['id', 'user', 'products']
+    
+    def get_products(self, obj):
+        # Get all products from wishlist items
+        wishlist_items = obj.items.all().select_related('product')
+        products_data = []
+        
+        for item in wishlist_items:
+            product = item.product
+            
+            # Get main image URL
+            main_image = None
+            if product.main_image:
+                main_image = product.main_image.url
+            elif product.images and len(product.images) > 0:
+                main_image = product.images[0]
+            
+            products_data.append({
+                'id': product.id,
+                'name': product.name,
+                'description': product.description,
+                'main_image': main_image,
+                'images': product.images,
+                'price': product.price,
+                'stock_quantity': product.stock_quantity,
+                'status': product.status,
+                'item_id': item.id,
+                'added_at': item.added_at
+            })
+        
+        return products_data
 
 class WishlistItemSerializer(serializers.ModelSerializer):
+    product_details = serializers.SerializerMethodField()
+    
     class Meta:
         model = WishlistItem
-        fields = ['id', 'wishlist', 'product', 'added_at']
-
+        fields = ['id', 'wishlist', 'product', 'added_at', 'product_details']
+        read_only_fields = ['wishlist']
+    
+    def get_product_details(self, obj):
+        product = obj.product
+        
+        # Get main image URL
+        main_image = None
+        if product.main_image:
+            main_image = product.main_image.url
+        elif product.images and len(product.images) > 0:
+            main_image = product.images[0]
+            
+        return {
+            'id': product.id,
+            'name': product.name,
+            'description': product.description,
+            'main_image': main_image,
+            'images': product.images,
+            'price': product.price,
+            'stock_quantity': product.stock_quantity,
+            'status': product.status
+        }
+    
+    def create(self, validated_data):
+        # Get the current user
+        user = self.context['request'].user
+        # Get or create their wishlist
+        wishlist, created = Wishlist.objects.get_or_create(user=user)
+        # Add the wishlist to the validated data
+        validated_data['wishlist'] = wishlist
+        return super().create(validated_data)
+    
 class WishlistNotificationSerializer(serializers.ModelSerializer):
     class Meta:
         model = WishlistNotification

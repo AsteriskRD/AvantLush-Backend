@@ -1425,25 +1425,27 @@ class ProductSearchView(generics.ListAPIView):
                 
         return queryset
         
+
 # Wishlist Views
 class WishlistViewSet(viewsets.ModelViewSet):
     serializer_class = WishlistSerializer
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
+        # Return Wishlist objects, not WishlistItem objects
         return Wishlist.objects.filter(user=self.request.user)
-
+    
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        wishlist, created = Wishlist.objects.get_or_create(user=self.request.user)
+        serializer.save(wishlist=wishlist)
+    
     @action(detail=False, methods=['POST', 'GET'])
     def move_to_cart(self, request):
         """Move items from wishlist to cart"""
         try:
-        
             wishlist, created = Wishlist.objects.get_or_create(user=request.user)
             cart, _ = Cart.objects.get_or_create(user=request.user)
             
-            # Rest of your code remains the same
             if request.method == 'GET':
                 item_ids = request.query_params.getlist('item_ids', [])
             else:
@@ -1454,6 +1456,14 @@ class WishlistViewSet(viewsets.ModelViewSet):
                 id__in=item_ids
             )
             
+            # Check if any items were found
+            if not items.exists():
+                return Response(
+                    {'error': 'No matching wishlist items found'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            moved_count = 0
             for wishlist_item in items:
                 if wishlist_item.product.stock_quantity > 0:
                     CartItem.objects.create(
@@ -1462,21 +1472,21 @@ class WishlistViewSet(viewsets.ModelViewSet):
                         quantity=1
                     )
                     wishlist_item.delete()
+                    moved_count += 1
             
-            return Response({'status': 'Items moved to cart successfully'})
+            if moved_count > 0:
+                return Response({'status': f'{moved_count} items moved to cart successfully'})
+            else:
+                return Response(
+                    {'warning': 'No items were moved to cart. Items might be out of stock.'},
+                    status=status.HTTP_200_OK
+                )
         except Exception as e:
             return Response(
                 {'error': str(e)},
                 status=status.HTTP_400_BAD_REQUEST
             )
-class WishlistItemViewSet(viewsets.ModelViewSet):
-    serializer_class = WishlistItemSerializer
-    permission_classes = [AllowAny]
-
-    def get_queryset(self):
-        return Wishlist.objects.filter(user=self.request.user)
-
-
+        
     @action(detail=False, methods=['POST'])
     def bulk_delete(self, request):
         """Delete multiple wishlist items at once"""
@@ -1503,14 +1513,76 @@ class WishlistItemViewSet(viewsets.ModelViewSet):
         notifications = []
         for item in wishlist_items:
             if item.product.stock_quantity > 0:
-                notifications.append({
+                # Get main image URL
+                main_image = None
+                if hasattr(item.product, 'main_image') and item.product.main_image:
+                    main_image = item.product.main_image.url
+                elif hasattr(item.product, 'images') and item.product.images and len(item.product.images) > 0:
+                    main_image = item.product.images[0]
+                    
+                # Create consistent notification object with all fields
+                notification = {
                     'product_id': item.product.id,
                     'product_name': item.product.name,
                     'stock_quantity': item.product.stock_quantity,
-                    'added_at': item.added_at
-                })
+                    'added_at': item.added_at.isoformat()
+                }
+                
+                # Add optional fields if they exist on the product model
+                if hasattr(item.product, 'description'):
+                    notification['product_description'] = item.product.description
+                
+                if main_image:
+                    notification['main_image'] = main_image
+                
+                if hasattr(item.product, 'images') and item.product.images:
+                    notification['images'] = item.product.images
+                
+                if hasattr(item.product, 'price'):
+                    notification['price'] = str(item.product.price)  # Convert to string to ensure it's JSON serializable
+                
+                notifications.append(notification)
         
         return Response(notifications)
+
+class WishlistItemViewSet(viewsets.ModelViewSet):
+    serializer_class = WishlistItemSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return WishlistItem.objects.filter(wishlist__user=self.request.user)
+
+    def create(self, request, *args, **kwargs):
+        # Get or create the user's wishlist
+        wishlist, created = Wishlist.objects.get_or_create(user=request.user)
+        
+        # Add the wishlist to the request data
+        mutable_data = request.data.copy()
+        mutable_data['wishlist'] = wishlist.id
+        
+        serializer = self.get_serializer(data=mutable_data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+    
+    @action(detail=False, methods=['POST'])
+    def bulk_delete(self, request):
+        """Delete multiple wishlist items at once"""
+        try:
+            item_ids = request.data.get('item_ids', [])
+            WishlistItem.objects.filter(
+                wishlist__user=request.user,
+                id__in=item_ids
+            ).delete()
+            return Response({'status': 'Items deleted successfully'})
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+    
     def perform_create(self, serializer):
         serializer.save(wishlist=self.request.user.wishlist)
 
