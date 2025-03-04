@@ -357,12 +357,22 @@ class ProductSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source='category.name', read_only=True)
     main_image = serializers.SerializerMethodField()
     is_featured = serializers.BooleanField()  
-    is_physical_product = serializers.BooleanField()  
+    is_physical_product = serializers.BooleanField()
+    is_liked = serializers.SerializerMethodField()
 
     def get_main_image(self, obj):
         if obj.main_image:
             return obj.main_image.url
         return None
+
+    def get_is_liked(self, obj):
+        user = self.context.get('request').user
+        if user.is_authenticated:
+            return WishlistItem.objects.filter(
+                wishlist__user=user, 
+                product=obj
+            ).exists()
+        return False
 
     class Meta:
         model = Product
@@ -371,7 +381,7 @@ class ProductSerializer(serializers.ModelSerializer):
             'category', 'category_name', 'images', 'stock_quantity',
             'is_featured', 'is_physical_product', 'sku', 'status', 
             'created_at', 'updated_at', 'rating', 'num_ratings', 
-            'main_image'
+            'main_image', 'is_liked'
         ]
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -553,14 +563,14 @@ class WishlistSerializer(serializers.ModelSerializer):
                 'main_image': main_image,
                 'images': product.images,
                 'price': product.price,
-                'stock_quantity': product.stock_quantity,
+                'is_liked': True,  # Always True for wishlist items
                 'status': product.status,
                 'item_id': item.id,
                 'added_at': item.added_at
             })
         
         return products_data
-
+    
 class WishlistItemSerializer(serializers.ModelSerializer):
     product_details = serializers.SerializerMethodField()
     
@@ -586,8 +596,8 @@ class WishlistItemSerializer(serializers.ModelSerializer):
             'main_image': main_image,
             'images': product.images,
             'price': product.price,
-            'stock_quantity': product.stock_quantity,
-            'status': product.status
+            'status': product.status,
+            'is_liked': True
         }
     
     def create(self, validated_data):
@@ -595,6 +605,17 @@ class WishlistItemSerializer(serializers.ModelSerializer):
         user = self.context['request'].user
         # Get or create their wishlist
         wishlist, created = Wishlist.objects.get_or_create(user=user)
+        
+        # Check if the product is already in the wishlist
+        existing_item = WishlistItem.objects.filter(
+            wishlist=wishlist, 
+            product=validated_data['product']
+        ).first()
+        
+        # If the item already exists, return the existing item
+        if existing_item:
+            return existing_item
+        
         # Add the wishlist to the validated data
         validated_data['wishlist'] = wishlist
         return super().create(validated_data)
@@ -914,13 +935,24 @@ class ProductManagementSerializer(serializers.ModelSerializer):
     status_display = serializers.SerializerMethodField()
     main_image = serializers.SerializerMethodField()
     
+    is_liked = serializers.SerializerMethodField()
+
+    def get_is_liked(self, obj):
+        user = self.context.get('request').user
+        if user.is_authenticated:
+            return WishlistItem.objects.filter(
+                wishlist__user=user, 
+                product=obj
+            ).exists()
+        return False
+    
     class Meta:
         model = Product
         fields = [
             # General Information
             'id', 'name', 'description', 'category', 'category_name', 
             'tags', 'status', 'status_display', 'main_image', 'images',
-            'image_files',  'is_featured',
+            'image_files',  'is_featured', 'is_liked',
             # Pricing
             'base_price', 'discount_type', 'discount_percentage', 
             'vat_amount',

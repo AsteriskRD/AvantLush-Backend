@@ -1436,7 +1436,24 @@ class WishlistViewSet(viewsets.ModelViewSet):
         return Wishlist.objects.filter(user=self.request.user)
     
     def perform_create(self, serializer):
+        # Get or create the user's wishlist
         wishlist, created = Wishlist.objects.get_or_create(user=self.request.user)
+        
+        # Check for duplicate products before saving
+        product_id = self.request.data.get('product')
+        if product_id:
+            # Check if the product already exists in the wishlist
+            existing_item = WishlistItem.objects.filter(
+                wishlist=wishlist, 
+                product_id=product_id
+            ).first()
+            
+            # If the item already exists, raise a validation error
+            if existing_item:
+                raise serializers.ValidationError({
+                    "error": "Product already exists in your wishlist"
+                })
+        
         serializer.save(wishlist=wishlist)
     
     @action(detail=False, methods=['POST', 'GET'])
@@ -1556,17 +1573,51 @@ class WishlistItemViewSet(viewsets.ModelViewSet):
         # Get or create the user's wishlist
         wishlist, created = Wishlist.objects.get_or_create(user=request.user)
         
-        # Add the wishlist to the request data
-        mutable_data = request.data.copy()
-        mutable_data['wishlist'] = wishlist.id
+        # Get the product ID from the request
+        product_id = request.data.get('product')
         
+        # Validate product exists
+        try:
+            product = Product.objects.get(id=product_id)
+        except Product.DoesNotExist:
+            return Response(
+                {'error': 'Product does not exist'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Check if the product is already in the wishlist
+        existing_item = WishlistItem.objects.filter(
+            wishlist=wishlist, 
+            product_id=product_id
+        ).first()
+        
+        # If the item already exists, return an error
+        if existing_item:
+            return Response(
+                {'error': 'Product already exists in your wishlist'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Prepare data for serializer
+        mutable_data = {
+            'wishlist': wishlist.id,
+            'product': product_id
+        }
+        
+        # Create new wishlist item
         serializer = self.get_serializer(data=mutable_data)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
         
         headers = self.get_success_headers(serializer.data)
-        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+        return Response(
+            {'message': 'Product added to wishlist', 'data': serializer.data},
+            status=status.HTTP_201_CREATED, 
+            headers=headers
+        )
     
+    def perform_create(self, serializer):
+        serializer.save(wishlist=self.request.user.wishlist)    
     @action(detail=False, methods=['POST'])
     def bulk_delete(self, request):
         """Delete multiple wishlist items at once"""
