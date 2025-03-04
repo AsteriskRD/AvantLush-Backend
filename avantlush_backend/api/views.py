@@ -953,13 +953,17 @@ class CartViewSet(viewsets.ModelViewSet):
         subtotal = sum(item.product.price * item.quantity for item in items)
         shipping = Decimal('0.00')  # Can be calculated based on your logic
         
+        # Calculate total quantity (sum of all item quantities)
+        total_quantity = sum(item.quantity for item in items)
+        
         return Response({
             'cart_id': cart.id,
             'items': CartItemSerializer(items, many=True).data,
             'subtotal': subtotal,
             'shipping': shipping,
             'total': subtotal + shipping,
-            'item_count': items.count()
+            'item_count': items.count(), 
+            'total_quantity': total_quantity  # New field for total quantity
         })
 
     @action(detail=False, methods=['POST'])
