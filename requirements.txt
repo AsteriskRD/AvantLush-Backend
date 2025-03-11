@@ -21,4 +21,4 @@ celery==5.4.0
 django-cleanup==9.0.0
 paypalrestsdk==1.13.3
 cloudinary==1.36.0
-django-cloudinary-storage==0.3.0c
+django-cloudinary-storage==0.3.0
