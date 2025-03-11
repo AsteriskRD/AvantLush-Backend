@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verify Your Email</title>
+</head>
+<body style="margin: 0; padding: 20px; background-color: #f7f7f7; font-family: Arial, sans-serif;">
+    <div style="max-width: 600px; margin: 0 auto; background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        <div style="text-align: center; margin-bottom: 20px;">
+            <img src="https://res.cloudinary.com/dvfwa8fzh/image/upload/v1736339705/avantlush-email/Avantlush%20logo.svg" alt="Avantlush Logo" style="max-width: 200px;">
+        </div>
+        <h1 style="color: #333; text-align: center; margin-bottom: 20px;">Verify Your Email Address</h1>
+        <p style="color: #666; line-height: 1.6; margin-bottom: 20px;">
+            Thank you for registering with Avantlush. To complete your registration and activate your account, please click one of the buttons below:
+        </p>
+        <div style="text-align: center; margin: 30px 0;">
+            <a href="{{ verification_url }}" style="background-color: #4A90E2; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; margin-right: 10px; display: inline-block; margin-bottom: 10px;">Verify (Development)</a>
+            <a href="{{ production_verification_url }}" style="background-color: #4A90E2; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block; margin-bottom: 10px;">Verify (Production)</a>
+        </div>
+        <div style="background-color: #f9f9f9; border-left: 4px solid #4A90E2; padding: 15px; margin-bottom: 20px;">
+            <p style="color: #666; margin: 0; line-height: 1.6;">
+                <strong>For developers and local testing:</strong> Use the "Development" button.
+                <br>
+                <strong>For users and production environment:</strong> Use the "Production" button.
+            </p>
+        </div>
+        <p style="color: #666; line-height: 1.6; margin-bottom: 20px;">
+            If the buttons don't work, you can copy and paste one of these links into your browser:
+            <br><br>
+            <strong>Development:</strong> <span style="color: #4A90E2; word-break: break-all;">{{ verification_url }}</span>
+            <br><br>
+            <strong>Production:</strong> <span style="color: #4A90E2; word-break: break-all;">{{ production_verification_url }}</span>
+        </p>
+        <p style="color: #666; line-height: 1.6; margin-bottom: 20px;">
+            This verification link will expire in 24 hours.
+        </p>
+        <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
+            <p style="color: #999; font-size: 12px;">
+                If you didn't create an account with Avantlush, please ignore this email.
+            </p>
+        </div>
+    </div>
+</body>
+</html>
