@@ -366,14 +366,13 @@ class ProductSerializer(serializers.ModelSerializer):
         return None
 
     def get_is_liked(self, obj):
-        user = self.context.get('request').user
-        if user.is_authenticated:
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
             return WishlistItem.objects.filter(
-                wishlist__user=user, 
-                product=obj
+                wishlist__user=request.user,
+                product_id=obj.id
             ).exists()
         return False
-
     class Meta:
         model = Product
         fields = [
@@ -540,14 +539,22 @@ class WishlistSerializer(serializers.ModelSerializer):
     class Meta:
         model = Wishlist
         fields = ['id', 'user', 'products']
-    
     def get_products(self, obj):
-        # Get all products from wishlist items
-        wishlist_items = obj.items.all().select_related('product')
+        # Get unique products from wishlist items and order them by added_at
+        wishlist_items = obj.items.all().select_related('product').order_by('added_at')
         products_data = []
+        
+        # Track products we've already added
+        added_product_ids = set()
         
         for item in wishlist_items:
             product = item.product
+            
+            # Skip if we've already added this product
+            if product.id in added_product_ids:
+                continue
+                
+            added_product_ids.add(product.id)
             
             # Get main image URL
             main_image = None
@@ -565,7 +572,7 @@ class WishlistSerializer(serializers.ModelSerializer):
                 'price': product.price,
                 'is_liked': True,  # Always True for wishlist items
                 'status': product.status,
-                'item_id': item.id,
+                'item_id': item.id,  # This is the WishlistItem ID needed for deletion
                 'added_at': item.added_at
             })
         
@@ -938,14 +945,13 @@ class ProductManagementSerializer(serializers.ModelSerializer):
     is_liked = serializers.SerializerMethodField()
 
     def get_is_liked(self, obj):
-        user = self.context.get('request').user
-        if user.is_authenticated:
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
             return WishlistItem.objects.filter(
-                wishlist__user=user, 
-                product=obj
+                wishlist__user=request.user,
+                product_id=obj.id  # Use consistent field reference
             ).exists()
         return False
-    
     class Meta:
         model = Product
         fields = [

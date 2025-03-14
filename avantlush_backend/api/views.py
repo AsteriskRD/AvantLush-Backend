@@ -1656,7 +1656,30 @@ class WishlistItemViewSet(viewsets.ModelViewSet):
         )
     
     def perform_create(self, serializer):
-        serializer.save(wishlist=self.request.user.wishlist)    
+        wishlist, created = Wishlist.objects.get_or_create(user=self.request.user)
+        serializer.save(wishlist=wishlist)
+
+    @action(detail=True, methods=['DELETE'])
+    def remove_item(self, request, pk=None):
+        """Remove a single item from the wishlist"""
+        try:
+            wishlist_item = WishlistItem.objects.get(
+                id=pk,
+                wishlist__user=request.user
+            )
+            wishlist_item.delete()
+            return Response({
+                'status': 'Item removed from wishlist successfully'
+            }, status=status.HTTP_200_OK)
+        except WishlistItem.DoesNotExist:
+            return Response({
+                'error': 'Item not found in your wishlist'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({
+                'error': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
     @action(detail=False, methods=['POST'])
     def bulk_delete(self, request):
         """Delete multiple wishlist items at once"""
@@ -1673,8 +1696,18 @@ class WishlistItemViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
     
-    def perform_create(self, serializer):
-        serializer.save(wishlist=self.request.user.wishlist)
+    def destroy(self, request, *args, **kwargs):
+        """Delete a single wishlist item"""
+        try:
+            instance = self.get_object()
+            self.perform_destroy(instance)
+            return Response({
+                'status': 'Item removed from wishlist successfully'
+            }, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({
+                'error': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
 
 # Product Recommendation View
 class ProductRecommendationView(generics.ListAPIView):
@@ -2714,6 +2747,47 @@ class ProductViewSet(viewsets.ModelViewSet):
             'remaining_images': product.images
         })
 
+    @action(detail=False, methods=['GET'])
+    def debug_wishlist(self, request):
+        """Debug endpoint to check wishlist status"""
+        if not request.user.is_authenticated:
+            return Response({"error": "Not authenticated"}, status=401)
+        
+        product_id = request.query_params.get('product_id')
+        if not product_id:
+            return Response({"error": "Missing product_id parameter"}, status=400)
+        
+        try:
+            # Find user's wishlist
+            wishlist = Wishlist.objects.filter(user=request.user).first()
+            
+            result = {
+                "user": request.user.username,
+                "product_id": product_id,
+                "has_wishlist": wishlist is not None,
+            }
+            
+            if wishlist:
+                # Check if product is in wishlist
+                item_exists = WishlistItem.objects.filter(
+                    wishlist=wishlist,
+                    product_id=product_id
+                ).exists()
+                
+                # Get all wishlist items
+                all_items = list(WishlistItem.objects.filter(
+                    wishlist=wishlist
+                ).values_list('product_id', flat=True))
+                
+                result.update({
+                    "product_in_wishlist": item_exists,
+                    "all_wishlist_items": all_items,
+                    "wishlist_count": len(all_items)
+                })
+            
+            return Response(result)
+        except Exception as e:
+            return Response({"error": str(e)})
 class ProductReviewViewSet(viewsets.ModelViewSet):
     serializer_class = ReviewSerializer
     
