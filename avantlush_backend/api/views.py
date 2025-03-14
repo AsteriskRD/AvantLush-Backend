@@ -1474,6 +1474,28 @@ class WishlistViewSet(viewsets.ModelViewSet):
         # Return Wishlist objects, not WishlistItem objects
         return Wishlist.objects.filter(user=self.request.user)
     
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            response = self.get_paginated_response(serializer.data)
+            
+            # Get the correct product count
+            wishlist = Wishlist.objects.filter(user=request.user).first()
+            if wishlist:
+                # Get unique product IDs using similar logic as in the serializer
+                wishlist_items = wishlist.items.all().select_related('product')
+                unique_product_ids = set(item.product.id for item in wishlist_items)
+                
+                # Update the existing count with the correct number
+                response.data['count'] = len(unique_product_ids)
+            return response
+        
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+        
     def perform_create(self, serializer):
         # Get or create the user's wishlist
         wishlist, created = Wishlist.objects.get_or_create(user=self.request.user)

@@ -533,12 +533,13 @@ class OrderTrackingSerializer(serializers.ModelSerializer):
         model = OrderTracking
         fields = ['id', 'status', 'location', 'description', 'timestamp']
         read_only_fields = ['timestamp']
+
 class WishlistSerializer(serializers.ModelSerializer):
     products = serializers.SerializerMethodField()
-    
+    products_count = serializers.SerializerMethodField()
     class Meta:
         model = Wishlist
-        fields = ['id', 'user', 'products']
+        fields = ['id', 'user', 'products', 'products_count']
     def get_products(self, obj):
         # Get unique products from wishlist items and order them by added_at
         wishlist_items = obj.items.all().select_related('product').order_by('added_at')
@@ -577,6 +578,17 @@ class WishlistSerializer(serializers.ModelSerializer):
             })
         
         return products_data
+
+    
+    def get_products_count(self, obj):
+        # Get unique product IDs using similar logic as in get_products
+        wishlist_items = obj.items.all().select_related('product')
+        added_product_ids = set()
+        
+        for item in wishlist_items:
+            added_product_ids.add(item.product.id)
+            
+        return len(added_product_ids)
     
 class WishlistItemSerializer(serializers.ModelSerializer):
     product_details = serializers.SerializerMethodField()
