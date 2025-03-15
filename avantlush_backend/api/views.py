@@ -2852,6 +2852,7 @@ class ProductViewSet(viewsets.ModelViewSet):
             return Response(result)
         except Exception as e:
             return Response({"error": str(e)})
+            
 class ProductReviewViewSet(viewsets.ModelViewSet):
     serializer_class = ReviewSerializer
     

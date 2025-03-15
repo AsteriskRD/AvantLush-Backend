@@ -30,6 +30,12 @@ from .models import (
 
 # Product Forms
 class ProductAdminForm(forms.ModelForm):
+    product_details_text = forms.CharField(
+        widget=forms.Textarea(attrs={'rows': 6}),
+        required=False,
+        help_text="Enter product details, one per line. Each line will be displayed as a bullet point."
+    )
+    
     main_image = CloudinaryFileField(
         options={
             'folder': 'products/',
@@ -47,6 +53,29 @@ class ProductAdminForm(forms.ModelForm):
         widgets = {
             'description': forms.Textarea(attrs={'rows': 4}),
         }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Hide the original JSON field
+        if 'product_details' in self.fields:
+            self.fields['product_details'].widget = forms.HiddenInput()
+        
+        # If we're editing an existing product, populate the text field
+        if self.instance.pk and hasattr(self.instance, 'product_details') and self.instance.product_details:
+            self.fields['product_details_text'].initial = '\n'.join(self.instance.product_details)
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        # Convert text input to JSON list
+        details_text = cleaned_data.get('product_details_text', '')
+        if details_text:
+            # Split by new lines and remove empty lines
+            details_list = [line.strip() for line in details_text.split('\n') if line.strip()]
+            cleaned_data['product_details'] = details_list
+        else:
+            cleaned_data['product_details'] = []
+        return cleaned_data
+
 from django.forms.widgets import ClearableFileInput
 class ProductVariationForm(forms.ModelForm):
     variant_images = CloudinaryFileField(
@@ -219,7 +248,7 @@ class ProductAdmin(admin.ModelAdmin):
         }),
         ('Product Details', {
             'fields': (
-                'product_details', 
+                'product_details_text', 
                 'is_featured',
                 'is_physical_product',
                 'weight',
