@@ -120,6 +120,7 @@ class Product(models.Model):
     # Basic fields
     name = models.CharField(max_length=255)
     description = models.TextField()
+    product_details = models.JSONField(default=list, blank=True, help_text="List of product details/features as bullet points")
     price = models.DecimalField(max_digits=10, decimal_places=2)
     images = models.JSONField(default=list)
     stock_quantity = models.PositiveIntegerField(default=0)

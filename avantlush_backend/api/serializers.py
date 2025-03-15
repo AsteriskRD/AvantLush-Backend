@@ -392,6 +392,7 @@ class ProductSerializer(serializers.ModelSerializer):
                 product_id=obj.id
             ).exists()
         return False
+    
     class Meta:
         model = Product
         fields = [
@@ -399,7 +400,7 @@ class ProductSerializer(serializers.ModelSerializer):
             'category', 'category_name', 'images', 'stock_quantity',
             'is_featured', 'is_physical_product', 'sku', 'status', 
             'created_at', 'updated_at', 'rating', 'num_ratings', 
-            'main_image', 'is_liked'
+            'main_image', 'is_liked', 'product_details'  
         ]
 
 class CategorySerializer(serializers.ModelSerializer):

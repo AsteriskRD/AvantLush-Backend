@@ -219,13 +219,15 @@ class ProductAdmin(admin.ModelAdmin):
         }),
         ('Product Details', {
             'fields': (
+                'product_details', 
                 'is_featured',
                 'is_physical_product',
                 'weight',
                 'height',
                 'length',
                 'width'
-            )
+            ),
+            'description': 'Enter product details as a list of features. Each item will be displayed as a bullet point.'
         }),
         ('Metrics', {
             'fields': (
