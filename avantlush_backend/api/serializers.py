@@ -958,12 +958,21 @@ class ProductManagementSerializer(serializers.ModelSerializer):
 
     def get_is_liked(self, obj):
         request = self.context.get('request')
-        if request and request.user.is_authenticated:
-            return WishlistItem.objects.filter(
-                wishlist__user=request.user,
-                product_id=obj.id  # Use consistent field reference
-            ).exists()
+        if request and hasattr(request, 'user') and request.user.is_authenticated:
+            try:
+                # Use the annotation if it exists
+                if hasattr(obj, 'is_in_wishlist'):
+                    return obj.is_in_wishlist
+                    
+                # Otherwise check directly
+                return WishlistItem.objects.filter(
+                    wishlist__user=request.user,
+                    product_id=obj.id  # This is correct
+                ).exists()
+            except Exception as e:
+                print(f"Error checking wishlist status: {e}")
         return False
+
     class Meta:
         model = Product
         fields = [

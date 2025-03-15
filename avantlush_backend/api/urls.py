@@ -26,7 +26,7 @@ from .views import (
     AddressViewSet,
     ProductSearchView,
     ProductRecommendationView,
-    RecordProductViewView,  # Add the new view
+    RecordProductViewView,  
     ReviewViewSet,
     DashboardViewSet,
     CustomerViewSet,
@@ -85,7 +85,7 @@ urlpatterns = [
          ProductRecommendationView.as_view(), 
          name='product-recommendations-by-type'),
     
-    path('wishlist/move-to-cart/', WishlistViewSet.as_view({'post': 'move_to_cart'})),
+    path('wishlist/move-to-cart/<int:pk>/', WishlistViewSet.as_view({'post': 'move_to_cart'})),
     path('wishlist/bulk-delete/', WishlistViewSet.as_view({'post': 'bulk_delete'})),
     path('wishlist/stock-notifications/', WishlistViewSet.as_view({'get': 'stock_notifications'})),
     path('products/export/', ProductViewSet.as_view({'get': 'export'}), name='product-export'),

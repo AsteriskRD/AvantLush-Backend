@@ -1495,7 +1495,7 @@ class WishlistViewSet(viewsets.ModelViewSet):
         
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
-        
+
     def perform_create(self, serializer):
         # Get or create the user's wishlist
         wishlist, created = Wishlist.objects.get_or_create(user=self.request.user)
@@ -1517,48 +1517,45 @@ class WishlistViewSet(viewsets.ModelViewSet):
         
         serializer.save(wishlist=wishlist)
     
-    @action(detail=False, methods=['POST', 'GET'])
-    def move_to_cart(self, request):
-        """Move items from wishlist to cart"""
+    @action(detail=True, methods=['POST'])
+    def move_to_cart(self, request, pk=None):
+        """Move a single item from wishlist to cart"""
         try:
-            wishlist, created = Wishlist.objects.get_or_create(user=request.user)
-            cart, _ = Cart.objects.get_or_create(user=request.user)
-            
-            if request.method == 'GET':
-                item_ids = request.query_params.getlist('item_ids', [])
-            else:
-                item_ids = request.data.get('item_ids', [])
-                
-            items = WishlistItem.objects.filter(
-                wishlist=wishlist,
-                id__in=item_ids
+            wishlist_item = WishlistItem.objects.get(
+                id=pk,
+                wishlist__user=request.user
             )
             
-            # Check if any items were found
-            if not items.exists():
-                return Response(
-                    {'error': 'No matching wishlist items found'},
-                    status=status.HTTP_404_NOT_FOUND
+            cart, _ = Cart.objects.get_or_create(
+                user=request.user,
+                session_key=request.session.session_key or ''
+            )
+            
+            if wishlist_item.product.stock_quantity > 0:
+                # Create or update cart item
+                cart_item, created = CartItem.objects.get_or_create(
+                    cart=cart,
+                    product=wishlist_item.product,
+                    defaults={'quantity': 1}
                 )
-            
-            moved_count = 0
-            for wishlist_item in items:
-                if wishlist_item.product.stock_quantity > 0:
-                    CartItem.objects.create(
-                        cart=cart,
-                        product=wishlist_item.product,
-                        quantity=1
-                    )
-                    wishlist_item.delete()
-                    moved_count += 1
-            
-            if moved_count > 0:
-                return Response({'status': f'{moved_count} items moved to cart successfully'})
+                
+                # If cart item already existed, increment quantity
+                if not created:
+                    cart_item.quantity += 1
+                    cart_item.save()
+                    
+                wishlist_item.delete()
+                return Response({'status': 'Item moved to cart successfully'})
             else:
                 return Response(
-                    {'warning': 'No items were moved to cart. Items might be out of stock.'},
+                    {'warning': 'Item is out of stock and cannot be added to cart'},
                     status=status.HTTP_200_OK
                 )
+        except WishlistItem.DoesNotExist:
+            return Response(
+                {'error': 'Item not found in your wishlist'},
+                status=status.HTTP_404_NOT_FOUND
+            )
         except Exception as e:
             return Response(
                 {'error': str(e)},
@@ -2423,21 +2420,46 @@ class ProductViewSet(viewsets.ModelViewSet):
     serializer_class = ProductManagementSerializer
     filterset_class = ProductFilter
     filter_backends = [django_filters.DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    authentication_classes = []
+    authentication_classes = [JWTAuthentication]
     permission_classes = [AllowAny]  # Add authentication if needed
     search_fields = ['name', 'description', 'category__name']
     parser_classes = (MultiPartParser, FormParser)
 
     def get_queryset(self):
-        return Product.objects.prefetch_related(
+        queryset = Product.objects.prefetch_related(
             'variations',
             'variations__images'
-        ).all()
-    
+        )
+        
+        # If user is authenticated, prefetch wishlist data
+        if self.request.user.is_authenticated:
+            # This will help optimize the wishlist queries
+            user_wishlist_products = WishlistItem.objects.filter(
+                wishlist__user=self.request.user
+            ).values_list('product_id', flat=True)
+            
+            # You can add the wishlist info to the queryset
+            # This allows you to optimize the is_liked check in serializer
+            queryset = queryset.annotate(
+                is_in_wishlist=models.Exists(
+                    WishlistItem.objects.filter(
+                        wishlist__user=self.request.user,
+                        product_id=models.OuterRef('pk')
+                    )
+                )
+            )
+        
+        return queryset
     def get_serializer_class(self):
         if self.action in ['list', 'retrieve'] and self.request.query_params.get('view') == 'management':
             return ProductManagementSerializer
         return super().get_serializer_class()
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        # Make sure we include the request in the context
+        context['request'] = self.request
+        return context
 
     def list(self, request, *args, **kwargs):
         # Apply filters
