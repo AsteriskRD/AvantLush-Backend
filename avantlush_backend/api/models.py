@@ -450,7 +450,7 @@ class Review(models.Model):
         validators=[MinValueValidator(1), MaxValueValidator(5)]
     )
     content = models.TextField()
-    images = models.JSONField(default=list)  # Store list of image URLs
+    images = models.ImageField(upload_to='reviews/', null=True, blank=True)  
     tags = models.ManyToManyField(ReviewTag, related_name='reviews')
     helpful_votes = models.PositiveIntegerField(default=0)
     variant = models.CharField(max_length=100, blank=True)  # Store variant info like "White"

@@ -99,6 +99,7 @@ from .models import (
     Tag,
     Category,
     Customer,
+    OrderItem,
 )
 
 # Local imports - Serializers
@@ -2415,13 +2416,17 @@ class ProductFilter(django_filters.FilterSet):
             Q(sku__icontains=value)
         )
 # Update the ProductViewSet
+from django.db import models
+from rest_framework.authentication import TokenAuthentication, SessionAuthentication
+from rest_framework.permissions import AllowAny
+from rest_framework_simplejwt.authentication import JWTAuthentication
 class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.all()
     serializer_class = ProductManagementSerializer
     filterset_class = ProductFilter
     filter_backends = [django_filters.DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [AllowAny]  # Add authentication if needed
+    authentication_classes = [JWTAuthentication, TokenAuthentication, SessionAuthentication]  # Add authentication
+    permission_classes = [AllowAny]  # Allow anyone to view products but the auth context will be used for wishlist
     search_fields = ['name', 'description', 'category__name']
     parser_classes = (MultiPartParser, FormParser)
 
