@@ -534,6 +534,9 @@ class Payment(models.Model):
     
 class Address(models.Model):
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
+    full_name = models.CharField(max_length=255, default="")
+    email = models.EmailField(max_length=255, default="")
+    phone_number = models.CharField(max_length=20, default="")
     street_address = models.CharField(max_length=255)
     city = models.CharField(max_length=100)
     state = models.CharField(max_length=100)

@@ -324,13 +324,32 @@ class ProfileSerializer(serializers.ModelSerializer):
 class AddressSerializer(serializers.ModelSerializer):
     class Meta:
         model = Address
-        fields = ['id', 'street_address', 'city', 'state', 'country',
-                 'zip_code', 'is_default', 'created_at', 'updated_at']
+        fields = ['id', 'full_name', 'email', 'phone_number', 'street_address', 
+                 'city', 'state', 'country', 'zip_code', 'is_default', 
+                 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
     
     def validate_zip_code(self, value):
-        if not re.match(r'^\d{5}(-\d{4})?$', value):
-            raise serializers.ValidationError("Invalid zip code format")
+        # Basic validation - just ensure it's not empty and has reasonable length
+        if not value.strip():
+            raise serializers.ValidationError("Zip/postal code cannot be empty")
+        if len(value) > 20:  # Set a reasonable maximum length
+            raise serializers.ValidationError("Zip/postal code is too long")
+        return value
+    
+    def validate_email(self, value):
+        if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', value):
+            raise serializers.ValidationError("Invalid email format")
+        return value
+    
+    def validate_phone_number(self, value):
+        if not re.match(r'^\+?[0-9]{10,15}$', value):
+            raise serializers.ValidationError("Invalid phone number format")
+        return value
+    
+    def validate_full_name(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("Full name cannot be empty")
         return value
     
     def validate_street_address(self, value):
