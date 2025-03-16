@@ -273,6 +273,10 @@ class ProductAdmin(admin.ModelAdmin):
     save_on_top = True
     
     def save_model(self, request, obj, form, change):
+        # Explicitly set product_details from the form's cleaned data
+        if 'product_details' in form.cleaned_data:
+            obj.product_details = form.cleaned_data['product_details']
+            
         files = request.FILES.getlist('variant_images')
         if files:
             from cloudinary.uploader import upload
@@ -296,8 +300,7 @@ class ProductAdmin(admin.ModelAdmin):
                     image=result['secure_url']
                 )
         
-        super().save_model(request, obj, form, change)
-
+        admin.ModelAdmin.save_model(self, request, obj, form, change)
     def save_formset(self, request, form, formset, change):
         instances = formset.save(commit=False)
         
