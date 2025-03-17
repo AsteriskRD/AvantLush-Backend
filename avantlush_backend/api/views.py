@@ -788,18 +788,27 @@ class ProfileViewSet(viewsets.ModelViewSet):
         return Profile.objects.filter(user=self.request.user)
     
     def update(self, request, *args, **kwargs):
-        try:
-            response = super().update(request, *args, **kwargs)
-            return Response({
-                'status': 'success',
-                'message': 'Profile updated successfully',
-                'data': response.data
-            }, status=status.HTTP_200_OK)
-        except Exception as e:
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        
+        if not serializer.is_valid():
+            # Format error messages nicely
+            error_messages = self._format_error_messages(serializer.errors)
             return Response({
                 'status': 'error',
-                'message': str(e)
+                'success': False,  # Boolean indicator for failure
+                'message': 'Validation error',
+                'errors': error_messages
             }, status=status.HTTP_400_BAD_REQUEST)
+            
+        self.perform_update(serializer)
+        return Response({
+            'status': 'success',
+            'success': True,  # Boolean indicator for success
+            'message': 'Profile updated successfully',
+            'data': serializer.data
+        }, status=status.HTTP_200_OK)
     
     @action(detail=False, methods=['POST'])
     def upload_photo(self, request):
@@ -809,6 +818,7 @@ class ProfileViewSet(viewsets.ModelViewSet):
             if not photo:
                 return Response({
                     'status': 'error',
+                    'success': False,  # Boolean indicator for failure
                     'message': 'No photo provided'
                 }, status=status.HTTP_400_BAD_REQUEST)
             
@@ -817,13 +827,15 @@ class ProfileViewSet(viewsets.ModelViewSet):
             
             return Response({
                 'status': 'success',
+                'success': True,  # Boolean indicator for success
                 'message': 'Photo uploaded successfully',
                 'data': ProfileSerializer(profile, context={'request': request}).data
             })
         except Exception as e:
             return Response({
                 'status': 'error',
-                'message': str(e)
+                'success': False,  # Boolean indicator for failure
+                'message': "Failed to upload photo"
             }, status=status.HTTP_400_BAD_REQUEST)
     
     @action(detail=False, methods=['DELETE'])
@@ -836,13 +848,35 @@ class ProfileViewSet(viewsets.ModelViewSet):
             
             return Response({
                 'status': 'success',
+                'success': True,  # Boolean indicator for success
                 'message': 'Photo removed successfully'
             })
         except Exception as e:
             return Response({
                 'status': 'error',
-                'message': str(e)
+                'success': False,  # Boolean indicator for failure
+                'message': "Failed to remove photo"
             }, status=status.HTTP_400_BAD_REQUEST)
+    
+    def _format_error_messages(self, errors):
+        """Convert complex validation errors to simple messages"""
+        formatted_errors = {}
+        
+        for field, error_list in errors.items():
+            if isinstance(error_list, list):
+                # Get first error message without technical details
+                error_message = error_list[0]
+                if hasattr(error_message, 'detail'):
+                    formatted_errors[field] = error_message.detail
+                else:
+                    formatted_errors[field] = str(error_message)
+            elif isinstance(error_list, dict):
+                # Handle nested serializers
+                formatted_errors[field] = self._format_error_messages(error_list)
+            else:
+                formatted_errors[field] = str(error_list)
+                
+        return formatted_errors
 
 class AddressViewSet(viewsets.ModelViewSet):
     serializer_class = AddressSerializer
@@ -855,47 +889,64 @@ class AddressViewSet(viewsets.ModelViewSet):
         serializer.save(user=self.request.user)
     
     def create(self, request, *args, **kwargs):
-        try:
-            response = super().create(request, *args, **kwargs)
-            return Response({
-                'status': 'success',
-                'message': 'Address added successfully',
-                'data': response.data
-            }, status=status.HTTP_201_CREATED)
-        except Exception as e:
+        serializer = self.get_serializer(data=request.data)
+        if not serializer.is_valid():
+            # Format error messages nicely
+            error_messages = self._format_error_messages(serializer.errors)
             return Response({
                 'status': 'error',
-                'message': str(e)
+                'success': False,  # Boolean indicator for failure
+                'message': 'Validation error',
+                'errors': error_messages
             }, status=status.HTTP_400_BAD_REQUEST)
+            
+        self.perform_create(serializer)
+        return Response({
+            'status': 'success',
+            'success': True,  # Boolean indicator for success
+            'message': 'Address added successfully',
+            'data': serializer.data
+        }, status=status.HTTP_201_CREATED)
     
     def update(self, request, *args, **kwargs):
-        try:
-            response = super().update(request, *args, **kwargs)
-            return Response({
-                'status': 'success',
-                'message': 'Address updated successfully',
-                'data': response.data
-            }, status=status.HTTP_200_OK)
-        except Exception as e:
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        
+        if not serializer.is_valid():
+            # Format error messages nicely
+            error_messages = self._format_error_messages(serializer.errors)
             return Response({
                 'status': 'error',
-                'message': str(e)
+                'success': False,  # Boolean indicator for failure
+                'message': 'Validation error',
+                'errors': error_messages
             }, status=status.HTTP_400_BAD_REQUEST)
-
+            
+        self.perform_update(serializer)
+        return Response({
+            'status': 'success',
+            'success': True,  # Boolean indicator for success
+            'message': 'Address updated successfully',
+            'data': serializer.data
+        }, status=status.HTTP_200_OK)
+    
     def destroy(self, request, *args, **kwargs):
         try:
             instance = self.get_object()
             self.perform_destroy(instance)
             return Response({
                 'status': 'success',
+                'success': True,  # Boolean indicator for success
                 'message': 'Address deleted successfully'
             }, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({
                 'status': 'error',
-                'message': str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)       
-        
+                'success': False,  # Boolean indicator for failure
+                'message': "Failed to delete address"
+            }, status=status.HTTP_400_BAD_REQUEST)
+    
     @action(detail=True, methods=['POST'])
     def set_default(self, request, pk=None):
         try:
@@ -904,13 +955,35 @@ class AddressViewSet(viewsets.ModelViewSet):
             address.save()
             return Response({
                 'status': 'success',
+                'success': True,  # Boolean indicator for success
                 'message': 'Address set as default successfully'
             })
         except Exception as e:
             return Response({
                 'status': 'error',
-                'message': str(e)
+                'success': False,  # Boolean indicator for failure
+                'message': "Failed to set address as default"
             }, status=status.HTTP_400_BAD_REQUEST)
+    
+    def _format_error_messages(self, errors):
+        """Convert complex validation errors to simple messages"""
+        formatted_errors = {}
+        
+        for field, error_list in errors.items():
+            if isinstance(error_list, list):
+                # Get first error message without technical details
+                error_message = error_list[0]
+                if hasattr(error_message, 'detail'):
+                    formatted_errors[field] = error_message.detail
+                else:
+                    formatted_errors[field] = str(error_message)
+            elif isinstance(error_list, dict):
+                # Handle nested serializers
+                formatted_errors[field] = self._format_error_messages(error_list)
+            else:
+                formatted_errors[field] = str(error_list)
+                
+        return formatted_errors
         
 class ArticleViewSet(viewsets.ModelViewSet):
     queryset = Article.objects.all()

@@ -344,7 +344,8 @@ class AddressSerializer(serializers.ModelSerializer):
     
     def validate_phone_number(self, value):
         if not re.match(r'^\+?[0-9]{10,15}$', value):
-            raise serializers.ValidationError("Invalid phone number format")
+            # Simple clear message instead of technical error
+            raise serializers.ValidationError("Please enter a valid phone number")
         return value
     
     def validate_full_name(self, value):
