@@ -21,6 +21,7 @@ from django.apps import apps
 from django.http import HttpResponse
 from django.contrib.auth import get_user_model
 
+
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
@@ -138,7 +139,8 @@ from .serializers import (
     OrderItemSerializer,
     CustomerSerializer,
     CustomerDetailSerializer,
-    CustomerCreateSerializer
+    CustomerCreateSerializer,
+    UserDetailsUpdateSerializer
     
     
 )
@@ -856,6 +858,51 @@ class ProfileViewSet(viewsets.ModelViewSet):
                 'status': 'error',
                 'success': False,  # Boolean indicator for failure
                 'message': "Failed to remove photo"
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['PATCH', 'PUT'], url_path='update-details')
+    def update_details(self, request):
+        """
+        Endpoint to update only the user's full name, email, and photo
+        """
+        try:
+            profile = request.user.profile
+            serializer = UserDetailsUpdateSerializer(
+                profile, 
+                data=request.data,
+                context={'request': request},
+                partial=True
+            )
+            
+            if not serializer.is_valid():
+                error_messages = self._format_error_messages(serializer.errors)
+                return Response({
+                    'status': 'error',
+                    'success': False,
+                    'message': 'Validation error',
+                    'errors': error_messages
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            profile = serializer.save()
+            
+            return Response({
+                'status': 'success',
+                'success': True,
+                'message': 'User details updated successfully',
+                'data': {
+                    'full_name': profile.full_name,
+                    'email': profile.user.email,
+                    'photo_url': self.get_serializer(profile).get_photo_url(profile) if profile.photo else None
+                }
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            import traceback
+            print(traceback.format_exc())  # This will help to debug by showing the full error in your console
+            return Response({
+                'status': 'error',
+                'success': False,
+                'message': f"Failed to update user details: {str(e)}"
             }, status=status.HTTP_400_BAD_REQUEST)
     
     def _format_error_messages(self, errors):

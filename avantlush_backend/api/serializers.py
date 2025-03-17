@@ -320,6 +320,40 @@ class ProfileSerializer(serializers.ModelSerializer):
                 f"Invalid country code. Valid options are: {', '.join(VALID_COUNTRY_CODES.keys())}"
             )
         return value
+
+class UserDetailsUpdateSerializer(serializers.Serializer):
+    full_name = serializers.CharField(required=False)
+    email = serializers.EmailField(required=False)
+    photo = serializers.ImageField(required=False)
+    
+    def validate_email(self, value):
+        # Check if email is already taken by another user
+        user = self.context.get('request').user
+        if CustomUser.objects.filter(email=value).exclude(id=user.id).exists():
+            raise serializers.ValidationError("This email is already in use.")
+        return value
+    
+    def update(self, instance, validated_data):
+        user = instance.user
+        
+        # Update email (in CustomUser model)
+        if 'email' in validated_data:
+            user.email = validated_data['email']
+            user.save()
+        
+        # Update full_name (in Profile model)
+        if 'full_name' in validated_data:
+            instance.full_name = validated_data['full_name']
+        
+        # Update photo (in Profile model)
+        if 'photo' in validated_data:
+            # If there's an existing photo, delete it first
+            if instance.photo:
+                instance.photo.delete()
+            instance.photo = validated_data['photo']
+        
+        instance.save()
+        return instance
     
 class AddressSerializer(serializers.ModelSerializer):
     class Meta:
@@ -330,7 +364,7 @@ class AddressSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'updated_at']
     
     def validate_zip_code(self, value):
-        # Basic validation - just ensure it's not empty and has reasonable length
+        # Basic validation - just to ensure it's not empty and has reasonable length
         if not value.strip():
             raise serializers.ValidationError("Zip/postal code cannot be empty")
         if len(value) > 20:  # Set a reasonable maximum length
