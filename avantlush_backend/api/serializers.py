@@ -325,6 +325,8 @@ class UserDetailsUpdateSerializer(serializers.Serializer):
     full_name = serializers.CharField(required=False)
     email = serializers.EmailField(required=False)
     photo = serializers.ImageField(required=False)
+    phone_number = serializers.CharField(required=False)
+    country_code = serializers.CharField(required=False)
     
     def validate_email(self, value):
         # Check if email is already taken by another user
@@ -332,6 +334,23 @@ class UserDetailsUpdateSerializer(serializers.Serializer):
         if CustomUser.objects.filter(email=value).exclude(id=user.id).exists():
             raise serializers.ValidationError("This email is already in use.")
         return value
+    
+    def validate(self, data):
+        country_code = data.get('country_code')
+        phone_number = data.get('phone_number')
+        
+        if phone_number and not country_code:
+            raise serializers.ValidationError({'country_code': 'Country code is required when providing a phone number'})
+        
+        if country_code and phone_number:
+            is_valid, error_message = validate_phone_format(country_code, phone_number)
+            if not is_valid:
+                raise serializers.ValidationError({'phone_number': error_message})
+            
+            # Format the phone number before saving
+            data['phone_number'] = format_phone_number(country_code, phone_number)
+        
+        return data
     
     def update(self, instance, validated_data):
         user = instance.user
@@ -352,9 +371,16 @@ class UserDetailsUpdateSerializer(serializers.Serializer):
                 instance.photo.delete()
             instance.photo = validated_data['photo']
         
+        # Update phone_number and country_code
+        if 'phone_number' in validated_data:
+            instance.phone_number = validated_data['phone_number']
+        
+        if 'country_code' in validated_data:
+            instance.country_code = validated_data['country_code']
+        
         instance.save()
         return instance
-    
+        
 class AddressSerializer(serializers.ModelSerializer):
     class Meta:
         model = Address

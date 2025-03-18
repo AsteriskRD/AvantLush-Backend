@@ -782,6 +782,11 @@ class ProductViewSet(viewsets.ModelViewSet):
                 
         return queryset
 
+def format_phone_number(country_code, phone_number):
+    """Format phone number with country code"""
+    # Simple formatting - you can customize this
+    return f"{country_code} {phone_number}"
+
 class ProfileViewSet(viewsets.ModelViewSet):
     serializer_class = ProfileSerializer
     permission_classes = [IsAuthenticated]
@@ -863,7 +868,7 @@ class ProfileViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['PATCH', 'PUT'], url_path='update-details')
     def update_details(self, request):
         """
-        Endpoint to update only the user's full name, email, and photo
+        Endpoint to update the user's full name, email, photo, and phone number
         """
         try:
             profile = request.user.profile
@@ -885,6 +890,11 @@ class ProfileViewSet(viewsets.ModelViewSet):
             
             profile = serializer.save()
             
+            # Format the phone number for the response
+            formatted_phone = None
+            if profile.phone_number and profile.country_code:
+                formatted_phone = format_phone_number(profile.country_code, profile.phone_number)
+            
             return Response({
                 'status': 'success',
                 'success': True,
@@ -892,7 +902,10 @@ class ProfileViewSet(viewsets.ModelViewSet):
                 'data': {
                     'full_name': profile.full_name,
                     'email': profile.user.email,
-                    'photo_url': self.get_serializer(profile).get_photo_url(profile) if profile.photo else None
+                    'photo_url': self.get_serializer(profile).get_photo_url(profile) if profile.photo else None,
+                    'phone_number': profile.phone_number,
+                    'country_code': profile.country_code,
+                    'formatted_phone_number': formatted_phone
                 }
             }, status=status.HTTP_200_OK)
             
