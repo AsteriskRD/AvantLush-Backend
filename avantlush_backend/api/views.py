@@ -1748,7 +1748,8 @@ class WishlistViewSet(viewsets.ModelViewSet):
                     'product_id': item.product.id,
                     'product_name': item.product.name,
                     'stock_quantity': item.product.stock_quantity,
-                    'added_at': item.added_at.isoformat()
+                    'added_at': item.added_at.isoformat(),
+                    'is_liked': True  # Add this field to show the item is liked/wishlisted
                 }
                 
                 # Add optional fields if they exist on the product model
