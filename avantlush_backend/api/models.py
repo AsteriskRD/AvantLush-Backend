@@ -322,6 +322,7 @@ class Order(models.Model):
     # Payment Information
     payment_type = models.CharField(max_length=20, choices=PAYMENT_TYPE_CHOICES)
     payment_status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='PENDING')
+    billing_address = models.TextField(null=True, blank=True)
     
     # Financial Details
     subtotal = models.DecimalField(max_digits=10, decimal_places=2, default=0)

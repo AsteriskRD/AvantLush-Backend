@@ -529,19 +529,28 @@ class OrderItemSerializer(serializers.ModelSerializer):
 
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
-    payment = PaymentSerializer(read_only=True)
+    payments = PaymentSerializer(many=True, read_only=True)  # Change to match the related_name
     customer_email = serializers.EmailField(source='user.email', read_only=True)
     customer_name = serializers.SerializerMethodField()
     status_display = serializers.SerializerMethodField()
+    
+    payment = serializers.SerializerMethodField()
+    
+    # Add this method to get the first payment (if any)
+    def get_payment(self, obj):
+        payment = obj.payments.first()
+        if payment:
+            return PaymentSerializer(payment).data
+        return None
     
     class Meta:
         model = Order
         fields = [
             'id', 'order_number', 'customer_email', 'customer_name',
-            'items', 'total', 'status', 'status_display', 'payment',
-            'shipping_address', 'billing_address', 'created_at', 
-            'updated_at', 'notes', 'payment_type', 'order_type',
-            'order_date', 'order_time'  # Added these fields from OrderDetailSerializer
+            'items', 'total', 'status', 'status_display', 'payment', 'payments',
+            'shipping_address', 'created_at', 
+            'updated_at', 'note', 'payment_type', 'order_type',
+            'order_date', 'order_time'
         ]
         read_only_fields = ['id', 'order_number', 'created_at', 'updated_at']
     
@@ -564,7 +573,7 @@ class OrderCreateSerializer(serializers.ModelSerializer):
         model = Order
         fields = [
             'items', 'payment_method', 'shipping_address',
-            'billing_address', 'notes', 'payment_type', 'order_type',
+            'billing_address', 'note', 'payment_type', 'order_type',
             'order_date', 'order_time', 'status'  # Added fields from OrderDetailSerializer
         ]
     

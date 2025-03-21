@@ -1371,7 +1371,7 @@ class CartItemViewSet(viewsets.ModelViewSet):
         return Response(debug_data)
     
 class OrderViewSet(viewsets.ModelViewSet):
-    queryset = Order.objects.all().select_related('user', 'payment').prefetch_related('items__product')
+    queryset = Order.objects.all().select_related('user', 'customer').prefetch_related('items__product', 'payments')
     filterset_class = OrderFilter
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['order_number', 'user__email', 'user__first_name', 'user__last_name']
@@ -1462,8 +1462,8 @@ class OrderViewSet(viewsets.ModelViewSet):
                 items_str,
                 order.total,
                 order.get_status_display(),
-                order.payment.method if order.payment else 'N/A',
-                order.payment.status if order.payment else 'N/A'
+                order.payments.first().payment_method if order.payments.exists() else 'N/A',
+                order.payments.first().status if order.payments.exists() else 'N/A'
             ])
         
         return response
@@ -1489,7 +1489,7 @@ class OrderViewSet(viewsets.ModelViewSet):
         
         # Payment method distribution
         payment_methods = queryset.values(
-            'payment__method'
+            'payments__payment_method'  # or 'payments__method' depending on which field you want to use
         ).annotate(
             count=Count('id'),
             total_value=Sum('total')
@@ -1504,17 +1504,17 @@ class OrderViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['POST'])
     def add_note(self, request, pk=None):
         order = self.get_object()
-        note = request.data.get('note')
+        note_content = request.data.get('note')
         
-        if not note:
+        if not note_content:
             return Response({
                 'error': 'Note content is required'
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        if order.notes:
-            order.notes += f"\n[{timezone.now().strftime('%Y-%m-%d %H:%M')}] {note}"
+        if order.note:  # Changed from notes to note
+            order.note += f"\n[{timezone.now().strftime('%Y-%m-%d %H:%M')}] {note_content}"
         else:
-            order.notes = f"[{timezone.now().strftime('%Y-%m-%d %H:%M')}] {note}"
+            order.note = f"[{timezone.now().strftime('%Y-%m-%d %H:%M')}] {note_content}"
         
         order.save()
         return Response({'status': 'success'})
@@ -1530,10 +1530,12 @@ class OrderViewSet(viewsets.ModelViewSet):
                 'error': 'Payment status is required'
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        if not order.payment:
+        payment = order.payments.first()
+        if not payment:
             return Response({
                 'error': 'No payment found for this order'
             }, status=status.HTTP_404_NOT_FOUND)
+        payment.status = payment_status
         
         order.payment.status = payment_status
         if transaction_id:
