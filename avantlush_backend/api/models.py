@@ -533,6 +533,24 @@ class Payment(models.Model):
     def __str__(self):
         return f"Payment {self.transaction_id} for Order {self.order.id}"
     
+class SavedPaymentMethod(models.Model):
+    PAYMENT_TYPES = (
+        ('STRIPE', 'Stripe'),
+        ('PAYPAL', 'PayPal'),
+        ('CLOVER', 'Clover'),
+    )
+    
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    payment_type = models.CharField(max_length=20, choices=PAYMENT_TYPES)
+    token = models.CharField(max_length=255)
+    card_last_four = models.CharField(max_length=4, blank=True)
+    card_brand = models.CharField(max_length=20, blank=True)
+    is_default = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        unique_together = ('user', 'token')
+
 class Address(models.Model):
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
     full_name = models.CharField(max_length=255, default="")
@@ -591,28 +609,19 @@ class SupportTicket(models.Model):
         ('CLOSED', 'Closed')
     ]
     
-    PRIORITY_CHOICES = [
-        ('LOW', 'Low'),
-        ('MEDIUM', 'Medium'),
-        ('HIGH', 'High'),
-        ('URGENT', 'Urgent')
-    ]
-
-    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='support_tickets')
-    subject = models.CharField(max_length=255)
-    message = models.TextField()
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='support_tickets', null=True, blank=True)
+    full_name = models.CharField(max_length=255)  # New field to match UI
+    message = models.TextField()  # This matches the "Complaint" field in UI
     status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='OPEN')
-    priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default='MEDIUM')
-    order = models.ForeignKey('Order', on_delete=models.SET_NULL, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
+    
     class Meta:
         ordering = ['-created_at']
-
+    
     def __str__(self):
-        return f"Ticket #{self.id} - {self.subject}"
-
+        return f"Help Request #{self.id} - {self.full_name}"
+    
 class TicketResponse(models.Model):
     ticket = models.ForeignKey(SupportTicket, on_delete=models.CASCADE, related_name='responses')
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)

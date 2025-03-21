@@ -167,8 +167,8 @@ Your private key here
 }
 
 #Payment methods
-CLOVER_PUBLIC_TOKEN = 'your_public_token'
-CLOVER_PRIVATE_TOKEN = 'your_private_token'
+CLOVER_PUBLIC_TOKEN = '57c5f8cf1e22bd2cf97a95db31080287'
+CLOVER_PRIVATE_TOKEN = '7f340fd7-6aff-16c8-4740-a3cc8b811a6b'
 STRIPE_PUBLIC_KEY = 'your_stripe_public_key'
 STRIPE_SECRET_KEY = 'your_stripe_secret_key'
 PAYPAL_MODE = 'sandbox'  # sandbox or live

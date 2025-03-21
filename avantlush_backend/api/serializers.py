@@ -837,14 +837,11 @@ class TicketResponseSerializer(serializers.ModelSerializer):
         read_only_fields = ['is_staff_response']
 
 class SupportTicketSerializer(serializers.ModelSerializer):
-    responses = TicketResponseSerializer(many=True, read_only=True)
-    
     class Meta:
         model = SupportTicket
-        fields = ['id', 'subject', 'message', 'status', 'priority', 'order', 
-                 'created_at', 'updated_at', 'responses']
-        read_only_fields = ['created_at', 'updated_at']
-
+        fields = ['id', 'full_name', 'message', 'status', 'created_at', 'updated_at']
+        read_only_fields = ['status', 'created_at', 'updated_at']
+        
 class DashboardCartMetricsSerializer(serializers.Serializer):
     abandoned_rate = serializers.FloatField()
     total_carts = serializers.IntegerField()

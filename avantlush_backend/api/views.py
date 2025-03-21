@@ -161,6 +161,8 @@ from datetime import timedelta
 from django_filters import FilterSet
 from django_filters import DateFromToRangeFilter
 from django_filters import FilterSet, NumberFilter
+from .models import Order, SavedPaymentMethod
+from .services import CloverPaymentService
 
 class WaitlistRateThrottle(AnonRateThrottle):
     rate = '5/minute'  # Limit to 5 requests per minute per IP
@@ -2104,10 +2106,15 @@ class CheckoutViewSet(viewsets.ViewSet):
                     'id': 'google_pay',
                     'name': 'Google Pay',
                     'enabled': True
+                },
+                {
+                    'id': 'clover',
+                    'name': 'Clover',
+                    'enabled': True
                 }
             ]
         })
-
+    
     @action(detail=False, methods=['POST'])
     def validate_promocode(self, request):
         """Validate promocode and return discount amount"""
@@ -2277,6 +2284,7 @@ class CheckoutViewSet(viewsets.ViewSet):
             'GOOGLE_PAY': GooglePayService(),
             'VISA': StripePaymentService(),
             'MASTERCARD': StripePaymentService(),
+            'CLOVER': CloverPaymentService(),
         }
         return services.get(payment_method.upper())
 
@@ -2335,6 +2343,49 @@ class CheckoutViewSet(viewsets.ViewSet):
             return Response({
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['POST'])
+    def create_clover_token(self, request):
+        """Create a payment token from Clover for future use"""
+        try:
+            card_data = request.data.get('card_data', {})
+            
+            if not card_data:
+                return Response({
+                    'status': 'error',
+                    'message': 'Card data is required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+            clover_service = CloverPaymentService()
+            result = clover_service.get_payment_token(card_data)
+            
+            if result['success']:
+                # If user is authenticated, you could save this token
+                if request.user.is_authenticated and request.data.get('save_card', False):
+                    SavedPaymentMethod.objects.create(
+                        user=request.user,
+                        payment_type='CLOVER',
+                        token=result['token'],
+                        card_last_four=result.get('card_last_four', ''),
+                        card_brand=result.get('card_brand', ''),
+                        is_default=not SavedPaymentMethod.objects.filter(user=request.user).exists()
+                    )
+                    
+                return Response({
+                    'status': 'success',
+                    'token': result['token']
+                })
+                
+            return Response({
+                'status': 'error',
+                'message': result.get('error', 'Failed to create payment token')
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        except Exception as e:
+            return Response({
+                'status': 'error',
+                'message': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
     @action(detail=False, methods=['POST'])
     def shipping_cost(self, request):
@@ -2366,31 +2417,31 @@ class ShippingMethodViewSet(viewsets.ReadOnlyModelViewSet):
 
 class SupportTicketViewSet(viewsets.ModelViewSet):
     serializer_class = SupportTicketSerializer
-    permission_classes = [IsAuthenticated]
-
+    
     def get_queryset(self):
-        return SupportTicket.objects.filter(user=self.request.user)
-
+        user = self.request.user
+        if user.is_authenticated:
+            return SupportTicket.objects.filter(user=user)
+        return SupportTicket.objects.none()
+    
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
-
-    @action(detail=True, methods=['POST'])
-    def add_response(self, request, pk=None):
-        ticket = self.get_object()
-        serializer = TicketResponseSerializer(data=request.data)
+        user = self.request.user
+        if user.is_authenticated:
+            serializer.save(user=user)
+        else:
+            serializer.save()
+    
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
         
-        if serializer.is_valid():
-            serializer.save(
-                ticket=ticket,
-                user=request.user,
-                is_staff_response=False
-            )
-            return Response({
-                'status': 'success',
-                'message': 'Response added successfully',
-                'data': serializer.data
-            })
-        return Response(serializer.errors, status=400)
+        # Return success message
+        return Response({
+            'status': 'success',
+            'message': 'We have received your message, and we\'ll get back to you.',
+            'data': serializer.data
+        }, status=status.HTTP_201_CREATED)
     
 
 class DashboardViewSet(viewsets.ViewSet):
