@@ -2277,6 +2277,24 @@ class CheckoutViewSet(viewsets.ViewSet):
                 'status': 'error',
                 'message': 'Order not found'
             }, status=status.HTTP_404_NOT_FOUND)
+    
+    @action(detail=False, methods=['GET'])
+    def saved_payment_methods(self, request):
+        """Get saved payment methods for the current user"""
+        if not request.user.is_authenticated:
+            return Response([], status=status.HTTP_200_OK)
+            
+        saved_methods = SavedPaymentMethod.objects.filter(user=request.user)
+        return Response([
+            {
+                'id': method.id,
+                'type': method.payment_type,
+                'last_four': method.card_last_four,
+                'brand': method.card_brand,
+                'is_default': method.is_default
+            }
+            for method in saved_methods
+        ])
 
     def _get_payment_service(self, payment_method):
         """Get appropriate payment service based on payment method"""
