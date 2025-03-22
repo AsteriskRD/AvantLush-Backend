@@ -25,6 +25,11 @@ echo "Creating superuser..."
 python manage.py ensure_superuser
 echo "Superuser creation completed"
 
+echo "Populating ordertable..."
+python manage.py create_dummy_orders
+echo "Order Population completed"
+
+
 echo "Collecting static files..."
 python manage.py collectstatic --no-input
 
