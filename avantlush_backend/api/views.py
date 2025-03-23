@@ -1716,12 +1716,12 @@ class WishlistViewSet(viewsets.ModelViewSet):
         
     @action(detail=False, methods=['POST'])
     def bulk_delete(self, request):
-        """Delete multiple wishlist items at once"""
+        """Delete multiple wishlist items at once using product IDs"""
         try:
-            item_ids = request.data.get('item_ids', [])
+            product_ids = request.data.get('product_ids', [])  # Changed from item_ids to product_ids
             WishlistItem.objects.filter(
                 wishlist__user=request.user,
-                id__in=item_ids
+                product_id__in=product_ids
             ).delete()
             return Response({'status': 'Items deleted successfully'})
         except Exception as e:
@@ -1851,15 +1851,39 @@ class WishlistItemViewSet(viewsets.ModelViewSet):
             return Response({
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['DELETE'])
+    def remove_by_product_id(self, request, product_id=None):
+        """Remove wishlist item by product_id rather than item_id"""
+        try:
+            # Find the wishlist item by product_id instead of item_id
+            wishlist_item = WishlistItem.objects.filter(
+                wishlist__user=request.user,
+                product_id=product_id
+            ).first()
+            
+            if not wishlist_item:
+                return Response({
+                    'error': 'Product not found in your wishlist'
+                }, status=status.HTTP_404_NOT_FOUND)
+                
+            wishlist_item.delete()
+            return Response({
+                'status': 'Item removed from wishlist successfully'
+            }, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({
+                'error': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
             
     @action(detail=False, methods=['POST'])
     def bulk_delete(self, request):
-        """Delete multiple wishlist items at once"""
+        """Delete multiple wishlist items at once using product IDs"""
         try:
-            item_ids = request.data.get('item_ids', [])
+            product_ids = request.data.get('product_ids', [])  # Changed from item_ids to product_ids
             WishlistItem.objects.filter(
                 wishlist__user=request.user,
-                id__in=item_ids
+                product_id__in=product_ids
             ).delete()
             return Response({'status': 'Items deleted successfully'})
         except Exception as e:

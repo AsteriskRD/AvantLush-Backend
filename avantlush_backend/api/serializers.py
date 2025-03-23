@@ -630,6 +630,7 @@ class WishlistSerializer(serializers.ModelSerializer):
     class Meta:
         model = Wishlist
         fields = ['id', 'user', 'products', 'products_count']
+        
     def get_products(self, obj):
         # Get unique products from wishlist items and order them by added_at
         wishlist_items = obj.items.all().select_related('product').order_by('added_at')
@@ -654,6 +655,7 @@ class WishlistSerializer(serializers.ModelSerializer):
             elif product.images and len(product.images) > 0:
                 main_image = product.images[0]
             
+            # Remove item_id completely and only use product id
             products_data.append({
                 'id': product.id,
                 'name': product.name,
@@ -663,12 +665,11 @@ class WishlistSerializer(serializers.ModelSerializer):
                 'price': product.price,
                 'is_liked': True,  # Always True for wishlist items
                 'status': product.status,
-                'item_id': item.id,  # This is the WishlistItem ID needed for deletion
+                # 'item_id': item.id,  <-- Remove this field completely
                 'added_at': item.added_at
             })
         
         return products_data
-
     
     def get_products_count(self, obj):
         # Get unique product IDs using similar logic as in get_products

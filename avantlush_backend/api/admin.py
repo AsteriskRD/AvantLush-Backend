@@ -36,6 +36,7 @@ class ProductAdminForm(forms.ModelForm):
         help_text="Enter product details, one per line. Each line will be displayed as a bullet point."
     )
     
+    
     main_image = CloudinaryFileField(
         options={
             'folder': 'products/',

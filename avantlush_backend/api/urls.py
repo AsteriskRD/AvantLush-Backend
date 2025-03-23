@@ -72,7 +72,7 @@ urlpatterns = [
     
     # Product & Wishlist
     path('products/search/', ProductSearchView.as_view(), name='product-search'),
-    path('wishlist-items/<int:pk>/remove/', WishlistItemViewSet.as_view({'delete': 'remove_item'})),
+    path('wishlist-items/<int:product_id>/remove/', WishlistItemViewSet.as_view({'delete': 'remove_by_product_id'})),
     
     # NEW: Product View Recording
     path('products/record-view/', RecordProductViewView.as_view(), name='record-product-view'),
