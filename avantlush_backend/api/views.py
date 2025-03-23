@@ -1669,19 +1669,28 @@ class WishlistViewSet(viewsets.ModelViewSet):
         
         serializer.save(wishlist=wishlist)
     
-    @action(detail=True, methods=['POST'])
+    
+    @action(detail=False, methods=['POST'], url_path='move-to-cart/(?P<pk>[^/.]+)')
     def move_to_cart(self, request, pk=None):
-        """Move a single item from wishlist to cart"""
+        """Move a single item from wishlist to cart using product_id"""
         try:
-            wishlist_item = WishlistItem.objects.get(
-                id=pk,
-                wishlist__user=request.user
-            )
+            # Find the wishlist item by product_id instead of item_id
+            product_id = pk  # Use pk as the product_id
+            wishlist_item = WishlistItem.objects.filter(
+                wishlist__user=request.user,
+                product_id=product_id
+            ).first()
             
-            cart, _ = Cart.objects.get_or_create(
-                user=request.user,
-                session_key=request.session.session_key or ''
-            )
+            if not wishlist_item:
+                return Response(
+                    {'error': 'Product not found in your wishlist'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+                # Get cart using the CartViewSet's get_cart method
+            cart_viewset = CartViewSet()
+            cart_viewset.request = request
+            cart = cart_viewset.get_cart()
             
             if wishlist_item.product.stock_quantity > 0:
                 # Create or update cart item
@@ -1703,17 +1712,11 @@ class WishlistViewSet(viewsets.ModelViewSet):
                     {'warning': 'Item is out of stock and cannot be added to cart'},
                     status=status.HTTP_200_OK
                 )
-        except WishlistItem.DoesNotExist:
-            return Response(
-                {'error': 'Item not found in your wishlist'},
-                status=status.HTTP_404_NOT_FOUND
-            )
         except Exception as e:
             return Response(
                 {'error': str(e)},
                 status=status.HTTP_400_BAD_REQUEST
-            )
-        
+            )        
     @action(detail=False, methods=['POST'])
     def bulk_delete(self, request):
         """Delete multiple wishlist items at once using product IDs"""
