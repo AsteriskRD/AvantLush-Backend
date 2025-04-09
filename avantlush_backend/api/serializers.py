@@ -521,7 +521,24 @@ class PaymentSerializer(serializers.ModelSerializer):
 class OrderItemSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source='product.name')
     product_sku = serializers.CharField(source='product.sku')
+    unit_price = serializers.SerializerMethodField()
+    total_price = serializers.SerializerMethodField()
+    variants = serializers.SerializerMethodField()
+
+    def get_unit_price(self, obj):
+        # Return the price from elsewhere, or a default value
+        return getattr(obj, 'price', 0)
     
+    def get_total_price(self, obj):
+        # Calculate total price on the fly
+        unit_price = self.get_unit_price(obj)
+        quantity = getattr(obj, 'quantity', 1)
+        return unit_price * quantity
+    
+    def get_variants(self, obj):
+        # Return empty dict or default value
+        return {} 
+
     class Meta:
         model = OrderItem
         fields = ['id', 'product', 'product_name', 'product_sku', 'quantity', 
@@ -536,7 +553,7 @@ class OrderSerializer(serializers.ModelSerializer):
     
     payment = serializers.SerializerMethodField()
     
-    # Add this method to get the first payment (if any)
+    # Added this method to get the first payment (if any)
     def get_payment(self, obj):
         payment = obj.payments.first()
         if payment:
