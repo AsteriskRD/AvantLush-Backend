@@ -1,26 +1,22 @@
-
 from django.core.management.base import BaseCommand
-from django.utils import timezone
 from avantlush_backend.api.models import CustomUser, Order, OrderItem, Product, OrderTracking
+from django.utils import timezone
 import random
 from decimal import Decimal
 
-
 class Command(BaseCommand):
-    help = 'Creates dummy orders for testing purposes'
+    help = 'Creates dummy orders for a specific user'
 
     def add_arguments(self, parser):
-        parser.add_argument('--email', type=str, default='danieludechukwu117@gmail.com',
-                            help='Email of the user to create orders for')
-        parser.add_argument('--count', type=int, default=5,
-                            help='Number of orders to create')
+        parser.add_argument('email', type=str)
+        parser.add_argument('--count', type=int, default=5)
 
     def handle(self, *args, **options):
-        email = options['email']
-        count = options['count']
-
-        self.stdout.write(self.style.SUCCESS(f'Creating {count} orders for {email}'))
-
+        email = options.get('email')
+        count = options.get('count', 5)
+        
+        self.stdout.write(f"Creating {count} orders for {email}")
+        
         try:
             user = CustomUser.objects.get(email=email)
             self.stdout.write(self.style.SUCCESS(f"Found user: {user.email}"))
@@ -37,9 +33,9 @@ class Command(BaseCommand):
             "Rattan Accent Chair",
             "Velvet Dining Chair Set"
         ]
-
+        
         products = list(Product.objects.filter(name__in=product_names))
-
+        
         if not products:
             self.stdout.write(self.style.WARNING("No products found with the specified names. Using all available products..."))
             products = list(Product.objects.all()[:10])
@@ -47,7 +43,7 @@ class Command(BaseCommand):
             if not products:
                 self.stdout.write(self.style.ERROR("No products found in the database. Please add some products first."))
                 return
-
+        
         self.stdout.write(self.style.SUCCESS(f"Found {len(products)} products to use in orders"))
 
         # Create orders with different statuses
@@ -135,6 +131,8 @@ class Command(BaseCommand):
                     timestamp=timezone.now() - timezone.timedelta(hours=12)
                 )
             
-            self.stdout.write(self.style.SUCCESS(f"Created order #{order.order_number} with status {status} and {num_products} products. Total: ${order.total}"))
+            self.stdout.write(self.style.SUCCESS(
+                f"Created order #{order.order_number} with status {status} and {num_products} products. Total: ${order.total}"
+            ))
 
         self.stdout.write(self.style.SUCCESS(f"Done! Created {count} dummy orders."))

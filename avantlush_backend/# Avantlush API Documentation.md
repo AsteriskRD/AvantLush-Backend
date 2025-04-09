@@ -838,7 +838,7 @@ Success Response (201):
 - **Query Parameters**:
   - `rating`: Filter by rating (1-5)
   - `has_images`: true/false
-  - `tag`: Filter by tag slug
+  - `tag`: Filter by tag slug 
   - `ordering`: created_at, helpful_votes, rating
 - **Success Response (200)**:
 ```json

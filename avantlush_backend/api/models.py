@@ -362,8 +362,11 @@ class Order(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"Order {self.order_number} - {self.customer.name}"
-
+        if self.customer:
+            return f"Order {self.order_number} - {self.customer.name}"
+        else:
+            return f"Order {self.order_number}"
+        
     class Meta:
         ordering = ['-created_at']
 
