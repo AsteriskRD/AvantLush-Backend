@@ -524,7 +524,8 @@ class OrderItemSerializer(serializers.ModelSerializer):
     unit_price = serializers.SerializerMethodField()
     total_price = serializers.SerializerMethodField()
     variants = serializers.SerializerMethodField()
-
+    product_image = serializers.SerializerMethodField()
+    
     def get_unit_price(self, obj):
         # Return the price from elsewhere, or a default value
         return getattr(obj, 'price', 0)
@@ -537,35 +538,70 @@ class OrderItemSerializer(serializers.ModelSerializer):
     
     def get_variants(self, obj):
         # Return empty dict or default value
-        return {} 
-
+        return {}
+        
+    def get_product_image(self, obj):
+        # Get main image URL
+        if obj.product.main_image:
+            return obj.product.main_image.url
+        elif obj.product.images and len(obj.product.images) > 0:
+            return obj.product.images[0]
+        return None
+    
     class Meta:
         model = OrderItem
-        fields = ['id', 'product', 'product_name', 'product_sku', 'quantity', 
-                 'unit_price', 'total_price', 'variants']
+        fields = ['id', 'product', 'product_name', 'product_sku', 'quantity',
+                 'unit_price', 'total_price', 'variants', 'product_image']
+
 
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
-    payments = PaymentSerializer(many=True, read_only=True)  # Change to match the related_name
+    payments = PaymentSerializer(many=True, read_only=True)
     customer_email = serializers.EmailField(source='user.email', read_only=True)
     customer_name = serializers.SerializerMethodField()
     status_display = serializers.SerializerMethodField()
-    
     payment = serializers.SerializerMethodField()
+    estimated_delivery_date = serializers.SerializerMethodField()
     
-    # Added this method to get the first payment (if any)
+    # Add this method to get the first payment (if any)
     def get_payment(self, obj):
         payment = obj.payments.first()
         if payment:
             return PaymentSerializer(payment).data
         return None
     
+    def get_estimated_delivery_date(self, obj):
+        # Look for tracking entry with "Estimated Delivery" status
+        estimated_delivery = obj.tracking_history.filter(status="Estimated Delivery").first()
+        
+        if estimated_delivery:
+            # Extract date from description using regex
+            import re
+            match = re.search(r'by ([A-Za-z]+, [A-Za-z]+ \d+, \d{4})', estimated_delivery.description)
+            if match:
+                return match.group(1)
+        
+        # If no specific tracking entry, calculate based on order type and date
+        if obj.order_type == 'EXPRESS':
+            days = 2
+        else:  # STANDARD
+            days = 5
+            
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        base_date = obj.created_at
+        delivery_date = base_date + timedelta(days=days)
+        
+        # Format the date nicely
+        return delivery_date.strftime("%A, %B %d, %Y")
+    
     class Meta:
         model = Order
         fields = [
             'id', 'order_number', 'customer_email', 'customer_name',
             'items', 'total', 'status', 'status_display', 'payment', 'payments',
-            'shipping_address', 'created_at', 
+            'shipping_address', 'created_at', 'estimated_delivery_date',
             'updated_at', 'note', 'payment_type', 'order_type',
             'order_date', 'order_time'
         ]
@@ -578,6 +614,7 @@ class OrderSerializer(serializers.ModelSerializer):
     
     def get_status_display(self, obj):
         return obj.get_status_display()
+
 
 class OrderCreateSerializer(serializers.ModelSerializer):
     items = serializers.ListField(
