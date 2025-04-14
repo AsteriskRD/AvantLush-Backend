@@ -47,7 +47,13 @@ from .models import (
     Category,
     models,
     Customer,
-    ProductVariantImage
+    ProductVariantImage,
+    CarouselItem,
+    Size,
+    Color,
+    ProductSize,
+    ProductColor,
+
 )   
 
 User = get_user_model()
@@ -966,6 +972,42 @@ class ProductVariantImageSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProductVariantImage
         fields = ['id', 'image_url', 'is_primary']
+    
+class SizeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Size
+        fields = ['id', 'name']
+
+class ColorSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Color
+        fields = ['id', 'name', 'hex_code']
+
+class ProductSizeSerializer(serializers.ModelSerializer):
+    size = SizeSerializer(read_only=True)
+    size_id = serializers.PrimaryKeyRelatedField(
+        queryset=Size.objects.all(),
+        source='size',
+        write_only=True
+    )
+    
+    class Meta:
+        model = ProductSize
+        fields = ['id', 'size', 'size_id']
+
+class ProductColorSerializer(serializers.ModelSerializer):
+    color = ColorSerializer(read_only=True)
+    color_id = serializers.PrimaryKeyRelatedField(
+        queryset=Color.objects.all(),
+        source='color',
+        write_only=True
+    )
+    
+    class Meta:
+        model = ProductColor
+        fields = ['id', 'color', 'color_id']
+
+
 
 class ProductVariationSerializer(serializers.ModelSerializer):
     images = ProductVariantImageSerializer(many=True, read_only=True)
@@ -976,13 +1018,28 @@ class ProductVariationSerializer(serializers.ModelSerializer):
         required=False
     )
     final_price = serializers.SerializerMethodField()
+    size = SizeSerializer(read_only=True)
+    color = ColorSerializer(read_only=True)
+    size_id = serializers.PrimaryKeyRelatedField(
+        queryset=Size.objects.all(), 
+        source='size',
+        write_only=True,
+        required=False
+    )
+    color_id = serializers.PrimaryKeyRelatedField(
+        queryset=Color.objects.all(), 
+        source='color',
+        write_only=True,
+        required=False
+    )
 
     class Meta:
         model = ProductVariation
         fields = [
             'id', 'variation_type', 'variation', 'price_adjustment',
             'stock_quantity', 'sku', 'is_default', 'images', 'image_files',
-            'variant_image_url', 'final_price', 'variant_image'
+            'variant_image_url', 'final_price', 'variant_image',
+            'size', 'size_id', 'color', 'color_id'
         ]
 
     def get_variant_image_url(self, obj):
@@ -1097,6 +1154,10 @@ class ProductManagementSerializer(serializers.ModelSerializer):
     main_image = serializers.SerializerMethodField()
     
     is_liked = serializers.SerializerMethodField()
+    available_sizes = ProductSizeSerializer(many=True, required=False)
+    available_colors = ProductColorSerializer(many=True, required=False)
+    variations = ProductVariationSerializer(many=True, required=False)
+    
 
     def get_is_liked(self, obj):
         request = self.context.get('request')
@@ -1121,7 +1182,8 @@ class ProductManagementSerializer(serializers.ModelSerializer):
             # General Information
             'id', 'name', 'description', 'product_details', 'category', 'category_name', 
             'tags', 'status', 'status_display', 'main_image', 'images',
-            'image_files',  'is_featured', 'is_liked',
+            'image_files',  'is_featured', 'is_liked', 'available_sizes', 'available_colors',
+            'variations',
             # Pricing
             'base_price', 'discount_type', 'discount_percentage', 
             'vat_amount',
@@ -1195,6 +1257,57 @@ class ProductManagementSerializer(serializers.ModelSerializer):
             product.save()
         
         return product
+    def create(self, validated_data):
+        available_sizes_data = validated_data.pop('available_sizes', [])
+        available_colors_data = validated_data.pop('available_colors', [])
+        variations_data = validated_data.pop('variations', [])
+        
+        # Create product
+        product = Product.objects.create(**validated_data)
+        
+        # Create available sizes
+        for size_data in available_sizes_data:
+            ProductSize.objects.create(product=product, **size_data)
+        
+        # Create available colors
+        for color_data in available_colors_data:
+            ProductColor.objects.create(product=product, **color_data)
+        
+        # Create variations
+        for variation_data in variations_data:
+            ProductVariation.objects.create(product=product, **variation_data)
+        
+        return product
+    
+    def update(self, instance, validated_data):
+        available_sizes_data = validated_data.pop('available_sizes', [])
+        available_colors_data = validated_data.pop('available_colors', [])
+        variations_data = validated_data.pop('variations', [])
+        
+        # Update product fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        
+        # Handle sizes (optional: clear and recreate)
+        if available_sizes_data:
+            instance.available_sizes.all().delete()
+            for size_data in available_sizes_data:
+                ProductSize.objects.create(product=instance, **size_data)
+        
+        # Handle colors (optional: clear and recreate)
+        if available_colors_data:
+            instance.available_colors.all().delete()
+            for color_data in available_colors_data:
+                ProductColor.objects.create(product=instance, **color_data)
+        
+        # Handle variations
+        if variations_data:
+            instance.variations.all().delete()
+            for variation_data in variations_data:
+                ProductVariation.objects.create(product=instance, **variation_data)
+        
+        instance.save()
+        return instance
 
     def update(self, instance, validated_data):
         # Handle variations and image files
@@ -1227,7 +1340,47 @@ class ProductManagementSerializer(serializers.ModelSerializer):
             
         instance.save()
         return instance
-            
+
+class CarouselItemSerializer(serializers.ModelSerializer):
+    """Serializer for carousel items with all fields for admin use"""
+    image_url = serializers.SerializerMethodField()
+    product_name = serializers.SerializerMethodField(read_only=True)
+    
+    class Meta:
+        model = CarouselItem
+        fields = [
+            'id', 'title', 'subtitle', 'button_text', 'button_link',
+            'image', 'image_url', 'product', 'product_name', 'order', 'active'
+        ]
+    
+    def get_image_url(self, obj):
+        """Get the Cloudinary URL for the image"""
+        return obj.image.url if obj.image else None
+        
+    def get_product_name(self, obj):
+        """Get the name of the linked product if any"""
+        return obj.product.name if obj.product else None
+
+class CarouselItemPublicSerializer(serializers.ModelSerializer):
+    """Lightweight serializer for public carousel display - minimizes payload size"""
+    image_url = serializers.SerializerMethodField()
+    product_slug = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = CarouselItem
+        fields = [
+            'id', 'title', 'subtitle', 'button_text', 'button_link',
+            'image_url', 'product_slug'
+        ]
+    
+    def get_image_url(self, obj):
+        """Get the Cloudinary URL for the image"""
+        return obj.image.url if obj.image else None
+        
+    def get_product_slug(self, obj):
+        """Get the slug of the linked product if any"""
+        return obj.product.slug if obj.product else None
+
 class CustomerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Customer

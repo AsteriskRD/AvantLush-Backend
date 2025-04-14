@@ -29,7 +29,7 @@ from django.core.files.base import ContentFile
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework_simplejwt.tokens import AccessToken
 from rest_framework_simplejwt.exceptions import TokenError
 from django.utils import timezone
@@ -101,6 +101,10 @@ from .models import (
     Category,
     Customer,
     OrderItem,
+    CarouselItem,
+    Size,
+    Color
+    
 )
 
 # Local imports - Serializers
@@ -140,7 +144,11 @@ from .serializers import (
     CustomerSerializer,
     CustomerDetailSerializer,
     CustomerCreateSerializer,
-    UserDetailsUpdateSerializer
+    CarouselItemSerializer,
+    UserDetailsUpdateSerializer,
+    CarouselItemPublicSerializer,
+    SizeSerializer,
+    ColorSerializer,
     
     
 )
@@ -2667,6 +2675,16 @@ from rest_framework.authentication import TokenAuthentication, SessionAuthentica
 from rest_framework.permissions import AllowAny
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
+class SizeViewSet(viewsets.ModelViewSet):
+    queryset = Size.objects.all()
+    serializer_class = SizeSerializer
+    permission_classes = [IsAdminUser]  # Only admin users can manage sizes
+
+class ColorViewSet(viewsets.ModelViewSet):
+    queryset = Color.objects.all()
+    serializer_class = ColorSerializer
+    permission_classes = [IsAdminUser]
+
 class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.all()
     serializer_class = ProductManagementSerializer
@@ -3044,6 +3062,98 @@ class ProductViewSet(viewsets.ModelViewSet):
         })
 
     @action(detail=False, methods=['GET'])
+    def sizes(self, request):
+        """Get all available sizes for product management"""
+        sizes = Size.objects.all()
+        serializer = SizeSerializer(sizes, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['GET'])
+    def colors(self, request):
+        """Get all available colors for product management"""
+        colors = Color.objects.all()
+        serializer = ColorSerializer(colors, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['POST'])
+    def add_sizes(self, request, pk=None):
+        """Add available sizes to a product"""
+        product = self.get_object()
+        size_ids = request.data.get('size_ids', [])
+        
+        added_sizes = []
+        for size_id in size_ids:
+            try:
+                size = Size.objects.get(id=size_id)
+                product_size, created = ProductSize.objects.get_or_create(
+                    product=product,
+                    size=size
+                )
+                if created:
+                    added_sizes.append(size.name)
+            except Size.DoesNotExist:
+                pass
+        
+        return Response({
+            'message': f"Added sizes: {', '.join(added_sizes)}",
+            'product': product.name
+        })
+
+    @action(detail=True, methods=['POST'])
+    def add_colors(self, request, pk=None):
+        """Add available colors to a product"""
+        product = self.get_object()
+        color_ids = request.data.get('color_ids', [])
+        
+        added_colors = []
+        for color_id in color_ids:
+            try:
+                color = Color.objects.get(id=color_id)
+                product_color, created = ProductColor.objects.get_or_create(
+                    product=product,
+                    color=color
+                )
+                if created:
+                    added_colors.append(color.name)
+            except Color.DoesNotExist:
+                pass
+        
+        return Response({
+            'message': f"Added colors: {', '.join(added_colors)}",
+            'product': product.name
+        })
+
+    @action(detail=True, methods=['DELETE'])
+    def remove_size(self, request, pk=None):
+        """Remove an available size from a product"""
+        product = self.get_object()
+        size_id = request.data.get('size_id')
+        
+        if not size_id:
+            return Response({'error': 'Size ID is required'}, status=400)
+        
+        deleted, _ = ProductSize.objects.filter(product=product, size_id=size_id).delete()
+        
+        if deleted:
+            return Response({'message': 'Size removed from product'})
+        return Response({'message': 'Size not found for this product'}, status=404)
+
+    @action(detail=True, methods=['DELETE'])
+    def remove_color(self, request, pk=None):
+        """Remove an available color from a product"""
+        product = self.get_object()
+        color_id = request.data.get('color_id')
+        
+        if not color_id:
+            return Response({'error': 'Color ID is required'}, status=400)
+        
+        deleted, _ = ProductColor.objects.filter(product=product, color_id=color_id).delete()
+        
+        if deleted:
+            return Response({'message': 'Color removed from product'})
+        return Response({'message': 'Color not found for this product'}, status=404)
+
+    @action(detail=False, methods=['GET'])
     def debug_wishlist(self, request):
         """Debug endpoint to check wishlist status"""
         if not request.user.is_authenticated:
@@ -3084,6 +3194,68 @@ class ProductViewSet(viewsets.ModelViewSet):
             return Response(result)
         except Exception as e:
             return Response({"error": str(e)})
+        
+class CarouselViewSet(viewsets.ModelViewSet):
+    """ViewSet for managing carousel items"""
+    queryset = CarouselItem.objects.all().order_by('order')
+    serializer_class = CarouselItemSerializer
+    parser_classes = (MultiPartParser, FormParser)
+    authentication_classes = [JWTAuthentication, TokenAuthentication, SessionAuthentication]
+    
+    def get_permissions(self):
+        """
+        Override permissions:
+        - Admin access required for all operations except public endpoint
+        - Public endpoint accessible to anyone
+        """
+        if self.action == 'public':
+            return [AllowAny()]
+        return [IsAdminUser()]
+    
+    def get_serializer_class(self):
+        """Use different serializers based on the action"""
+        if self.action == 'public':
+            return CarouselItemPublicSerializer
+        return CarouselItemSerializer
+    
+    @action(detail=False, methods=['get'])
+    def public(self, request):
+        """Public endpoint for retrieving active carousel items"""
+        limit = int(request.query_params.get('limit', 5))  # Default to 5 items
+        items = CarouselItem.objects.filter(active=True).order_by('order')[:limit]
+        serializer = self.get_serializer(items, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['post'])
+    def reorder(self, request):
+        """Endpoint for reordering carousel items"""
+        try:
+            items_order = request.data.get('items', [])
+            
+            if not items_order:
+                return Response(
+                    {"error": "No items provided for reordering"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            with transaction.atomic():
+                for item_data in items_order:
+                    item_id = item_data.get('id')
+                    new_order = item_data.get('order')
+                    
+                    try:
+                        item = CarouselItem.objects.get(id=item_id)
+                        item.order = new_order
+                        item.save()
+                    except CarouselItem.DoesNotExist:
+                        continue
+            
+            return Response({"message": "Items reordered successfully"})
+        except Exception as e:
+            return Response(
+                {"error": f"Failed to reorder items: {str(e)}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
             
 class ProductReviewViewSet(viewsets.ModelViewSet):
     serializer_class = ReviewSerializer

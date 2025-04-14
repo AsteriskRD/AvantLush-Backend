@@ -32,6 +32,7 @@ from .views import (
     CustomerViewSet,
     ProductReviewViewSet,
     TokenValidationView,
+    CarouselViewSet,
 )
 
 # Router setup
@@ -53,7 +54,7 @@ router.register(r'dashboard', DashboardViewSet, basename='dashboard')
 router.register(r'product-management', ProductViewSet, basename='product-management')
 router.register(r'customers', CustomerViewSet, basename='customer')
 router.register(r'products/(?P<product_id>\d+)/reviews', ProductReviewViewSet, basename='product-reviews')
-
+router.register(r'carousel', CarouselViewSet, basename='carousel')
 # URL patterns
 urlpatterns = [
     # Authentication & User Management
@@ -84,6 +85,10 @@ urlpatterns = [
     path('products/<int:product_id>/recommendations/<str:rec_type>/', 
          ProductRecommendationView.as_view(), 
          name='product-recommendations-by-type'),
+
+    #Carousel Products Images
+    path('carousel/public/', CarouselViewSet.as_view({'get': 'public'}), name='carousel-public'),
+    path('carousel/reorder/', CarouselViewSet.as_view({'post': 'reorder'}), name='carousel-reorder'),
     
     path('wishlist/move-to-cart/<int:pk>/', WishlistViewSet.as_view({'post': 'move_to_cart'})),
     path('wishlist/bulk-delete/', WishlistViewSet.as_view({'post': 'bulk_delete'})),

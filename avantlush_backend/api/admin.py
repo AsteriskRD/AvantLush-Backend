@@ -26,6 +26,12 @@ from .models import (
     SupportTicket,
     TicketResponse,
     ProductVariantImage,
+    Category,
+    CarouselItem,
+    Size,
+    Color,
+    ProductSize,
+    ProductColor,
 )
 
 # Product Forms
@@ -93,7 +99,7 @@ class ProductVariationForm(forms.ModelForm):
     class Meta:
         model = ProductVariation
         fields = ['variation_type', 'variation', 'price_adjustment', 
-                 'stock_quantity', 'sku', 'is_default']
+                 'stock_quantity', 'sku', 'is_default', 'size', 'color']
 
 # Filters
 class StockFilter(SimpleListFilter):
@@ -127,6 +133,7 @@ class ProductVariationInline(admin.StackedInline):
     extra = 1
     fields = (
         ('variation_type', 'variation'),
+        ('size', 'color'),
         ('price_adjustment', 'stock_quantity'),
         ('sku', 'is_default'),
         'variant_image',
@@ -137,22 +144,19 @@ class ProductVariationInline(admin.StackedInline):
         formset.form.base_fields['variant_image'].widget = forms.ClearableFileInput()
         return formset
 
-    def display_images(self, obj):
-        if not obj.pk:
-            return "Save to view image"
-            
-        image = ProductVariantImage.objects.filter(variant=obj, is_primary=True).first()
-        if not image:
-            return "No image"
-            
-        return format_html('<img src="{}" width="50" height="50" />', image.image.url)
-    display_images.short_description = 'Current Image'
+class ProductSizeInline(admin.TabularInline):
+    model = ProductSize
+    extra = 1
+
+class ProductColorInline(admin.TabularInline):
+    model = ProductColor
+    extra = 1
 
 # Admin Classes
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
     form = ProductAdminForm
-    inlines = [ProductVariationInline]
+    inlines = [ProductVariationInline, ProductColorInline, ProductVariationInline]
     
     def image_preview(self, obj):
         if obj.main_image:
@@ -246,6 +250,10 @@ class ProductAdmin(admin.ModelAdmin):
                 'status',
                 'barcode'
             )
+        }),
+        ('Available Variations', {
+            'fields': [],
+            'description': 'Product variations are managed in the sections below. Add available sizes and colors, then create specific variations.'
         }),
         ('Product Details', {
             'fields': (
@@ -380,6 +388,52 @@ class EmailVerificationTokenAdmin(admin.ModelAdmin):
     list_display = ('user', 'token', 'created_at', 'is_used')
     search_fields = ('user__email',)
     list_filter = ('is_used', 'created_at')
+
+@admin.register(Category)
+class CategoryAdmin(admin.ModelAdmin):
+    list_display = ('name', 'slug', 'parent')
+    list_filter = ('parent',)
+    search_fields = ('name', 'slug')
+    prepopulated_fields = {'slug': ('name',)}
+
+@admin.register(CarouselItem)
+class CarouselItemAdmin(admin.ModelAdmin):
+    list_display = ('title', 'product', 'order', 'active', 'created_at')
+    list_filter = ('active',)
+    search_fields = ('title', 'subtitle', 'product__name')
+    ordering = ('order',)
+    readonly_fields = ('created_at', 'updated_at')
+    
+    fieldsets = (
+        ('Content', {
+            'fields': ('title', 'subtitle', 'button_text', 'button_link')
+        }),
+        ('Image', {
+            'fields': ('image',)
+        }),
+        ('Settings', {
+            'fields': ('product', 'order', 'active', 'created_at', 'updated_at')
+        }),
+    )
+
+@admin.register(Size)
+class SizeAdmin(admin.ModelAdmin):
+    list_display = ('name',)
+    search_fields = ('name',)
+
+@admin.register(Color)
+class ColorAdmin(admin.ModelAdmin):
+    list_display = ('name', 'hex_code', 'color_preview')
+    search_fields = ('name',)
+    
+    def color_preview(self, obj):
+        if obj.hex_code:
+            return format_html(
+                '<div style="background-color: {}; width: 20px; height: 20px; border: 1px solid #ccc;"></div>',
+                obj.hex_code
+            )
+        return "N/A"
+    color_preview.short_description = "Color"
 
 @admin.register(Article)
 class ArticleAdmin(admin.ModelAdmin):

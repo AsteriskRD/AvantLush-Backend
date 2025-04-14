@@ -192,21 +192,59 @@ class ProductView(models.Model):
     class Meta:
         ordering = ['-viewed_at']
 
+class Size(models.Model):
+    name = models.CharField(max_length=50, unique=True)
+    
+    def __str__(self):
+        return self.name
+
+class Color(models.Model):
+    name = models.CharField(max_length=50, unique=True)
+    hex_code = models.CharField(max_length=7, blank=True, null=True, help_text="Hexadecimal color code (e.g., #FF5733)")
+    
+    def __str__(self):
+        return self.name
+    
 class ProductVariation(models.Model):
     product = models.ForeignKey(Product, related_name='variations', on_delete=models.CASCADE)
-    variation_type = models.CharField(max_length=100)  # e.g., 'color', 'size'
-    variation = models.CharField(max_length=100)  # e.g., 'red', 'large'
+    variation_type = models.CharField(max_length=100)  # Keeping for backward compatibility
+    variation = models.CharField(max_length=100)  # Keeping for backward compatibility
     price_adjustment = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     stock_quantity = models.PositiveIntegerField(default=0)
     sku = models.CharField(max_length=100, unique=True)
     is_default = models.BooleanField(default=False)
     variant_image = CloudinaryField('image', folder='product_variants/', null=True, blank=True)
+    
+    # New fields for Size and Color
+    size = models.ForeignKey(Size, on_delete=models.SET_NULL, null=True, blank=True)
+    color = models.ForeignKey(Color, on_delete=models.SET_NULL, null=True, blank=True)
 
     class Meta:
         unique_together = ['product', 'variation_type', 'variation']
 
     def __str__(self):
         return f"{self.product.name} - {self.variation_type}: {self.variation}"
+
+class ProductSize(models.Model):
+    product = models.ForeignKey(Product, related_name='available_sizes', on_delete=models.CASCADE)
+    size = models.ForeignKey(Size, on_delete=models.CASCADE)
+    
+    class Meta:
+        unique_together = ['product', 'size']
+    
+    def __str__(self):
+        return f"{self.product.name} - Size: {self.size.name}"
+
+class ProductColor(models.Model):
+    product = models.ForeignKey(Product, related_name='available_colors', on_delete=models.CASCADE)
+    color = models.ForeignKey(Color, on_delete=models.CASCADE)
+    
+    class Meta:
+        unique_together = ['product', 'color']
+    
+    def __str__(self):
+        return f"{self.product.name} - Color: {self.color.name}"
+
     
 class ProductVariantImage(models.Model):
     variant = models.ForeignKey('ProductVariation', related_name='images', on_delete=models.CASCADE)
@@ -218,6 +256,29 @@ class ProductVariantImage(models.Model):
 
     def __str__(self):
         return f"Image for {self.variant}"
+    
+
+class CarouselItem(models.Model):
+    """Model for homepage carousel items"""
+    title = models.CharField(max_length=100)
+    subtitle = models.CharField(max_length=200, blank=True)
+    button_text = models.CharField(max_length=30, default="Shop Now")
+    button_link = models.CharField(max_length=200, default="/products/")
+    image = CloudinaryField('image', folder='carousel/')
+    product = models.ForeignKey('Product', on_delete=models.SET_NULL, null=True, blank=True, 
+                               help_text="Optional: Link this carousel item to a product")
+    order = models.PositiveIntegerField(default=0, help_text="Determines the display order")
+    active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['order']
+        verbose_name = "Carousel Item"
+        verbose_name_plural = "Carousel Items"
+
+    def __str__(self):
+        return self.title
     
 class Article(models.Model):
     title = models.CharField(max_length=255)
