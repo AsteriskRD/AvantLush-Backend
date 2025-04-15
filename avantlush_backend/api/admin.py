@@ -404,24 +404,24 @@ class CategoryAdmin(admin.ModelAdmin):
 
 @admin.register(CarouselItem)
 class CarouselItemAdmin(admin.ModelAdmin):
-    list_display = ('title', 'product', 'order', 'active', 'created_at')
+    list_display = ('text', 'order', 'active', 'created_at')
     list_filter = ('active',)
-    search_fields = ('title', 'subtitle', 'product__name')
+    search_fields = ('text',)
     ordering = ('order',)
     readonly_fields = ('created_at', 'updated_at')
     
     fieldsets = (
         ('Content', {
-            'fields': ('title', 'subtitle', 'button_text', 'button_link')
+            'fields': ('text',)
         }),
         ('Image', {
             'fields': ('image',)
         }),
         ('Settings', {
-            'fields': ('product', 'order', 'active', 'created_at', 'updated_at')
+            'fields': ('order', 'active', 'created_at', 'updated_at')
         }),
     )
-
+    
 @admin.register(ProductVariation)
 class ProductVariationAdmin(admin.ModelAdmin):
     form = ProductVariationForm

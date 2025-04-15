@@ -1385,24 +1385,16 @@ class CarouselItemSerializer(serializers.ModelSerializer):
 
 class CarouselItemPublicSerializer(serializers.ModelSerializer):
     """Lightweight serializer for public carousel display - minimizes payload size"""
-    image_url = serializers.SerializerMethodField()
-    product_slug = serializers.SerializerMethodField()
-    
+    url = serializers.SerializerMethodField()  # Renamed from image_url to match frontend needs
+
     class Meta:
         model = CarouselItem
-        fields = [
-            'id', 'title', 'subtitle', 'button_text', 'button_link',
-            'image_url', 'product_slug'
-        ]
-    
-    def get_image_url(self, obj):
+        fields = ['id', 'url', 'text']
+
+    def get_url(self, obj):
         """Get the Cloudinary URL for the image"""
         return obj.image.url if obj.image else None
-        
-    def get_product_slug(self, obj):
-        """Get the slug of the linked product if any"""
-        return obj.product.slug if obj.product else None
-
+    
 class CustomerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Customer

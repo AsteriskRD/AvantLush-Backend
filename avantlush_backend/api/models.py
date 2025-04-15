@@ -263,27 +263,22 @@ class ProductVariantImage(models.Model):
     
 
 class CarouselItem(models.Model):
-    """Model for homepage carousel items"""
-    title = models.CharField(max_length=100)
-    subtitle = models.CharField(max_length=200, blank=True)
-    button_text = models.CharField(max_length=30, default="Shop Now")
-    button_link = models.CharField(max_length=200, default="/products/")
-    image = CloudinaryField('image', folder='carousel/')
-    product = models.ForeignKey('Product', on_delete=models.SET_NULL, null=True, blank=True, 
-                               help_text="Optional: Link this carousel item to a product")
-    order = models.PositiveIntegerField(default=0, help_text="Determines the display order")
+    """Model for homepage carousel items/banners"""
+    text = models.CharField(max_length=200)  # This will store the ad text
+    image = CloudinaryField('image', folder='carousel/')  # This stays the same
     active = models.BooleanField(default=True)
+    order = models.PositiveIntegerField(default=0, help_text="Determines the display order")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ['order']
-        verbose_name = "Carousel Item"
-        verbose_name_plural = "Carousel Items"
+        verbose_name = "Banner"
+        verbose_name_plural = "Banners"
 
     def __str__(self):
-        return self.title
-    
+        return self.text
+        
 class Article(models.Model):
     title = models.CharField(max_length=255)
     content = models.TextField()
