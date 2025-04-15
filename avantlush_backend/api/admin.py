@@ -99,8 +99,11 @@ class ProductVariationForm(forms.ModelForm):
     class Meta:
         model = ProductVariation
         fields = ['variation_type', 'variation', 'price_adjustment', 
-                 'stock_quantity', 'sku', 'is_default', 'size', 'color']
-
+                 'stock_quantity', 'sku', 'is_default', 
+                 # Old single fields (for backward compatibility)
+                 'size', 'color',
+                 # New many-to-many fields
+                 'sizes', 'colors']
 # Filters
 class StockFilter(SimpleListFilter):
     title = 'stock status'
@@ -133,7 +136,10 @@ class ProductVariationInline(admin.StackedInline):
     extra = 1
     fields = (
         ('variation_type', 'variation'),
+        # Old single fields (for backward compatibility)
         ('size', 'color'),
+        # New many-to-many fields
+        ('sizes', 'colors'),
         ('price_adjustment', 'stock_quantity'),
         ('sku', 'is_default'),
         'variant_image',
@@ -415,6 +421,14 @@ class CarouselItemAdmin(admin.ModelAdmin):
             'fields': ('product', 'order', 'active', 'created_at', 'updated_at')
         }),
     )
+
+@admin.register(ProductVariation)
+class ProductVariationAdmin(admin.ModelAdmin):
+    form = ProductVariationForm
+    filter_horizontal = ('sizes', 'colors')
+    list_display = ('product', 'variation_type', 'variation', 'sku')
+    search_fields = ('product__name', 'sku')
+    inlines = [ProductVariantImageInline]
 
 @admin.register(Size)
 class SizeAdmin(admin.ModelAdmin):

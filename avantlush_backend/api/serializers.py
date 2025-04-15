@@ -1018,6 +1018,8 @@ class ProductVariationSerializer(serializers.ModelSerializer):
         required=False
     )
     final_price = serializers.SerializerMethodField()
+    
+    # Keep these for backward compatibility
     size = SizeSerializer(read_only=True)
     color = ColorSerializer(read_only=True)
     size_id = serializers.PrimaryKeyRelatedField(
@@ -1032,6 +1034,24 @@ class ProductVariationSerializer(serializers.ModelSerializer):
         write_only=True,
         required=False
     )
+    
+    # Add these for multiple sizes and colors
+    sizes = SizeSerializer(many=True, read_only=True)
+    colors = ColorSerializer(many=True, read_only=True)
+    size_ids = serializers.PrimaryKeyRelatedField(
+        queryset=Size.objects.all(),
+        many=True,
+        write_only=True,
+        required=False,
+        source='sizes'
+    )
+    color_ids = serializers.PrimaryKeyRelatedField(
+        queryset=Color.objects.all(),
+        many=True,
+        write_only=True,
+        required=False,
+        source='colors'
+    )
 
     class Meta:
         model = ProductVariation
@@ -1039,9 +1059,11 @@ class ProductVariationSerializer(serializers.ModelSerializer):
             'id', 'variation_type', 'variation', 'price_adjustment',
             'stock_quantity', 'sku', 'is_default', 'images', 'image_files',
             'variant_image_url', 'final_price', 'variant_image',
-            'size', 'size_id', 'color', 'color_id'
+            # Single size/color (backward compatibility)
+            'size', 'size_id', 'color', 'color_id',
+            # Multiple sizes/colors (new fields)
+            'sizes', 'size_ids', 'colors', 'color_ids'
         ]
-
     def get_variant_image_url(self, obj):
         return obj.variant_image.url if obj.variant_image else None
 

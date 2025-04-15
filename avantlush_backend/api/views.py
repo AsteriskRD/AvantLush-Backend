@@ -2648,10 +2648,11 @@ class DashboardViewSet(viewsets.ViewSet):
 class ProductFilter(django_filters.FilterSet):
     tab = django_filters.CharFilter(method='filter_tab')
     search = django_filters.CharFilter(method='filter_search')
+    category = django_filters.CharFilter(method='filter_category')
     
     class Meta:
         model = Product
-        fields = ['tab', 'search']
+        fields = ['tab', 'search', 'category']
 
     def filter_tab(self, queryset, name, value):
         if value == 'all':
@@ -2663,6 +2664,19 @@ class ProductFilter(django_filters.FilterSet):
         elif value == 'draft':
             return queryset.filter(status='draft')
         return queryset
+    
+    def filter_category(self, queryset, name, value):
+        """
+        Filter products by either category name or slug
+        """
+        # First try by slug (preferred for URLs)
+        category_by_slug = queryset.filter(category__slug__iexact=value)
+        if category_by_slug.exists():
+            return category_by_slug
+            
+        # If no results by slug, try by name
+        return queryset.filter(category__name__iexact=value)
+
 
     def filter_search(self, queryset, name, value):
         return queryset.filter(

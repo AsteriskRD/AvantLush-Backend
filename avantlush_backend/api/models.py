@@ -215,9 +215,13 @@ class ProductVariation(models.Model):
     is_default = models.BooleanField(default=False)
     variant_image = CloudinaryField('image', folder='product_variants/', null=True, blank=True)
     
-    # New fields for Size and Color
-    size = models.ForeignKey(Size, on_delete=models.SET_NULL, null=True, blank=True)
-    color = models.ForeignKey(Color, on_delete=models.SET_NULL, null=True, blank=True)
+    # Change these foreign keys to ManyToMany relationships
+    sizes = models.ManyToManyField(Size, related_name='variations', blank=True)
+    colors = models.ManyToManyField(Color, related_name='variations', blank=True)
+    
+    # Keep these for backward compatibility
+    size = models.ForeignKey(Size, on_delete=models.SET_NULL, null=True, blank=True, related_name='single_variations')
+    color = models.ForeignKey(Color, on_delete=models.SET_NULL, null=True, blank=True, related_name='single_variations')
 
     class Meta:
         unique_together = ['product', 'variation_type', 'variation']
