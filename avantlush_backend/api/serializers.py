@@ -160,24 +160,18 @@ from rest_framework import serializers
 
 class GoogleAuthSerializer(serializers.Serializer):
     token = serializers.CharField(required=True)
-    email = serializers.EmailField(required=True)
     location = serializers.CharField(required=False, default='Nigeria')
 
     def validate_token(self, value):
         if not value:
             raise serializers.ValidationError("Google token is required")
         return value
-    
-    def validate_email(self, value):
-        if not value:
-            raise serializers.ValidationError("Email is required")
-        return value.lower()  # Normalize email to lowercase
 
     def validate(self, attrs):
         if not attrs.get('location'):
             attrs['location'] = 'Nigeria'
         return attrs
-
+    
 class GoogleAuthCallbackSerializer(serializers.Serializer):
     code = serializers.CharField(required=True)
     location = serializers.CharField(required=False, default='Nigeria')

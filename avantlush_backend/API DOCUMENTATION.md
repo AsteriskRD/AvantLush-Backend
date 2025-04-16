@@ -1,10 +1,10 @@
-AvantLush API Documentation
-Base URL
-Production: https://avantlush-backend-2s6k.onrender.com/api/
-Development: http://localhost:8000/api/
+# AvantLush API Documentation
+
+# Base URL
+Production: 'https://avantlush-backend-2s6k.onrender.com/api/'
+Development: 'http://localhost:8000/api/'
 Authentication
 Most endpoints require authentication using JWT tokens.
-
 Authentication Header:
 
 Authorization: Bearer <jwt_token>

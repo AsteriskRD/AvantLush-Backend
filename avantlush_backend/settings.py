@@ -99,7 +99,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     
     'allauth.account.middleware.AccountMiddleware',
-    #'avantlush_backend.api.middleware.StandardizedResponseMiddleware',
+    'avantlush_backend.api.middleware.StandardizedResponseMiddleware',
 ]
 
 AUTH_USER_MODEL = 'api.CustomUser'

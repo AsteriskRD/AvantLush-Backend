@@ -1,4 +1,5 @@
 # Django imports
+import requests
 from django.conf import settings
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
@@ -67,13 +68,16 @@ from dj_rest_auth.registration.views import SocialLoginView
 from django_filters.rest_framework import DjangoFilterBackend
 from django_filters import rest_framework as django_filters
 from google.oauth2 import id_token
-from google.auth.transport import requests
+#from google.auth.transport import requests
 import stripe
 import uuid
 from decimal import Decimal
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+from rest_framework_simplejwt.tokens import RefreshToken
 
 
 # Local imports - Models
@@ -204,54 +208,134 @@ class GoogleLoginView(APIView):
         serializer = self.serializer_class(data=request.data)
         if serializer.is_valid():
             token = serializer.validated_data['token']
-            email = serializer.validated_data['email']
             location = serializer.validated_data.get('location', 'Nigeria')
-
+            
             try:
-                # Verify the Google token
-                idinfo = id_token.verify_oauth2_token(
-                    token,
-                    requests.Request(),
-                    settings.SOCIAL_AUTH_GOOGLE_OAUTH2_KEY
-                )
-
-                if idinfo['email'] != email:
+                # Print debugging info
+                print(f"Attempting to verify token with client ID: {settings.SOCIAL_AUTH_GOOGLE_OAUTH2_KEY}")
+                
+                # For testing purposes, you can try both verification methods
+                try:
+                    # Method 1: Using google-auth library
+                    idinfo = id_token.verify_oauth2_token(
+                        token,
+                        google_requests.Request(),
+                        settings.SOCIAL_AUTH_GOOGLE_OAUTH2_KEY
+                    )
+                    print("Token verified successfully with google-auth!")
+                    print(f"Token info: {idinfo}")
+                except Exception as e1:
+                    print(f"google-auth verification failed: {str(e1)}")
+                    
+                    # Method 2: Using requests to validate with Google's tokeninfo endpoint
+                    response = requests.get(
+                        f'https://oauth2.googleapis.com/tokeninfo?id_token={token}'
+                    )
+                    if response.status_code == 200:
+                        idinfo = response.json()
+                        print("Token verified successfully with tokeninfo endpoint!")
+                        print(f"Token info: {idinfo}")
+                    else:
+                        print(f"tokeninfo verification failed: {response.text}")
+                        raise ValueError("Token verification failed with both methods")
+                
+                # Check if the token is issued by Google
+                if idinfo['iss'] not in ['accounts.google.com', 'https://accounts.google.com']:
+                    print(f"Invalid issuer: {idinfo['iss']}")
                     return Response(
-                        {'error': 'Email verification failed'},
+                        {"error": "Invalid token issuer"},
                         status=status.HTTP_400_BAD_REQUEST
                     )
-
-                # Get or create user
+                
+                # Extract user information from the verified token
+                google_id = idinfo['sub']
+                email = idinfo['email']
+                name = idinfo.get('name', '')
+                first_name = idinfo.get('given_name', '')
+                last_name = idinfo.get('family_name', '')
+                
+                print(f"Extracted user info - Email: {email}, Name: {name}, First: {first_name}, Last: {last_name}, Google ID: {google_id}")
+                
+                # Check if user exists with this email
                 try:
-                    user = User.objects.get(email=email)
-                except User.DoesNotExist:
-                    user = User.objects.create_user(
+                    user = CustomUser.objects.get(email=email)
+                    print(f"Existing user found with email: {email}")
+                    # Update Google ID if not already set
+                    if not user.google_id:
+                        user.google_id = google_id
+                        user.save()
+                    
+                    # Always update the profile with the name from Google
+                    profile, created = Profile.objects.get_or_create(user=user)
+                    if name:  # If name is available from Google
+                        profile.full_name = name
+                        profile.save()
+                        print(f"Updated profile name to: {name}")
+                        
+                except CustomUser.DoesNotExist:
+                    # Create a new user
+                    print(f"Creating new user with email: {email}")
+                    user = CustomUser.objects.create_user(
                         email=email,
                         location=location,
-                        google_id=idinfo['sub']
+                        google_id=google_id
                     )
-
+                    # Create profile with name from Google
+                    profile, created = Profile.objects.get_or_create(user=user)
+                    if name:
+                        profile.full_name = name
+                        profile.save()
+                        print(f"Created profile with name: {name}")
+                
                 # Generate JWT tokens
                 refresh = RefreshToken.for_user(user)
                 
-                return Response({
-                    'user': {
-                        'email': user.email,
-                        'location': user.location,
-                    },
-                    'tokens': {
-                        'refresh': str(refresh),
-                        'access': str(refresh.access_token),
-                    }
-                })
+                # Get the user's profile (it should be updated with the Google name)
+                profile = None
+                try:
+                    profile = user.profile
+                except:
+                    pass
 
-            except ValueError:
+                # Build the response
+                user_data = {
+                    'email': user.email,
+                    'location': user.location,
+                    'uuid': user.uuid
+                }
+
+                # Add profile data if available
+                if profile:
+                    user_data['full_name'] = profile.full_name
+                    # Add any other profile fields you want to include
+                    if hasattr(profile, 'photo') and profile.photo:
+                        user_data['photo_url'] = profile.photo.url
+                    
+                return Response({
+                    'refresh': str(refresh),
+                    'access': str(refresh.access_token),
+                    'user': user_data
+                })
+                
+            except ValueError as ve:
+                # Invalid token
+                print(f"ValueError during token verification: {str(ve)}")
                 return Response(
-                    {'error': 'Invalid token'},
+                    {"error": "Invalid token", "details": str(ve)},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-
+            except Exception as e:
+                # Log the error for debugging
+                print(f"Google authentication error: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                return Response(
+                    {"error": "Authentication failed", "details": str(e)},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
     
 class AppleLoginView(SocialLoginView):
     adapter_class = AppleOAuth2Adapter
