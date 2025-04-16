@@ -273,8 +273,8 @@ class CarouselItem(models.Model):
 
     class Meta:
         ordering = ['order']
-        verbose_name = "Banner"
-        verbose_name_plural = "Banners"
+        verbose_name = "Carousel Banner"
+        verbose_name_plural = "Carousel Banners"
 
     def __str__(self):
         return self.text
