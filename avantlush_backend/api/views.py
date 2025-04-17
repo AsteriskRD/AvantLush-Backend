@@ -2796,7 +2796,7 @@ class ProductViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = Product.objects.prefetch_related(
             'variations',
-            'variations__images'
+            
         )
         
         # If user is authenticated, prefetch wishlist data

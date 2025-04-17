@@ -47,7 +47,6 @@ from .models import (
     Category,
     models,
     Customer,
-    ProductVariantImage,
     CarouselItem,
     Size,
     Color,
@@ -956,17 +955,7 @@ class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
         fields = ['id', 'name', 'slug']
-
-class ProductVariantImageSerializer(serializers.ModelSerializer):
-    image_url = serializers.SerializerMethodField()
-
-    def get_image_url(self, obj):
-        return obj.image.url if obj.image else None
-
-    class Meta:
-        model = ProductVariantImage
-        fields = ['id', 'image_url', 'is_primary']
-    
+   
 class SizeSerializer(serializers.ModelSerializer):
     class Meta:
         model = Size
@@ -1004,13 +993,6 @@ class ProductColorSerializer(serializers.ModelSerializer):
 
 
 class ProductVariationSerializer(serializers.ModelSerializer):
-    images = ProductVariantImageSerializer(many=True, read_only=True)
-    variant_image_url = serializers.SerializerMethodField()
-    image_files = serializers.ListField(
-        child=serializers.FileField(max_length=1000000, allow_empty_file=False, use_url=False),
-        write_only=True,
-        required=False
-    )
     final_price = serializers.SerializerMethodField()
     
     # Keep these for backward compatibility
@@ -1051,16 +1033,14 @@ class ProductVariationSerializer(serializers.ModelSerializer):
         model = ProductVariation
         fields = [
             'id', 'variation_type', 'variation', 'price_adjustment',
-            'stock_quantity', 'sku', 'is_default', 'images', 'image_files',
-            'variant_image_url', 'final_price', 'variant_image',
+            'stock_quantity', 'sku', 'is_default',
+             'final_price', 
             # Single size/color (backward compatibility)
             'size', 'size_id', 'color', 'color_id',
             # Multiple sizes/colors (new fields)
             'sizes', 'size_ids', 'colors', 'color_ids'
         ]
-    def get_variant_image_url(self, obj):
-        return obj.variant_image.url if obj.variant_image else None
-
+    
     def get_final_price(self, obj):
         # Calculate the final price by adding the base price of the product 
         # and the price adjustment of the variant
@@ -1069,60 +1049,12 @@ class ProductVariationSerializer(serializers.ModelSerializer):
         return float(base_price) + float(price_adjustment)
 
     def create(self, validated_data):
-        image_files = validated_data.pop('image_files', [])
         variant = super().create(validated_data)
-        
-        # Handle image uploads
-        for index, image_file in enumerate(image_files):
-            try:
-                # Upload main variant image
-                if index == 0:
-                    # Direct assignment to CloudinaryField
-                    variant.variant_image = image_file
-                    variant.save()
-
-                # Create additional variant images
-                result = upload(
-                    image_file,
-                    folder=f'product_variants/{variant.product.id}/{variant.id}/',
-                    resource_type='auto'
-                )
-                ProductVariantImage.objects.create(
-                    variant=variant,
-                    image=image_file,  # Pass the file directly, not the URL
-                    is_primary=(index == 0)
-                )
-                
-            except Exception as e:
-                raise serializers.ValidationError(f"Failed to upload image: {str(e)}")
-        
         return variant
 
     def update(self, instance, validated_data):
-        image_files = validated_data.pop('image_files', [])
+        # Simply call the super method to update the instance
         variant = super().update(instance, validated_data)
-        
-        if image_files:
-            # Optional: Clear existing images
-            instance.images.all().delete()
-            
-            for index, image_file in enumerate(image_files):
-                try:
-                    # Update main variant image
-                    if index == 0:
-                        variant.variant_image = image_file
-                        variant.save()
-
-                    # Create additional variant images
-                    ProductVariantImage.objects.create(
-                        variant=variant,
-                        image=image_file,  # Pass the file directly
-                        is_primary=(index == 0)
-                    )
-                    
-                except Exception as e:
-                    raise serializers.ValidationError(f"Failed to upload image: {str(e)}")
-        
         return variant
 
 class ProductManagementSerializer(serializers.ModelSerializer):
@@ -1204,7 +1136,7 @@ class ProductManagementSerializer(serializers.ModelSerializer):
         result = {
             'main_image': None,
             'gallery': [],
-            'variants': {}
+        #    'variants': {}
         }
         
         # Add main image
@@ -1216,19 +1148,19 @@ class ProductManagementSerializer(serializers.ModelSerializer):
             result['gallery'] = obj.images
         
         # Add variant images
-        for variant in obj.variations.all():
-            variant_id = str(variant.id)
-            result['variants'][variant_id] = []
+#      for variant in obj.variations.all():
+#           variant_id = str(variant.id)
+#            result['variants'][variant_id] = []
             
             # Add variant's main image
-            if variant.variant_image:
-                result['variants'][variant_id].append(variant.variant_image.url)
+#            if variant.variant_image:
+#                result['variants'][variant_id].append(variant.variant_image.url)
+#            
+#            # Add variant's additional images
+#            for img in variant.images.all():
+#                if img.image:
+#                    result['variants'][variant_id].append(img.image.url)
             
-            # Add variant's additional images
-            for img in variant.images.all():
-                if img.image:
-                    result['variants'][variant_id].append(img.image.url)
-        
         return result
 
     def get_is_liked(self, obj):

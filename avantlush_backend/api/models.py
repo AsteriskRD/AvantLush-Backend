@@ -213,7 +213,7 @@ class ProductVariation(models.Model):
     stock_quantity = models.PositiveIntegerField(default=0)
     sku = models.CharField(max_length=100, unique=True)
     is_default = models.BooleanField(default=False)
-    variant_image = CloudinaryField('image', folder='product_variants/', null=True, blank=True)
+    
     
     # Change these foreign keys to ManyToMany relationships
     sizes = models.ManyToManyField(Size, related_name='variations', blank=True)
@@ -247,20 +247,7 @@ class ProductColor(models.Model):
         unique_together = ['product', 'color']
     
     def __str__(self):
-        return f"{self.product.name} - Color: {self.color.name}"
-
-    
-class ProductVariantImage(models.Model):
-    variant = models.ForeignKey('ProductVariation', related_name='images', on_delete=models.CASCADE)
-    image = CloudinaryField('image', folder='product_variants/')
-    is_primary = models.BooleanField(default=False)
-    
-    class Meta:
-        ordering = ['-is_primary', 'id']
-
-    def __str__(self):
-        return f"Image for {self.variant}"
-    
+        return f"{self.product.name} - Color: {self.color.name}"    
 
 class CarouselItem(models.Model):
     """Model for homepage carousel items/banners"""

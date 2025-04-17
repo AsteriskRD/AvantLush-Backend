@@ -25,7 +25,6 @@ from .models import (
     OrderTracking,
     SupportTicket,
     TicketResponse,
-    ProductVariantImage,
     Category,
     CarouselItem,
     Size,
@@ -85,16 +84,6 @@ class ProductAdminForm(forms.ModelForm):
 
 from django.forms.widgets import ClearableFileInput
 class ProductVariationForm(forms.ModelForm):
-    variant_images = CloudinaryFileField(
-        options={
-            'folder': 'product_variants/',
-            'allowed_formats': ['jpg', 'png'],
-            'crop': 'limit',
-            'width': 1000,
-            'height': 1000,
-        },
-        required=False
-    )
     
     class Meta:
         model = ProductVariation
@@ -125,10 +114,6 @@ class StockFilter(SimpleListFilter):
             return queryset.filter(stock_quantity__gte=10)
 
 # Inlines
-class ProductVariantImageInline(admin.TabularInline):
-    model = ProductVariantImage
-    extra = 1
-    fields = ('image', 'is_primary')
 
 class ProductVariationInline(admin.StackedInline):
     model = ProductVariation
@@ -142,13 +127,10 @@ class ProductVariationInline(admin.StackedInline):
         ('sizes', 'colors'),
         ('price_adjustment', 'stock_quantity'),
         ('sku', 'is_default'),
-        'variant_image',
+        
     )
 
-    def get_formset(self, request, obj=None, **kwargs):
-        formset = super().get_formset(request, obj, **kwargs)
-        formset.form.base_fields['variant_image'].widget = forms.ClearableFileInput()
-        return formset
+    
 
 class ProductSizeInline(admin.TabularInline):
     model = ProductSize
@@ -292,28 +274,6 @@ class ProductAdmin(admin.ModelAdmin):
         if 'product_details' in form.cleaned_data:
             obj.product_details = form.cleaned_data['product_details']
             
-        files = request.FILES.getlist('variant_images')
-        if files:
-            from cloudinary.uploader import upload
-            
-            # Get or create default variant if none exists
-            default_variant, created = ProductVariation.objects.get_or_create(
-                product=obj,
-                variation_type='default',
-                variation='default',
-                defaults={'is_default': True}
-            )
-            
-            for file in files:
-                result = upload(
-                    file,
-                    folder=f'products/variants/{obj.id}/',
-                    resource_type='auto'
-                )
-                ProductVariantImage.objects.create(
-                    variant=default_variant,
-                    image=result['secure_url']
-                )
         
         admin.ModelAdmin.save_model(self, request, obj, form, change)
     def save_formset(self, request, form, formset, change):
@@ -322,39 +282,6 @@ class ProductAdmin(admin.ModelAdmin):
         for instance in instances:
             instance.save()
             
-            if isinstance(instance, ProductVariation):
-                form_index = next((i for i, f in enumerate(formset.forms) 
-                                if f.instance == instance), None)
-                if form_index is not None:
-                    form = formset.forms[form_index]
-                    image_file = form.cleaned_data.get('variant_image')
-                    
-                    if image_file:
-                        from cloudinary.uploader import upload
-                        try:
-                            # Delete existing primary image if any
-                            ProductVariantImage.objects.filter(
-                                variant=instance, 
-                                is_primary=True
-                            ).delete()
-                            
-                            # Upload new image
-                            result = upload(
-                                image_file,
-                                folder=f'product_variants/{instance.product.id}/{instance.id}/',
-                                resource_type='auto'
-                            )
-                            
-                            # Create new primary image
-                            ProductVariantImage.objects.create(
-                                variant=instance,
-                                image=result['secure_url'],
-                                is_primary=True
-                            )
-                        except Exception as e:
-                            messages.error(request, f"Failed to upload image: {str(e)}")
-        
-        formset.save_m2m()
 # Other Admin Registrations
 class CustomUserAdmin(UserAdmin):
     list_display = ('email', 'location', 'is_active', 'date_joined', 'is_staff')
@@ -428,7 +355,7 @@ class ProductVariationAdmin(admin.ModelAdmin):
     filter_horizontal = ('sizes', 'colors')
     list_display = ('product', 'variation_type', 'variation', 'sku')
     search_fields = ('product__name', 'sku')
-    inlines = [ProductVariantImageInline]
+    
 
 @admin.register(Size)
 class SizeAdmin(admin.ModelAdmin):
@@ -486,11 +413,6 @@ class AddressAdmin(admin.ModelAdmin):
     list_display = ('user', 'street_address', 'city', 'state', 'is_default')
     list_filter = ('is_default', 'state')
     search_fields = ('user__email', 'street_address', 'city', 'state')
-
-@admin.register(ProductVariantImage)
-class ProductVariantImageAdmin(admin.ModelAdmin):
-    list_display = ['variant', 'image', 'is_primary']
-    list_filter = ['is_primary', 'variant']
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
