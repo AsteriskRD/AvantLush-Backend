@@ -1245,8 +1245,7 @@ class ProductManagementSerializer(serializers.ModelSerializer):
                 uploaded_urls.append(url)
             
             # Update the images JSON field
-            current_images = product.images or []
-            product.images = current_images + uploaded_urls
+            product.images = uploaded_urls
             product.save()
         
         return product

@@ -3082,6 +3082,7 @@ class ProductViewSet(viewsets.ModelViewSet):
         categories = Category.objects.all()
         serializer = CategorySerializer(categories, many=True)
         return Response(serializer.data)
+    
     @action(detail=True, methods=['POST'], url_path='upload-images')
     def upload_images(self, request, pk=None):
         """Handle multiple image uploads for products"""
@@ -3096,6 +3097,9 @@ class ProductViewSet(viewsets.ModelViewSet):
         uploaded_urls = []
         errors = []
         
+        # Get current images
+        current_images = product.images or []
+        
         for image in request.FILES.getlist('images'):
             try:
                 # Upload to Cloudinary
@@ -3109,15 +3113,15 @@ class ProductViewSet(viewsets.ModelViewSet):
                 image_url = upload_result['secure_url']
                 uploaded_urls.append(image_url)
                 
+                # Add to current images
+                current_images.append(image_url)
+                
             except Exception as e:
                 errors.append(f"Failed to upload {image.name}: {str(e)}")
         
-        if uploaded_urls:
-            # Get current images and append new ones
-            current_images = product.images or []
-            current_images.extend(uploaded_urls)
-            product.images = current_images
-            product.save()
+        # Save the updated images list to the product
+        product.images = current_images
+        product.save()
         
         response_data = {
             'uploaded_images': uploaded_urls,
@@ -3129,7 +3133,6 @@ class ProductViewSet(viewsets.ModelViewSet):
             response_data['errors'] = errors
             
         return Response(response_data)
-
     @action(detail=True, methods=['DELETE'], url_path='remove-images')
     def remove_images(self, request, pk=None):
         """Handle removal of multiple images"""
