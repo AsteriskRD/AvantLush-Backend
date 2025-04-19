@@ -10,8 +10,8 @@ echo "Running database migrations..."
 python manage.py migrate
 
 
-echo "Populating initial product data..."
-python manage.py populate_products || true
+#echo "Populating initial product data..."
+#python manage.py populate_products || true
 
 #echo "Fixing product table..."
 #python manage.py fix_product_table || true  # Add || true to prevent build failure
@@ -21,13 +21,13 @@ python manage.py populate_products || true
 #python manage.py update_product_images || true  # Add || true to prevent build failure
 
 #create superuser
-echo "Creating superuser..."
-python manage.py ensure_superuser
-echo "Superuser creation completed"
+#echo "Creating superuser..."
+#python manage.py ensure_superuser
+#echo "Superuser creation completed"
 
-echo "Populating ordertable..."
-python manage.py create_dummy_orders --email danieludechukwu117@gmail.com --count 5 || true
-echo "Order Population completed"
+#echo "Populating ordertable..."
+#python manage.py create_dummy_orders --email danieludechukwu117@gmail.com --count 5 || true
+#echo "Order Population completed"
 
 
 echo "Collecting static files..."

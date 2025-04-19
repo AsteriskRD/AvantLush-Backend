@@ -1136,17 +1136,24 @@ class ProductManagementSerializer(serializers.ModelSerializer):
         result = {
             'main_image': None,
             'gallery': [],
-        #    'variants': {}
         }
         
         # Add main image
         if obj.main_image:
             result['main_image'] = obj.main_image.url
+            # Also add it to the gallery as the first item
+            result['gallery'] = [obj.main_image.url]
         
-        # Add gallery images from JSONField
+        # Add additional gallery images from JSONField
         if obj.images:
-            result['gallery'] = obj.images
-        
+            # If we already have a main image in gallery, extend the list
+            # Otherwise assign directly
+            if result['gallery']:
+                result['gallery'].extend(obj.images)
+            else:
+                result['gallery'] = obj.images
+                
+        return result        
         # Add variant images
 #      for variant in obj.variations.all():
 #           variant_id = str(variant.id)
