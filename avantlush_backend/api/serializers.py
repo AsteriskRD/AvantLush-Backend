@@ -805,13 +805,16 @@ class ProductRecommendationSerializer(serializers.ModelSerializer):
             url, options = cloudinary_url(obj.main_image.public_id, format=obj.main_image.format)
             return url
         return None
-
 class ReviewTagSerializer(serializers.ModelSerializer):
     class Meta:
         model = ReviewTag
         fields = ['id', 'name', 'slug', 'count']
 
 class ReviewSerializer(serializers.ModelSerializer):
+    name = serializers.CharField(write_only=True, required=True)  # For user's name input
+    title = serializers.CharField(required=True)  # For review title
+    content = serializers.CharField(required=True)  # For review details
+    rating = serializers.IntegerField(min_value=1, max_value=5, required=True)
     user_email = serializers.EmailField(source='user.email', read_only=True)
     tags = ReviewTagSerializer(many=True, read_only=True)
     tag_ids = serializers.ListField(
@@ -825,8 +828,8 @@ class ReviewSerializer(serializers.ModelSerializer):
     class Meta:
         model = Review
         fields = [
-            'id', 'product', 'user_email', 'rating', 'content',
-            'images', 'tags', 'tag_ids', 'helpful_count', 'is_helpful',
+            'id', 'product', 'user_email', 'name', 'title', 'rating', 'content',
+            'tags', 'tag_ids', 'helpful_count', 'is_helpful',
             'variant', 'is_verified_purchase', 'created_at'
         ]
         read_only_fields = ['user', 'helpful_votes', 'is_verified_purchase']
@@ -842,7 +845,23 @@ class ReviewSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         tag_ids = validated_data.pop('tag_ids', [])
-        review = Review.objects.create(**validated_data)
+        name = validated_data.pop('name', None)
+        
+        # Update user's name if provided
+        if name and self.context['request'].user:
+            user = self.context['request'].user
+            user.first_name = name
+            user.save()
+
+        if 'user' in validated_data:
+            validated_data.pop('user')
+        
+        # Create the review
+        review = Review.objects.create(
+            user=self.context['request'].user,
+            **validated_data
+        )
+        
         if tag_ids:
             review.tags.set(tag_ids)
             # Update tag counts
