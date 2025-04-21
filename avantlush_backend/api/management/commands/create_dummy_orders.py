@@ -3,8 +3,6 @@ from django.utils import timezone
 from avantlush_backend.api.models import CustomUser, Order, OrderItem, Product, OrderTracking
 import random
 from decimal import Decimal
-import cloudinary.uploader
-from cloudinary.utils import cloudinary_url
 from datetime import timedelta
 
 class Command(BaseCommand):
@@ -29,58 +27,15 @@ class Command(BaseCommand):
             self.stdout.write(self.style.ERROR("User not found. Please check the email address."))
             return
 
-        # Use specific products by name
+        # Use specific products by name - make sure these exist in your database
         product_names = [
-            "Ergonomic Chair",
-            "LED Wall Sconce",
-            "Three Seater",
-            "Executive Office Chair",
             "Rattan Accent Chair",
-            "Velvet Dining Chair Set"
+            "LED Wall Sconce",
+            "Executive Office Chair",
+            "Geometric Table Lamp",
+            "Storage Ottoman",
+            "Floating Wall Shelf Set"
         ]
-
-        # Image URLs for products
-        PRODUCT_IMAGES = {
-            "Ergonomic Chair": {
-                "main_image": "https://res.cloudinary.com/dvfwa8fzh/image/upload/v1738680206/products/Egonomic_chair2_pycpbr.jpg",
-                "images": [
-                    "https://res.cloudinary.com/dvfwa8fzh/image/upload/v1738680192/products/Chair_lno7it.jpg",
-                    "https://res.cloudinary.com/dvfwa8fzh/image/upload/v1738680221/products/single_chair_rk11hk.jpg"
-                ]
-            },
-            "LED Wall Sconce": {
-                "main_image": "https://res.cloudinary.com/dvfwa8fzh/image/upload/v1738680218/products/lampstand_hyrikx.jpg",
-                "images": [
-                    "https://res.cloudinary.com/dvfwa8fzh/image/upload/v1738680209/products/flowervase_uqrdfc.jpg"
-                ]
-            },
-            "Three Seater": {
-                "main_image": "https://res.cloudinary.com/dvfwa8fzh/image/upload/v1738680226/products/three_seater_w3145s.jpg",
-                "images": [
-                    "https://res.cloudinary.com/dvfwa8fzh/image/upload/v1738680240/products/WhatsApp_Image_2025-02-04_at_12.48.24_3218da74_gtuxwe.jpg"
-                ]
-            },
-            "Executive Office Chair": {
-                "main_image": "https://res.cloudinary.com/dvfwa8fzh/image/upload/v1738680192/products/Chair_lno7it.jpg",
-                "images": [
-                    "https://res.cloudinary.com/dvfwa8fzh/image/upload/v1738680206/products/Egonomic_chair2_pycpbr.jpg"
-                ]
-            },
-            "Rattan Accent Chair": {
-                "main_image": "https://res.cloudinary.com/dvfwa8fzh/image/upload/v1738680221/products/single_chair_rk11hk.jpg",
-                "images": [
-                    "https://res.cloudinary.com/dvfwa8fzh/image/upload/v1738680192/products/Chair_lno7it.jpg"
-                ]
-            },
-            "Velvet Dining Chair Set": {
-                "main_image": "https://res.cloudinary.com/dvfwa8fzh/image/upload/v1738680195/products/Dinng_table2_vyc9al.jpg",
-                "images": [
-                    "https://res.cloudinary.com/dvfwa8fzh/image/upload/v1738680197/products/dinng_table4_cnyuyz.jpg",
-                    "https://res.cloudinary.com/dvfwa8fzh/image/upload/v1738680200/products/dinnig_table_nak9zd.jpg",
-                    "https://res.cloudinary.com/dvfwa8fzh/image/upload/v1738680203/products/dinnig_table2_hkaehc.jpg"
-                ]
-            }
-        }
 
         products = list(Product.objects.filter(name__in=product_names))
 
@@ -91,29 +46,6 @@ class Command(BaseCommand):
             if not products:
                 self.stdout.write(self.style.ERROR("No products found in the database. Please add some products first."))
                 return
-
-        # Update products with images
-        for product in products:
-            if product.name in PRODUCT_IMAGES:
-                # Update main image
-                try:
-                    # For CloudinaryField, we need to set the URL properly
-                    # This approach assumes the URL is already in Cloudinary
-                    main_image_url = PRODUCT_IMAGES[product.name]["main_image"]
-                    
-                    # Extract the public_id from the URL (everything after the last slash and before the file extension)
-                    public_id = main_image_url.split('/')[-1].split('.')[0]
-                    
-                    # Set the main_image field with the public_id
-                    product.main_image = main_image_url
-                    
-                    # Update images JSONField
-                    product.images = PRODUCT_IMAGES[product.name]["images"]
-                    
-                    product.save()
-                    self.stdout.write(self.style.SUCCESS(f"Updated images for {product.name}"))
-                except Exception as e:
-                    self.stdout.write(self.style.ERROR(f"Error updating images for {product.name}: {str(e)}"))
 
         self.stdout.write(self.style.SUCCESS(f"Found {len(products)} products to use in orders"))
 
@@ -129,7 +61,7 @@ class Command(BaseCommand):
             else:
                 status = 'PENDING'
             
-            # Create the order
+            # Create the order with exact text matching what's shown in console
             order = Order(
                 user=user,
                 status=status,
@@ -147,35 +79,43 @@ class Command(BaseCommand):
                 discount=Decimal('0.00'),
                 total=Decimal('0.00'),
                 billing_address=f"{random.randint(1, 999)} Main St, Lagos, Nigeria",
-                note="This is a dummy order created for testing purposes."
+                # Use this exact note text to match what's shown in your console
+                note="A demo order created for testing purposes."
             )
             
             # Save to generate order number
             order.save()
             
-            # Add products as order items
+            # Add products as order items - keeping this simple to match structure
             num_products = min(random.randint(1, 3), len(products))
             order_products = random.sample(products, num_products)
             
+            # Track subtotal for order
+            order_subtotal = Decimal('0.00')
+            
             for product in order_products:
                 quantity = random.randint(1, 3)
-                price = product.price
+                price = product.base_price  # Use base_price from product
                 
-                OrderItem.objects.create(
+                # Create order item
+                item = OrderItem.objects.create(
                     order=order,
                     product=product,
                     quantity=quantity,
-                    price=price,
-                    subtotal=price * quantity
+                    # Use price field (will show as unit_price in serializer)
+                    price=Decimal(str(price)),
+                    # Use subtotal field (will show as total_price in serializer)
+                    subtotal=Decimal(str(price)) * quantity
                 )
+                
+                order_subtotal += item.subtotal
             
             # Recalculate order total
-            order.subtotal = sum(item.subtotal for item in order.items.all())
+            order.subtotal = order_subtotal
             order.total = order.subtotal + order.shipping_cost + order.tax - order.discount
             order.save()
             
             # Calculate estimated delivery date based on order type
-            # Standard: 3-5 days, Express: 1-2 days
             if order.order_type == 'STANDARD':
                 delivery_days = random.randint(3, 5)
             else:  # EXPRESS
@@ -193,7 +133,7 @@ class Command(BaseCommand):
                     timestamp=timezone.now() - timedelta(days=5)
                 )
                 
-                # Add estimated delivery information
+                # Add estimated delivery information - formatted exactly as expected by serializer
                 OrderTracking.objects.create(
                     order=order,
                     status="Estimated Delivery",
