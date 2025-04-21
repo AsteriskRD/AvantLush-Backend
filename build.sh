@@ -25,9 +25,9 @@ python manage.py migrate
 #python manage.py ensure_superuser
 #echo "Superuser creation completed"
 
-#echo "Populating ordertable..."
-#python manage.py create_dummy_orders --email danieludechukwu117@gmail.com --count 5 || true
-#echo "Order Population completed"
+echo "Populating ordertable..."
+python manage.py create_dummy_orders --email danieludechukwu117@gmail.com --count 5 || true
+echo "Order Population completed"
 
 
 echo "Collecting static files..."
