@@ -615,6 +615,76 @@ class OrderSerializer(serializers.ModelSerializer):
         return obj.get_status_display()
 
 
+class FlatOrderItemSerializer(serializers.ModelSerializer):
+    order_number = serializers.CharField(source='order.order_number')
+    customer_email = serializers.EmailField(source='order.user.email')
+    customer_name = serializers.SerializerMethodField()
+    status = serializers.CharField(source='order.status')
+    status_display = serializers.SerializerMethodField()
+    total = serializers.DecimalField(source='subtotal', max_digits=10, decimal_places=2)
+    created_at = serializers.DateTimeField(source='order.created_at')
+    updated_at = serializers.DateTimeField(source='order.updated_at')
+    order_date = serializers.DateField(source='order.order_date')
+    order_time = serializers.TimeField(source='order.order_time')
+    shipping_address = serializers.CharField(source='order.shipping_address')
+    order_type = serializers.CharField(source='order.order_type')
+    payment_type = serializers.CharField(source='order.payment_type')
+    estimated_delivery_date = serializers.SerializerMethodField()
+    product_name = serializers.CharField(source='product.name')
+    product_image = serializers.SerializerMethodField()
+    
+    def get_customer_name(self, obj):
+        if obj.order.user.first_name or obj.order.user.last_name:
+            return f"{obj.order.user.first_name} {obj.order.user.last_name}".strip()
+        return obj.order.user.email
+    
+    def get_status_display(self, obj):
+        return obj.order.get_status_display()
+    
+    def get_estimated_delivery_date(self, obj):
+        # Look for tracking entry with "Estimated Delivery" status
+        estimated_delivery = obj.order.tracking_history.filter(status="Estimated Delivery").first()
+        
+        if estimated_delivery:
+            # Extract date from description using regex
+            import re
+            match = re.search(r'by ([A-Za-z]+, [A-Za-z]+ \d+, \d{4})', estimated_delivery.description)
+            if match:
+                return match.group(1)
+        
+        # If no specific tracking entry, calculate based on order type and date
+        if obj.order.order_type == 'EXPRESS':
+            days = 2
+        else:  # STANDARD
+            days = 5
+            
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        base_date = obj.order.created_at
+        delivery_date = base_date + timedelta(days=days)
+        
+        # Format the date nicely
+        return delivery_date.strftime("%A, %B %d, %Y")
+    
+    def get_product_image(self, obj):
+        # Get main image URL
+        if obj.product.main_image:
+            return obj.product.main_image.url
+        elif obj.product.images and len(obj.product.images) > 0:
+            return obj.product.images[0]
+        return None
+    
+    class Meta:
+        model = OrderItem
+        fields = [
+            'id', 'order_number', 'customer_email', 'customer_name',
+            'product', 'product_name', 'quantity', 'price', 'total', 'status', 
+            'status_display', 'shipping_address', 'created_at', 'estimated_delivery_date',
+            'updated_at', 'payment_type', 'order_type', 'product_image',
+            'order_date', 'order_time'
+        ]
+        
 class OrderCreateSerializer(serializers.ModelSerializer):
     items = serializers.ListField(
         child=serializers.DictField(),

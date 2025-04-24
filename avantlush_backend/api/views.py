@@ -153,6 +153,7 @@ from .serializers import (
     CarouselItemPublicSerializer,
     SizeSerializer,
     ColorSerializer,
+    FlatOrderItemSerializer,
     
     
 )
@@ -1610,6 +1611,26 @@ class OrderViewSet(viewsets.ModelViewSet):
         
         order.save()
         return Response({'status': 'success'})
+    
+    @action(detail=False, methods=['GET'])
+    def flat_orders(self, request):
+        """Get orders with each item as a separate entry"""
+        queryset = OrderItem.objects.all().select_related(
+            'order', 'order__user', 'product'
+        ).prefetch_related('order__tracking_history').order_by('-order__created_at', 'id')
+        
+        # Apply filters if needed
+        if not request.user.is_staff:
+            queryset = queryset.filter(order__user=request.user)
+        
+        # Apply pagination
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = FlatOrderItemSerializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = FlatOrderItemSerializer(queryset, many=True)
+        return Response(serializer.data)
 
     @action(detail=True, methods=['POST'])
     def update_payment(self, request, pk=None):
