@@ -384,6 +384,80 @@ class ProductVariationAdmin(admin.ModelAdmin):
     list_display = ('product', 'variation_type', 'variation', 'sku')
     search_fields = ('product__name', 'sku')
     
+    def save_model(self, request, obj, form, change):
+        """Override save_model to sync sizes and colors when a variation is saved"""
+        super().save_model(request, obj, form, change)
+        # Sync available sizes and colors for the product
+        self.sync_product_variations(obj.product)
+        
+    def save_formset(self, request, form, formset, change):
+        """Override save_formset to sync sizes and colors after formset is saved"""
+        instances = formset.save()
+        
+        # If this is a ProductVariation formset, sync the product variations
+        if formset.model == ProductVariation and instances:
+            for instance in instances:
+                self.sync_product_variations(instance.product)
+                
+    def sync_product_variations(self, product):
+        """Sync sizes and colors for a product based on its variations"""
+        self.sync_available_sizes(product)
+        self.sync_available_colors(product)
+        messages.success(request, f"Product '{product.name}' variants synchronized successfully")
+    
+    def sync_available_sizes(self, product):
+        """Synchronize available sizes for the product based on its variations"""
+        # Get all sizes from variations
+        variation_sizes = set()
+        for variation in product.variations.all():
+            # Add sizes from ManyToMany relationship
+            variation_sizes.update(size.id for size in variation.sizes.all())
+            # Add size from ForeignKey relationship if exists
+            if variation.size:
+                variation_sizes.add(variation.size.id)
+        
+        # Clear existing product sizes
+        ProductSize.objects.filter(product=product).delete()
+        
+        # Create new product sizes
+        for size_id in variation_sizes:
+            try:
+                size = Size.objects.get(id=size_id)
+                ProductSize.objects.create(product=product, size=size)
+            except Size.DoesNotExist:
+                pass
+        
+        # Update available_sizes field if you're using it (seems to be a JSONField)
+        product.available_sizes = list(variation_sizes)
+        # Use update to avoid triggering other save signals
+        Product.objects.filter(id=product.id).update(available_sizes=list(variation_sizes))
+    
+    def sync_available_colors(self, product):
+        """Synchronize available colors for the product based on its variations"""
+        # Get all colors from variations
+        variation_colors = set()
+        for variation in product.variations.all():
+            # Add colors from ManyToMany relationship
+            variation_colors.update(color.id for color in variation.colors.all())
+            # Add color from ForeignKey relationship if exists
+            if variation.color:
+                variation_colors.add(variation.color.id)
+        
+        # Clear existing product colors
+        ProductColor.objects.filter(product=product).delete()
+        
+        # Create new product colors
+        for color_id in variation_colors:
+            try:
+                color = Color.objects.get(id=color_id)
+                ProductColor.objects.create(product=product, color=color)
+            except Color.DoesNotExist:
+                pass
+        
+        # Update available_colors field if you're using it (seems to be a JSONField)
+        product.available_colors = list(variation_colors)
+        # Use update to avoid triggering other save signals
+        Product.objects.filter(id=product.id).update(available_colors=list(variation_colors))    
 
 @admin.register(Size)
 class SizeAdmin(admin.ModelAdmin):

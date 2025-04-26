@@ -107,7 +107,9 @@ from .models import (
     OrderItem,
     CarouselItem,
     Size,
-    Color
+    Color,
+    ProductSize,
+    ProductColor
     
 )
 
@@ -1250,17 +1252,57 @@ class CartViewSet(viewsets.ModelViewSet):
         cart = self.get_cart()
         product_id = request.data.get('product')
         quantity = int(request.data.get('quantity', 1))
+        size_id = request.data.get('size_id')  # Get size_id from request
+        color_id = request.data.get('color_id')  # Get color_id from request
         
-        print(f"Adding to cart - Product ID: {product_id}, Quantity: {quantity}")
+        print(f"Adding to cart - Product ID: {product_id}, Quantity: {quantity}, Size ID: {size_id}, Color ID: {color_id}")
         print(f"Current cart: ID {cart.id}, Session: {cart.session_key}")
         
         try:
             product = Product.objects.get(id=product_id)
             
-            # Update or create cart item
+            # Get size and color objects if IDs were provided
+            size = None
+            color = None
+            
+            if size_id:
+                try:
+                    size = Size.objects.get(id=size_id)
+                except Size.DoesNotExist:
+                    return Response(
+                        {'error': 'Size not found'},
+                        status=status.HTTP_404_NOT_FOUND
+                    )
+                    
+            if color_id:
+                try:
+                    color = Color.objects.get(id=color_id)
+                except Color.DoesNotExist:
+                    return Response(
+                        {'error': 'Color not found'},
+                        status=status.HTTP_404_NOT_FOUND
+                    )
+                    
+            # Validate that the selected size is available for this product
+            if size and not ProductSize.objects.filter(product=product, size=size).exists():
+                return Response(
+                    {'error': f'Size {size.name} is not available for this product'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+                
+            # Validate that the selected color is available for this product
+            if color and not ProductColor.objects.filter(product=product, color=color).exists():
+                return Response(
+                    {'error': f'Color {color.name} is not available for this product'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Update or create cart item with size and color
             cart_item, created = CartItem.objects.get_or_create(
                 cart=cart,
                 product=product,
+                size=size,
+                color=color,
                 defaults={'quantity': quantity}
             )
             
@@ -1297,6 +1339,7 @@ class CartViewSet(viewsets.ModelViewSet):
                 {'error': f'Failed to add item to cart: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+    
     @action(detail=False, methods=['POST'])
     def update_quantity(self, request):
         """Update item quantity in cart"""
@@ -1319,15 +1362,15 @@ class CartViewSet(viewsets.ModelViewSet):
                 cart_item.save()
             else:
                 cart_item.delete()
-                
+                    
             return Response({'status': 'success'})
-            
+                
         except CartItem.DoesNotExist:
             return Response(
                 {'error': 'Cart item not found'},
                 status=status.HTTP_404_NOT_FOUND
             )
-
+    
     @action(detail=False, methods=['POST'])
     def apply_discount(self, request):
         """Apply discount code to cart"""

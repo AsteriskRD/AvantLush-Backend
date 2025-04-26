@@ -20,6 +20,10 @@ python manage.py migrate
 #python manage.py update_products_data || true  # Add || true to prevent build failure
 #python manage.py update_product_images || true  # Add || true to prevent build failure
 
+# Add product variations sync command
+echo "Syncing product variations..."
+python manage.py sync_product_variations || true  # Add || true to prevent build failure
+
 #create superuser
 #echo "Creating superuser..."
 #python manage.py ensure_superuser

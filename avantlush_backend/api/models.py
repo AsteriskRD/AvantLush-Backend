@@ -183,7 +183,62 @@ class Product(models.Model):
         ).exclude(id=self.id).annotate(
             purchase_count=models.Count('id')
         ).order_by('-purchase_count')[:limit]
+    
+    def sync_available_sizes(self):
+        """
+        Synchronize available sizes for the product based on its variations
+        """
+        # Get all sizes from variations
+        variation_sizes = set()
+        for variation in self.variations.all():
+            # Add sizes from ManyToMany relationship
+            variation_sizes.update(size.id for size in variation.sizes.all())
+            # Add size from ForeignKey relationship if exists
+            if variation.size:
+                variation_sizes.add(variation.size.id)
+        
+        # Clear existing product sizes
+        ProductSize.objects.filter(product=self).delete()
+        
+        # Create new product sizes
+        for size_id in variation_sizes:
+            try:
+                size = Size.objects.get(id=size_id)
+                ProductSize.objects.create(product=self, size=size)
+            except Size.DoesNotExist:
+                pass
+        
+        # Update available_sizes field if you're using it (seems to be a JSONField)
+        self.available_sizes = list(variation_sizes)
+        self.save(update_fields=['available_sizes'])
 
+def sync_available_colors(self):
+    """
+    Synchronize available colors for the product based on its variations
+    """
+    # Get all colors from variations
+    variation_colors = set()
+    for variation in self.variations.all():
+        # Add colors from ManyToMany relationship
+        variation_colors.update(color.id for color in variation.colors.all())
+        # Add color from ForeignKey relationship if exists
+        if variation.color:
+            variation_colors.add(variation.color.id)
+    
+    # Clear existing product colors
+    ProductColor.objects.filter(product=self).delete()
+    
+    # Create new product colors
+    for color_id in variation_colors:
+        try:
+            color = Color.objects.get(id=color_id)
+            ProductColor.objects.create(product=self, color=color)
+        except Color.DoesNotExist:
+            pass
+    
+    # Update available_colors field if you're using it (seems to be a JSONField)
+    self.available_colors = list(variation_colors)
+    self.save(update_fields=['available_colors'])
 
 class ProductView(models.Model):
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
@@ -206,6 +261,7 @@ class Color(models.Model):
     def __str__(self):
         return self.name
     
+
 class ProductVariation(models.Model):
     product = models.ForeignKey(Product, related_name='variations', on_delete=models.CASCADE)
     variation_type = models.CharField(max_length=100)  # Keeping for backward compatibility
@@ -304,18 +360,24 @@ class CartItem(models.Model):
     cart = models.ForeignKey(Cart, related_name='items', on_delete=models.CASCADE)
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
     quantity = models.PositiveIntegerField(default=1)
+    # Add these new fields:
+    size = models.ForeignKey(Size, on_delete=models.SET_NULL, null=True, blank=True)
+    color = models.ForeignKey(Color, on_delete=models.SET_NULL, null=True, blank=True)
 
     class Meta:
+        # Update the unique constraint to include size and color
         constraints = [
             models.UniqueConstraint(
-                fields=['cart', 'product'],
-                name='unique_product_in_cart'
+                fields=['cart', 'product', 'size', 'color'],
+                name='unique_product_variant_in_cart'
             ),
         ]
 
     def __str__(self):
-        return f"{self.quantity} x {self.product.name} in {self.cart}"
-    
+        size_info = f", Size: {self.size.name}" if self.size else ""
+        color_info = f", Color: {self.color.name}" if self.color else ""
+        return f"{self.quantity} x {self.product.name}{size_info}{color_info} in {self.cart}"
+        
 class Customer(models.Model):
     user = models.ForeignKey('CustomUser', on_delete=models.CASCADE, null=True, blank=True)
     name = models.CharField(max_length=255)

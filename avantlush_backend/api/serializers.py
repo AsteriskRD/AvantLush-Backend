@@ -1,30 +1,14 @@
 from rest_framework import serializers
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model, authenticate
 from django.contrib.auth.password_validation import validate_password
 from django.core import exceptions
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
+from allauth.socialaccount.providers.apple.views import AppleOAuth2Adapter
 from dj_rest_auth.registration.serializers import SocialLoginSerializer, RegisterSerializer
 from dj_rest_auth.serializers import UserDetailsSerializer
-from allauth.socialaccount.providers.apple.views import AppleOAuth2Adapter
-from dj_rest_auth.registration.serializers import SocialLoginSerializer
-from rest_framework import serializers
 import re
-from rest_framework import serializers
-from .models import Profile, Address
 from .utils import VALID_COUNTRY_CODES, validate_phone_format, format_phone_number
-from .models import Wishlist, WishlistItem, ProductRecommendation
-from rest_framework import serializers
-from .models import Review, ReviewTag, ReviewHelpfulVote
-from .models import PromoCode, ShippingMethod
-from rest_framework import serializers
-from .models import SupportTicket, TicketResponse
-from rest_framework import serializers
-from .models import Order, CustomUser, Cart, Product
-from rest_framework import serializers
-from .models import Product, Category
-from django.contrib.auth import authenticate
-
 from .models import (
     CustomUser,  
     WaitlistEntry,
@@ -44,7 +28,6 @@ from .models import (
     Payment,
     ProductVariation, 
     Tag,
-    Category,
     models,
     Customer,
     CarouselItem,
@@ -52,8 +35,15 @@ from .models import (
     Color,
     ProductSize,
     ProductColor,
-
-)   
+    Wishlist,
+    WishlistItem,
+    ProductRecommendation,
+    Review,
+    ReviewTag,
+    ReviewHelpfulVote,
+    PromoCode,
+    ShippingMethod
+)
 
 User = get_user_model()
 
@@ -432,6 +422,38 @@ class AddressSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Country cannot be empty")
         return value
 
+class TagSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Tag
+        fields = ['id', 'name', 'slug']
+
+class CategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Category
+        fields = ['id', 'name', 'slug']
+   
+class SizeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Size
+        fields = ['id', 'name']
+
+class ColorSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Color
+        fields = ['id', 'name', 'hex_code']
+
+class ProductSizeSerializer(serializers.ModelSerializer):
+    size = SizeSerializer(read_only=True)
+    size_id = serializers.PrimaryKeyRelatedField(
+        queryset=Size.objects.all(),
+        source='size',
+        write_only=True
+    )
+    
+    class Meta:
+        model = ProductSize
+        fields = ['id', 'size', 'size_id']
+        
 class ProductSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source='category.name', read_only=True)
     main_image = serializers.SerializerMethodField()
@@ -474,20 +496,40 @@ class ArticleSerializer(serializers.ModelSerializer):
         model = Article
         fields = '__all__'
 
+
 class CartItemSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source='product.name', read_only=True)
     product_price = serializers.DecimalField(source='product.price', max_digits=10, decimal_places=2, read_only=True)
     stock_status = serializers.CharField(source='product.status', read_only=True)
     product_image = serializers.SerializerMethodField(read_only=True)
+    # Add these fields:
+    size = SizeSerializer(read_only=True)
+    color = ColorSerializer(read_only=True)
+    size_id = serializers.PrimaryKeyRelatedField(
+        queryset=Size.objects.all(),
+        source='size',
+        write_only=True,
+        required=False
+    )
+    color_id = serializers.PrimaryKeyRelatedField(
+        queryset=Color.objects.all(),
+        source='color',
+        write_only=True,
+        required=False
+    )
     
     class Meta:
         model = CartItem
-        fields = ['id', 'product', 'quantity', 'product_name', 'product_price', 'stock_status', 'product_image']
+        fields = [
+            'id', 'product', 'quantity', 'product_name', 'product_price',
+            'stock_status', 'product_image', 'size', 'color', 'size_id', 'color_id'
+        ]
     
     def to_representation(self, instance):
         representation = super().to_representation(instance)
         representation['cart_item_id'] = representation.pop('id')
         return representation
+    
     def get_product_image(self, obj):
         # Check if product has a main image
         if obj.product.main_image:
@@ -1033,39 +1075,6 @@ class DashboardRecentOrderSerializer(serializers.Serializer):
     status = serializers.CharField()
     created_at = serializers.DateTimeField()
     items = DashboardRecentOrderItemSerializer(many=True)
-
-
-class TagSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Tag
-        fields = ['id', 'name', 'slug']
-
-class CategorySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Category
-        fields = ['id', 'name', 'slug']
-   
-class SizeSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Size
-        fields = ['id', 'name']
-
-class ColorSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Color
-        fields = ['id', 'name', 'hex_code']
-
-class ProductSizeSerializer(serializers.ModelSerializer):
-    size = SizeSerializer(read_only=True)
-    size_id = serializers.PrimaryKeyRelatedField(
-        queryset=Size.objects.all(),
-        source='size',
-        write_only=True
-    )
-    
-    class Meta:
-        model = ProductSize
-        fields = ['id', 'size', 'size_id']
 
 class ProductColorSerializer(serializers.ModelSerializer):
     color = ColorSerializer(read_only=True)
