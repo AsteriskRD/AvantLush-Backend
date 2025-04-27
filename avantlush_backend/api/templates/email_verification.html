@@ -1,45 +1,375 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Verify Your Email</title>
-</head>
-<body style="margin: 0; padding: 20px; background-color: #f7f7f7; font-family: Arial, sans-serif;">
-    <div style="max-width: 600px; margin: 0 auto; background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-        <div style="text-align: center; margin-bottom: 20px;">
-            <img src="https://res.cloudinary.com/dvfwa8fzh/image/upload/v1736339705/avantlush-email/Avantlush%20logo.svg" alt="Avantlush Logo" style="max-width: 200px;">
-        </div>
-        <h1 style="color: #333; text-align: center; margin-bottom: 20px;">Verify Your Email Address</h1>
-        <p style="color: #666; line-height: 1.6; margin-bottom: 20px;">
-            Thank you for registering with Avantlush. To complete your registration and activate your account, please click one of the buttons below:
-        </p>
-        <div style="text-align: center; margin: 30px 0;">
-            <a href="{{ verification_url }}" style="background-color: #4A90E2; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; margin-right: 10px; display: inline-block; margin-bottom: 10px;">Verify (Development)</a>
-            <a href="{{ production_verification_url }}" style="background-color: #4A90E2; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block; margin-bottom: 10px;">Verify (Production)</a>
-        </div>
-        <div style="background-color: #f9f9f9; border-left: 4px solid #4A90E2; padding: 15px; margin-bottom: 20px;">
-            <p style="color: #666; margin: 0; line-height: 1.6;">
-                <strong>For developers and local testing:</strong> Use the "Development" button.
-                <br>
-                <strong>For users and production environment:</strong> Use the "Production" button.
-            </p>
-        </div>
-        <p style="color: #666; line-height: 1.6; margin-bottom: 20px;">
-            If the buttons don't work, you can copy and paste one of these links into your browser:
-            <br><br>
-            <strong>Development:</strong> <span style="color: #4A90E2; word-break: break-all;">{{ verification_url }}</span>
-            <br><br>
-            <strong>Production:</strong> <span style="color: #4A90E2; word-break: break-all;">{{ production_verification_url }}</span>
-        </p>
-        <p style="color: #666; line-height: 1.6; margin-bottom: 20px;">
-            This verification link will expire in 24 hours.
-        </p>
-        <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
-            <p style="color: #999; font-size: 12px;">
-                If you didn't create an account with Avantlush, please ignore this email.
-            </p>
-        </div>
-    </div>
-</body>
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Verify Your Email Address - AvantLush</title>
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link
+			href="https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap"
+			rel="stylesheet"
+		/>
+	</head>
+	<body
+		style="
+			margin: 0;
+			padding: 0;
+			background: #f8f8f5;
+			font-family: &quot;Outfit&quot;, &quot;Helvetica Neue&quot;,
+				Helvetica, Arial, sans-serif;
+		"
+	>
+		<table
+			width="100%"
+			cellpadding="0"
+			cellspacing="0"
+			style="background: #f8f8f5"
+		>
+			<tr>
+				<td align="center">
+					<table
+						width="600"
+						cellpadding="0"
+						cellspacing="0"
+						style="background: #fff; margin: 32px 0"
+					>
+						<!-- Header -->
+						<tr>
+							<td style="padding: 32px 32px 0 32px">
+								<table width="100%">
+									<tr>
+										<td align="left">
+											<img
+												src="https://res.cloudinary.com/dvfwa8fzh/image/upload/v1745774755/email_templates/Avantlush_Logo2_w34wuw.png"
+												alt="AvantLush"
+												style="height: 40px"
+											/>
+										</td>
+									</tr>
+								</table>
+							</td>
+						</tr>
+						<!-- Banner -->
+						<tr>
+							<td style="padding: 32px 32px 0 32px">
+								<table
+									width="100%"
+									style="
+										background: #043947;
+										border-radius: 12px;
+									"
+								>
+									<tr>
+										<td
+											align="center"
+											style="padding: 32px 24px 16px 24px"
+										>
+											<h1
+												style="
+													color: #fff;
+													font-size: 30px;
+													margin: 0;
+													font-weight: 600;
+												"
+											>
+												Verify Your Email Address
+											</h1>
+											<p
+												style="
+													color: #fff;
+													font-size: 18px;
+													margin: 16px 0 0 0;
+												"
+											>
+												Thank you for registering with
+												AvantLush.<br />
+												To activate your account, please
+												verify your email address below.
+											</p>
+										</td>
+									</tr>
+								</table>
+							</td>
+						</tr>
+						<!-- Main Content -->
+						<tr>
+							<td style="padding: 32px">
+								<p
+									style="
+										font-size: 18px;
+										color: #3a3a3a;
+										margin: 0 0 24px 0;
+									"
+								>
+									Please click the button below to verify your
+									email address and complete your
+									registration:
+								</p>
+								<div style="text-align: center; margin: 32px 0">
+									<a
+										href="{{ verification_url }}"
+										style="
+											background: #043947;
+											color: #fff;
+											padding: 14px 36px;
+											text-decoration: none;
+											border-radius: 8px;
+											font-weight: 600;
+											font-size: 18px;
+											/* margin-right: 12px; */
+											display: inline-block;
+											margin-bottom: 10px;
+											min-width: 200px;
+										"
+										>Verify (Development)</a
+									>
+									<a
+										href="{{ production_verification_url }}"
+										style="
+											background: #f3c97a;
+											color: #00363a;
+											padding: 14px 36px;
+											text-decoration: none;
+											border-radius: 8px;
+											font-weight: 600;
+											font-size: 18px;
+											display: inline-block;
+											margin-bottom: 10px;
+											min-width: 200px;
+										"
+										>Verify (Production)</a
+									>
+								</div>
+								<table
+									width="100%"
+									style="
+										border: 2px solid #f3c97a;
+										border-radius: 12px;
+										margin: 32px 0;
+									"
+								>
+									<tr>
+										<td
+											align="center"
+											style="padding: 20px"
+										>
+											<span
+												style="
+													font-size: 18px;
+													color: #007c8a;
+												"
+											>
+												<strong>For developers:</strong>
+												Use the "Development" button.<br />
+												<strong>For users:</strong> Use
+												the "Production" button.
+											</span>
+										</td>
+									</tr>
+								</table>
+								<p
+									style="
+										color: #666;
+										font-size: 18px;
+										line-height: 1.6;
+										margin-bottom: 20px;
+									"
+								>
+									If the buttons don't work, copy and paste
+									one of these links into your browser:
+									<br /><br />
+									<strong>Development:</strong>
+									<span
+										style="
+											color: #007c8a;
+											word-break: break-all;
+										"
+										>{{ verification_url }}</span
+									>
+									<br /><br />
+									<strong>Production:</strong>
+									<span
+										style="
+											color: #007c8a;
+											word-break: break-all;
+										"
+										>{{ production_verification_url }}</span
+									>
+								</p>
+								<p
+									style="
+										color: #666;
+										font-size: 18px;
+										margin-bottom: 20px;
+									"
+								>
+									This verification link will expire in 24
+									hours.
+								</p>
+								<!-- Social Icons -->
+								<table width="100%" style="margin: 32px 0">
+									<tr>
+										<td align="center">
+											<a href="https://www.facebook.com/share/19orqfkP46/?mibextid=LQQJ4d"
+												><img
+													src="https://res.cloudinary.com/dvfwa8fzh/image/upload/avantlush-email/Facebook.png"
+													alt="Facebook"
+													style="
+														width: 40px;
+														margin: 0 12px;
+													"
+											/></a>
+											<a href="https://www.instagram.com/avantlush?igsh=dDNjcXQxYXZrdzls"
+												><img
+													src="https://res.cloudinary.com/dvfwa8fzh/image/upload/avantlush-email/Instagram.png"
+													alt="Instagram"
+													style="
+														width: 40px;
+														margin: 0 12px;
+													"
+											/></a>
+											<a href="https://twitter.com/avant_lush"
+												><img
+													src="https://res.cloudinary.com/dvfwa8fzh/image/upload/avantlush-email/Twitter.png"
+													alt="X"
+													style="
+														width: 40px;
+														margin: 0 12px;
+													"
+											/></a>
+											<a href="https://www.linkedin.com/company/avantlush/"
+												><img
+													src="https://res.cloudinary.com/dvfwa8fzh/image/upload/avantlush-email/Linkedin.png"
+													alt="LinkedIn"
+													style="
+														width: 40px;
+														margin: 0 12px;
+													"
+											/></a>
+										</td>
+									</tr>
+								</table>
+							</td>
+						</tr>
+						<!-- Footer -->
+						<tr>
+							<td
+								style="
+									background: #043947;
+									padding: 48px 40px;
+									color: #fff;
+								"
+							>
+								<table width="100%">
+									<tr>
+										<td
+											width="50%"
+											valign="top"
+											style="padding-right: 24px"
+										>
+											<h3
+												style="
+													margin: 0 0 16px 0;
+													font-size: 16px;
+													color: #fff;
+													font-family: &quot;Outfit&quot;,
+														Arial, sans-serif;
+												"
+											>
+												Contact Us
+											</h3>
+											<p
+												style="
+													margin: 0;
+													font-size: 14px;
+													color: #8f9fa3;
+													font-family: &quot;Outfit&quot;,
+														Arial, sans-serif;
+												"
+											>
+												+1 (999) 888-77-66<br />
+												hello@logoipsum.com
+											</p>
+											<h3
+												style="
+													margin: 32px 0 16px 0;
+													font-size: 16px;
+													font-weight: 600;
+													color: #fff;
+													font-family: &quot;Outfit&quot;,
+														Arial, sans-serif;
+												"
+											>
+												Location
+											</h3>
+											<p
+												style="
+													margin: 0;
+													font-size: 14px;
+													color: #8f9fa3;
+													font-family: &quot;Outfit&quot;,
+														Arial, sans-serif;
+												"
+											>
+												483920, Moscow,<br />
+												Myasnitskaya 22/2/5, Office 4
+											</p>
+										</td>
+										<td width="50%" valign="top">
+											<h3
+												style="
+													margin: 0 0 16px 0;
+													font-size: 16px;
+													color: #fff;
+													font-family: &quot;Outfit&quot;,
+														Arial, sans-serif;
+												"
+											>
+												Privacy
+											</h3>
+											<p
+												style="
+													margin: 0 0 24px 0;
+													font-size: 14px;
+													color: #8f9fa3;
+													font-family: &quot;Outfit&quot;,
+														Arial, sans-serif;
+												"
+											>
+												We value your privacy and
+												promise not to spam your inbox
+											</p>
+											<p
+												style="
+													margin: 0 0 8px 0;
+													font-size: 14px;
+													color: #8f9fa3;
+													font-family: &quot;Outfit&quot;,
+														Arial, sans-serif;
+												"
+											>
+												Don't want to hear from us?<br />
+												<a
+													href="#"
+													style="
+														color: #8f9fa3;
+														text-decoration: underline;
+														font-size: 14px;
+														font-family: &quot;Outfit&quot;,
+															Arial, sans-serif;
+													"
+													>Unsubscribe</a
+												>
+											</p>
+										</td>
+									</tr>
+								</table>
+							</td>
+						</tr>
+					</table>
+				</td>
+			</tr>
+		</table>
+	</body>
 </html>
