@@ -410,7 +410,7 @@ EMAIL_USE_SSL = True  # Enable SSL
 EMAIL_USE_TLS = False  # Disable TLS since we're using SSL
 EMAIL_HOST_USER = 'avalusht@gmail.com'
 EMAIL_HOST_PASSWORD = 'ojgrpofmppisffdr'
-DEFAULT_FROM_EMAIL = 'avalusht@gmail.com'
+DEFAULT_FROM_EMAIL = 'Avantlush <avalusht@gmail.com>'
 EMAIL_TIMEOUT = 20
 SERVER_EMAIL = 'avalusht@gmail.com'
 

@@ -50,9 +50,9 @@ def upload_image(image_path, folder="email_templates"):
 # Example usage
 if __name__ == "__main__":
     # Path to your image
-    image_path = r"C:\Users\ADMIN\Downloads\AvantLush-Backend\avantlush_backend\api\templates\Avantlush Logo2.png"
+    image_path = r"C:\Users\ADMIN\Downloads\AvantLush-Backend\avantlush_backend\api\templates\AvantLush Brand Secondary Logo Green 1.png"
     
-    # Upload the image and get the URL
+        # Upload the image and get the URL
     image_url = upload_image(image_path)
     
     if image_url:
