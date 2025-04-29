@@ -1246,58 +1246,22 @@ class CartViewSet(viewsets.ModelViewSet):
             'total_quantity': total_quantity  # New field for total quantity
         })
 
-    @action(detail=False, methods=['POST'])
+    @action(detail=False, methods=['post'])
     def add_item(self, request):
-        """Add item to cart"""
-        cart = self.get_cart()
-        product_id = request.data.get('product')
+        cart = self.get_cart(request)
+        product_id = request.data.get('product_id')
         quantity = int(request.data.get('quantity', 1))
-        size_id = request.data.get('size_id')  # Get size_id from request
-        color_id = request.data.get('color_id')  # Get color_id from request
-        
-        print(f"Adding to cart - Product ID: {product_id}, Quantity: {quantity}, Size ID: {size_id}, Color ID: {color_id}")
-        print(f"Current cart: ID {cart.id}, Session: {cart.session_key}")
+        size_id = request.data.get('size_id')  # Make sure this is being passed
+        color_id = request.data.get('color_id')  # Make sure this is being passed
         
         try:
             product = Product.objects.get(id=product_id)
             
-            # Get size and color objects if IDs were provided
-            size = None
-            color = None
+            # Get size and color objects if IDs are provided
+            size = Size.objects.get(id=size_id) if size_id else None
+            color = Color.objects.get(id=color_id) if color_id else None
             
-            if size_id:
-                try:
-                    size = Size.objects.get(id=size_id)
-                except Size.DoesNotExist:
-                    return Response(
-                        {'error': 'Size not found'},
-                        status=status.HTTP_404_NOT_FOUND
-                    )
-                    
-            if color_id:
-                try:
-                    color = Color.objects.get(id=color_id)
-                except Color.DoesNotExist:
-                    return Response(
-                        {'error': 'Color not found'},
-                        status=status.HTTP_404_NOT_FOUND
-                    )
-                    
-            # Validate that the selected size is available for this product
-            if size and not ProductSize.objects.filter(product=product, size=size).exists():
-                return Response(
-                    {'error': f'Size {size.name} is not available for this product'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-                
-            # Validate that the selected color is available for this product
-            if color and not ProductColor.objects.filter(product=product, color=color).exists():
-                return Response(
-                    {'error': f'Color {color.name} is not available for this product'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            
-            # Update or create cart item with size and color
+            # Check if this product variant is already in the cart
             cart_item, created = CartItem.objects.get_or_create(
                 cart=cart,
                 product=product,
@@ -1307,38 +1271,34 @@ class CartViewSet(viewsets.ModelViewSet):
             )
             
             if not created:
+                # If the item already exists, update the quantity
                 cart_item.quantity += quantity
                 cart_item.save()
-                print(f"Updated cart item: {cart_item.id}, New quantity: {cart_item.quantity}")
-            else:
-                print(f"Created new cart item: {cart_item.id}, Quantity: {cart_item.quantity}")
             
-            # Verify cart items after add
-            items_after = list(CartItem.objects.filter(cart=cart).values('id', 'product__name', 'quantity'))
-            print(f"Items in cart after add: {items_after}")
-            
-            # Return cart summary
-            summary = {
-                'cart_id': cart.id,
-                'total_items': CartItem.objects.filter(cart=cart).count(),
-                'item_added': CartItemSerializer(cart_item).data,
-                'all_items': CartItemSerializer(CartItem.objects.filter(cart=cart), many=True).data
-            }
-            
-            return Response(summary)
-            
+            serializer = CartItemSerializer(cart_item)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        
         except Product.DoesNotExist:
-            print(f"Product with ID {product_id} not found")
             return Response(
                 {'error': 'Product not found'},
                 status=status.HTTP_404_NOT_FOUND
             )
-        except Exception as e:
-            print(f"Error adding item to cart: {str(e)}")
+        except Size.DoesNotExist:
             return Response(
-                {'error': f'Failed to add item to cart: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                {'error': 'Size not found'},
+                status=status.HTTP_404_NOT_FOUND
             )
+        except Color.DoesNotExist:
+            return Response(
+                {'error': 'Color not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
     
     @action(detail=False, methods=['POST'])
     def update_quantity(self, request):
