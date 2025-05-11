@@ -1248,11 +1248,11 @@ class CartViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'])
     def add_item(self, request):
-        cart = self.get_cart(request)
+        cart = self.get_cart()  # Remove the request parameter
         product_id = request.data.get('product_id')
         quantity = int(request.data.get('quantity', 1))
-        size_id = request.data.get('size_id')  # Make sure this is being passed
-        color_id = request.data.get('color_id')  # Make sure this is being passed
+        size_id = request.data.get('size_id')
+        color_id = request.data.get('color_id')
         
         try:
             product = Product.objects.get(id=product_id)
@@ -1298,7 +1298,6 @@ class CartViewSet(viewsets.ModelViewSet):
                 {'error': str(e)},
                 status=status.HTTP_400_BAD_REQUEST
             )
-
     
     @action(detail=False, methods=['POST'])
     def update_quantity(self, request):
