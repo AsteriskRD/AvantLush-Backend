@@ -502,7 +502,7 @@ class CartItemSerializer(serializers.ModelSerializer):
     product_price = serializers.DecimalField(source='product.price', max_digits=10, decimal_places=2, read_only=True)
     stock_status = serializers.CharField(source='product.status', read_only=True)
     product_image = serializers.SerializerMethodField(read_only=True)
-    # Add these fields:
+    # Size and color serializers
     size = SizeSerializer(read_only=True)
     color = ColorSerializer(read_only=True)
     size_id = serializers.PrimaryKeyRelatedField(
@@ -528,6 +528,18 @@ class CartItemSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         representation = super().to_representation(instance)
         representation['cart_item_id'] = representation.pop('id')
+        
+        # Ensure size and color are properly included
+        if instance.size:
+            representation['size'] = SizeSerializer(instance.size).data
+        else:
+            representation['size'] = None
+            
+        if instance.color:
+            representation['color'] = ColorSerializer(instance.color).data
+        else:
+            representation['color'] = None
+            
         return representation
     
     def get_product_image(self, obj):
@@ -540,7 +552,7 @@ class CartItemSerializer(serializers.ModelSerializer):
             return obj.product.images[0]  # Return the first image URL
             
         return None  # Return None if no images are available
-            
+    
 class CartSerializer(serializers.ModelSerializer):
     items = CartItemSerializer(many=True, read_only=True)
     user = serializers.PrimaryKeyRelatedField(read_only=True)
