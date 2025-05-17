@@ -24,7 +24,7 @@ python manage.py update_product_images || true  # Add || true to prevent build f
 echo "Syncing product variations..."
 python manage.py sync_product_variations || true  # Add || true to prevent build failure
 
-create superuser
+#create superuser
 echo "Creating superuser..."
 python manage.py ensure_superuser
 echo "Superuser creation completed"
