@@ -41,7 +41,6 @@ class ProductAdminForm(forms.ModelForm):
         help_text="Enter product details, one per line. Each line will be displayed as a bullet point."
     )
     
-    
     main_image = CloudinaryFileField(
         options={
             'folder': 'products/',
@@ -51,6 +50,19 @@ class ProductAdminForm(forms.ModelForm):
             'height': 1000,
         },
         required=False
+    )
+    
+    image_uploads = CloudinaryFileField(
+        options={
+            'folder': 'products/',
+            'allowed_formats': ['jpg', 'png'],
+            'crop': 'limit',
+            'width': 1000,
+            'height': 1000,
+        },
+        required=False,
+        label="Additional Images",
+        help_text="Upload additional product images"
     )
 
     class Meta:
@@ -72,7 +84,8 @@ class ProductAdminForm(forms.ModelForm):
     
     def clean(self):
         cleaned_data = super().clean()
-        # Convert text input to JSON list
+        
+        # Handle product details text conversion
         details_text = cleaned_data.get('product_details_text', '')
         if details_text:
             # Split by new lines and remove empty lines
@@ -80,26 +93,9 @@ class ProductAdminForm(forms.ModelForm):
             cleaned_data['product_details'] = details_list
         else:
             cleaned_data['product_details'] = []
-        return cleaned_data
-    
-    image_uploads = CloudinaryFileField(
-        options={
-            'folder': 'products/',
-            'allowed_formats': ['jpg', 'png'],
-            'crop': 'limit',
-            'width': 1000,
-            'height': 1000,
-        },
-        required=False,
-        label="Additional Images",
-        help_text="Upload additional product images"
-    )
-    
-    def clean(self):
-        cleaned_data = super().clean()
+        
         # Handle the image uploads and append them to the images JSON field
         image_upload = cleaned_data.get('image_uploads')
-        
         if image_upload:
             instance = self.instance
             current_images = instance.images if instance.pk and instance.images else []
@@ -107,7 +103,7 @@ class ProductAdminForm(forms.ModelForm):
             # Store the Cloudinary URL in the images array
             current_images.append(image_upload.url)
             cleaned_data['images'] = current_images
-            
+        
         return cleaned_data
 
 from django.forms.widgets import ClearableFileInput
