@@ -33,6 +33,8 @@ from .views import (
     ProductReviewViewSet,
     TokenValidationView,
     CarouselViewSet,
+    admin_login, 
+    check_admin_access,
 )
 
 # Router setup
@@ -109,6 +111,8 @@ urlpatterns = [
     path('products/categories/', 
         ProductViewSet.as_view({'get': 'categories'}),
         name='product-categories'),
+    path('admin/login/', admin_login, name='admin-login'),
+    path('admin/check-access/', check_admin_access, name='check-admin-access'),
 
     # Cart Management
     path('cart/summary/', CartViewSet.as_view({'get': 'summary'})),

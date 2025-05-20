@@ -58,6 +58,7 @@ from rest_framework.permissions import (
 )
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
+from .permissions import IsAdminUser
 from rest_framework.views import APIView
 
 # Third party imports
@@ -662,6 +663,58 @@ def login(request):
         'message': 'Invalid data',
         'errors': serializer.errors
     }, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def admin_login(request):
+    """
+    Admin-specific login endpoint that verifies admin privileges
+    """
+    email = request.data.get('email')
+    password = request.data.get('password')
+    
+    if not email or not password:
+        return Response({
+            'success': False,
+            'message': 'Email and password are required'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    user = authenticate(request, email=email, password=password)
+    
+    if user and (user.is_staff or user.is_superuser):
+        # Generate JWT tokens
+        refresh = RefreshToken.for_user(user)
+        
+        return Response({
+            'success': True,
+            'message': 'Login successful',
+            'refresh': str(refresh),
+            'access': str(refresh.access_token),
+            'user': {
+                'email': user.email,
+                'is_admin': True,
+                'uuid': str(user.uuid) if hasattr(user, 'uuid') else None
+            }
+        }, status=status.HTTP_200_OK)
+    
+    return Response({
+        'success': False,
+        'message': 'Invalid credentials or insufficient privileges'
+    }, status=status.HTTP_401_UNAUTHORIZED)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def check_admin_access(request):
+    """
+    Endpoint to check if the current user has admin access
+    """
+    has_access = request.user.is_staff or request.user.is_superuser
+    
+    return Response({
+        'success': True,
+        'has_admin_access': has_access
+    })
 
 
 @action(detail=False, methods=['get'])
@@ -2607,7 +2660,7 @@ class SupportTicketViewSet(viewsets.ModelViewSet):
     
 
 class DashboardViewSet(viewsets.ViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUser]
     
     @action(detail=False, methods=['GET'])
     def cart_metrics(self, request):
@@ -2812,9 +2865,23 @@ class ProductViewSet(viewsets.ModelViewSet):
     filterset_class = ProductFilter
     filter_backends = [django_filters.DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     authentication_classes = [JWTAuthentication, TokenAuthentication, SessionAuthentication]  # Add authentication
-    permission_classes = [AllowAny]  # Allow anyone to view products but the auth context will be used for wishlist
+    #permission_classes = [AllowAny]  # Allow anyone to view products but the auth context will be used for wishlist
     search_fields = ['name', 'description', 'category__name']
     parser_classes = (MultiPartParser, FormParser)
+
+    def get_permissions(self):
+        """
+        Override permissions:
+        - Admin access required for management operations
+        - Public access for read-only operations
+        """
+        if self.action in ['create', 'update', 'partial_update', 'destroy', 
+                        'bulk_update_status', 'update_status', 'export',
+                        'upload_image', 'remove_image', 'upload_images',
+                        'remove_images', 'add_sizes', 'add_colors',
+                        'remove_size', 'remove_color']:
+            return [IsAdminUser()]
+        return [AllowAny()]
 
     def get_queryset(self):
         queryset = Product.objects.prefetch_related(
@@ -3444,6 +3511,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
     search_fields = ['name', 'email', 'phone']
     ordering_fields = ['created_at', 'name', 'orders_count', 'balance']
     ordering = ['-created_at']
+    permission_classes = [IsAdminUser]
 
     def get_queryset(self):
         queryset = super().get_queryset().annotate(
