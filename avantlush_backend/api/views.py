@@ -1602,14 +1602,25 @@ class OrderViewSet(viewsets.ModelViewSet):
                 for item in order.items.all()
             ])
             
+            # Fix: Get customer name properly
+            customer_name = ""
+            if hasattr(order, 'customer') and order.customer:
+                customer_name = order.customer.name
+            elif order.user:
+                # Try to get name from user or profile
+                if hasattr(order.user, 'profile') and order.user.profile:
+                    customer_name = order.user.profile.full_name or order.user.email
+                else:
+                    customer_name = order.user.email
+                    
             writer.writerow([
                 order.order_number,
                 order.created_at.strftime('%Y-%m-%d %H:%M'),
-                order.get_customer_name(),
-                order.user.email,
+                customer_name,  # Use the fixed customer name
+                order.user.email if order.user else 'Guest',
                 items_str,
                 order.total,
-                order.get_status_display(),
+                order.get_status_display() if hasattr(order, 'get_status_display') else order.status,
                 order.payments.first().payment_method if order.payments.exists() else 'N/A',
                 order.payments.first().status if order.payments.exists() else 'N/A'
             ])
