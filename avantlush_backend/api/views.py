@@ -2731,13 +2731,16 @@ class DashboardViewSet(viewsets.ViewSet):
             count=Count('id')
         )
         
+        # Convert QuerySet to list
+        orders_by_status_list = list(orders_by_status)
+        
         order_totals = orders.aggregate(
             total_revenue=Sum('total'),
             total_orders=Count('id')
         )
         
         data = {
-            'orders_by_status': orders_by_status,
+            'orders_by_status': orders_by_status_list,  # Use the list instead of QuerySet
             'total_revenue': order_totals['total_revenue'] or 0,
             'total_orders': order_totals['total_orders'],
             'period': time_period
