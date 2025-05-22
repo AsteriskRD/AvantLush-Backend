@@ -1063,12 +1063,14 @@ class DashboardCustomerMetricsSerializer(serializers.Serializer):
 class DashboardOrderStatusSerializer(serializers.Serializer):
     status = serializers.CharField()
     count = serializers.IntegerField()
+    total_value = serializers.DecimalField(max_digits=10, decimal_places=2, required=False)
 
 class DashboardOrderMetricsSerializer(serializers.Serializer):
-    orders_by_status = DashboardOrderStatusSerializer(many=True)
+    orders_by_status = serializers.ListField()  # Changed to ListField to accept the list directly
     total_revenue = serializers.DecimalField(max_digits=10, decimal_places=2)
     total_orders = serializers.IntegerField()
-    period = serializers.CharField()
+    status_filter = serializers.CharField(allow_null=True, required=False)  # New field
+    daily_trend = serializers.ListField(required=False)  # New field for daily trend data
 
 class DashboardSalesTrendSerializer(serializers.Serializer):
     date = serializers.DateField()

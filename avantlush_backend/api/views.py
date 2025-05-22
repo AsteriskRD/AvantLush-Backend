@@ -2731,35 +2731,56 @@ class DashboardViewSet(viewsets.ViewSet):
         serializer.is_valid(raise_exception=True)
         return Response(serializer.data)
 
-    @action(detail=False, methods=['GET'])
-    def order_metrics(self, request):
-        """Get order-related metrics"""
-        time_period = request.query_params.get('period', 'week')
-        date_threshold = self._get_date_threshold(time_period)
-        
-        orders = Order.objects.filter(created_at__gte=date_threshold)
-        orders_by_status = orders.values('status').annotate(
-            count=Count('id')
-        )
-        
-        # Convert QuerySet to list
-        orders_by_status_list = list(orders_by_status)
-        
-        order_totals = orders.aggregate(
-            total_revenue=Sum('total'),
-            total_orders=Count('id')
-        )
-        
-        data = {
-            'orders_by_status': orders_by_status_list,  # Use the list instead of QuerySet
-            'total_revenue': order_totals['total_revenue'] or 0,
-            'total_orders': order_totals['total_orders'],
-            'period': time_period
-        }
-        
-        serializer = DashboardOrderMetricsSerializer(data=data)
-        serializer.is_valid(raise_exception=True)
-        return Response(serializer.data)
+@action(detail=False, methods=['GET'])
+def order_metrics(self, request):
+    """Get order-related metrics filtered by status"""
+    # Get status filter from query params, or use None to get all statuses
+    status_filter = request.query_params.get('status', None)
+    
+    # Base queryset
+    orders = Order.objects.all()
+    
+    # Apply status filter if provided
+    if status_filter:
+        orders = orders.filter(status=status_filter)
+    
+    # Get orders by status (for the summary breakdown)
+    orders_by_status = orders.values('status').annotate(
+        count=Count('id'),
+        total_value=Sum('total')
+    )
+    
+    # Get overall totals
+    order_totals = orders.aggregate(
+        total_revenue=Sum('total'),
+        total_orders=Count('id')
+    )
+    
+    # Get recent trend (last 7 days) for the filtered status
+    today = timezone.now().date()
+    week_ago = today - timedelta(days=7)
+    
+    daily_trend = orders.filter(
+        created_at__date__gte=week_ago
+    ).annotate(
+        date=TruncDate('created_at')
+    ).values('date').annotate(
+        revenue=Sum('total'),
+        orders=Count('id')
+    ).order_by('date')
+    
+    data = {
+        'orders_by_status': list(orders_by_status),  # Convert QuerySet to list
+        'total_revenue': order_totals['total_revenue'] or 0,
+        'total_orders': order_totals['total_orders'] or 0,
+        'status_filter': status_filter,
+        'daily_trend': list(daily_trend)  # Add daily trend data
+    }
+    
+    serializer = DashboardOrderMetricsSerializer(data=data)
+    serializer.is_valid(raise_exception=True)
+    return Response(serializer.data)
+
 
     @action(detail=False, methods=['GET'])
     def sales_trend(self, request):
