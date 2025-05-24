@@ -79,7 +79,8 @@ from rest_framework.response import Response
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 from rest_framework_simplejwt.tokens import RefreshToken
-
+from django.db.models import Count, Sum, Avg, Exists, OuterRef, F
+from django.db.models.functions import TruncDate
 
 # Local imports - Models
 from .models import (
@@ -2674,28 +2675,196 @@ class DashboardViewSet(viewsets.ViewSet):
     permission_classes = [IsAdminUser]
     
     @action(detail=False, methods=['GET'])
+    def overview_metrics(self, request):
+        """Get all dashboard overview metrics in one endpoint"""
+        time_period = request.query_params.get('period', 'week')
+        date_threshold = self._get_date_threshold(time_period)
+        previous_period_threshold = self._get_previous_period_threshold(time_period)
+        
+        # ABANDONED CART METRICS
+        # Get carts that have items but no completed orders from the same user after cart creation
+        total_carts_with_items = Cart.objects.filter(
+            created_at__gte=date_threshold,
+            items__isnull=False
+        ).distinct().count()
+        
+        # Carts that resulted in orders (not abandoned)
+        converted_carts = Cart.objects.filter(
+            created_at__gte=date_threshold,
+            items__isnull=False,
+            user__isnull=False,  # Only for logged-in users
+            user__orders__created_at__gte=F('created_at'),
+            user__orders__status__in=['PROCESSING', 'SHIPPED', 'DELIVERED']
+        ).distinct().count()
+        
+        abandoned_carts = total_carts_with_items - converted_carts
+        abandoned_rate = (abandoned_carts / total_carts_with_items * 100) if total_carts_with_items > 0 else 0
+        
+        # Previous period for comparison
+        prev_total_carts = Cart.objects.filter(
+            created_at__gte=previous_period_threshold,
+            created_at__lt=date_threshold,
+            items__isnull=False
+        ).distinct().count()
+        
+        prev_converted_carts = Cart.objects.filter(
+            created_at__gte=previous_period_threshold,
+            created_at__lt=date_threshold,
+            items__isnull=False,
+            user__isnull=False,
+            user__orders__created_at__gte=F('created_at'),
+            user__orders__status__in=['PROCESSING', 'SHIPPED', 'DELIVERED']
+        ).distinct().count()
+        
+        prev_abandoned_carts = prev_total_carts - prev_converted_carts
+        prev_abandoned_rate = (prev_abandoned_carts / prev_total_carts * 100) if prev_total_carts > 0 else 0
+        
+        abandoned_rate_change = abandoned_rate - prev_abandoned_rate
+        
+        # CUSTOMER METRICS
+        # New customers this period
+        new_customers = CustomUser.objects.filter(
+            date_joined__gte=date_threshold
+        ).count()
+        
+        # Total customers
+        total_customers = CustomUser.objects.count()
+        
+        # Active customers (made an order in this period)
+        active_customers = CustomUser.objects.filter(
+            orders__created_at__gte=date_threshold
+        ).distinct().count()
+        
+        # Previous period comparisons
+        prev_new_customers = CustomUser.objects.filter(
+            date_joined__gte=previous_period_threshold,
+            date_joined__lt=date_threshold
+        ).count()
+        
+        prev_total_customers = CustomUser.objects.filter(
+            date_joined__lt=date_threshold
+        ).count()
+        
+        prev_active_customers = CustomUser.objects.filter(
+            orders__created_at__gte=previous_period_threshold,
+            orders__created_at__lt=date_threshold
+        ).distinct().count()
+        
+        # Calculate growth rates
+        customers_growth = ((new_customers - prev_new_customers) / prev_new_customers * 100) if prev_new_customers > 0 else 0
+        total_customers_growth = ((total_customers - prev_total_customers) / prev_total_customers * 100) if prev_total_customers > 0 else 0
+        active_customers_growth = ((active_customers - prev_active_customers) / prev_active_customers * 100) if prev_active_customers > 0 else 0
+        
+        # ORDER METRICS BY STATUS
+        all_orders_count = Order.objects.filter(created_at__gte=date_threshold).count()
+        pending_orders_count = Order.objects.filter(
+            created_at__gte=date_threshold,
+            status='PENDING'
+        ).count()
+        completed_orders_count = Order.objects.filter(
+            created_at__gte=date_threshold,
+            status='DELIVERED'
+        ).count()
+        
+        # Previous period order counts
+        prev_all_orders = Order.objects.filter(
+            created_at__gte=previous_period_threshold,
+            created_at__lt=date_threshold
+        ).count()
+        prev_pending_orders = Order.objects.filter(
+            created_at__gte=previous_period_threshold,
+            created_at__lt=date_threshold,
+            status='PENDING'
+        ).count()
+        prev_completed_orders = Order.objects.filter(
+            created_at__gte=previous_period_threshold,
+            created_at__lt=date_threshold,
+            status='DELIVERED'
+        ).count()
+        
+        # Calculate order growth rates
+        all_orders_growth = ((all_orders_count - prev_all_orders) / prev_all_orders * 100) if prev_all_orders > 0 else 0
+        pending_orders_growth = ((pending_orders_count - prev_pending_orders) / prev_pending_orders * 100) if prev_pending_orders > 0 else 0
+        completed_orders_growth = ((completed_orders_count - prev_completed_orders) / prev_completed_orders * 100) if prev_completed_orders > 0 else 0
+        
+        return Response({
+            'abandoned_cart': {
+                'rate': round(abandoned_rate, 1),
+                'change': round(abandoned_rate_change, 2),
+                'total_carts': total_carts_with_items,
+                'abandoned_count': abandoned_carts
+            },
+            'customers': {
+                'new_customers': new_customers,
+                'new_customers_growth': round(customers_growth, 1),
+                'total_customers': total_customers,
+                'total_growth': round(total_customers_growth, 1)
+            },
+            'active_customers': {
+                'count': active_customers,
+                'growth': round(active_customers_growth, 1)
+            },
+            'orders': {
+                'all_orders': {
+                    'count': all_orders_count,
+                    'growth': round(all_orders_growth, 2)
+                },
+                'pending': {
+                    'count': pending_orders_count,
+                    'growth': round(pending_orders_growth, 2)
+                },
+                'completed': {
+                    'count': completed_orders_count,
+                    'growth': round(completed_orders_growth, 2)
+                }
+            },
+            'period': time_period
+        })
+    
+    @action(detail=False, methods=['GET'])
     def cart_metrics(self, request):
-        """Get abandoned cart rate and related metrics"""
+        """Get detailed abandoned cart metrics"""
         time_period = request.query_params.get('period', 'week')
         date_threshold = self._get_date_threshold(time_period)
         
+        # Get carts with items (potential purchases)
         total_carts = Cart.objects.filter(
-            created_at__gte=date_threshold
-        ).count()
-        
-        abandoned_carts = Cart.objects.filter(
             created_at__gte=date_threshold,
             items__isnull=False
-        ).exclude(
-            user__orders__created_at__gte=F('created_at')
         ).distinct().count()
         
+        # Get carts that led to actual orders
+        # A cart is considered "converted" if the user made an order after creating the cart
+        converted_carts = Cart.objects.filter(
+            created_at__gte=date_threshold,
+            items__isnull=False,
+            user__isnull=False  # Only consider logged-in users for accurate tracking
+        ).annotate(
+            has_subsequent_order=Exists(
+                Order.objects.filter(
+                    user=OuterRef('user'),
+                    created_at__gte=OuterRef('created_at')
+                )
+            )
+        ).filter(has_subsequent_order=True).count()
+        
+        abandoned_carts = total_carts - converted_carts
         abandoned_rate = (abandoned_carts / total_carts * 100) if total_carts > 0 else 0
+        
+        # Get cart abandonment reasons (you might want to add this as a field to Cart model)
+        abandonment_data = {
+            'high_shipping_cost': 0,  # These would need additional tracking
+            'payment_issues': 0,
+            'just_browsing': abandoned_carts,  # Default to all abandoned
+            'other': 0
+        }
         
         data = {
             'abandoned_rate': round(abandoned_rate, 2),
             'total_carts': total_carts,
             'abandoned_carts': abandoned_carts,
+            'converted_carts': converted_carts,
+            'abandonment_reasons': abandonment_data,
             'period': time_period
         }
         
@@ -2705,25 +2874,45 @@ class DashboardViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=['GET'])
     def customer_metrics(self, request):
-        """Get customer-related metrics"""
+        """Get detailed customer metrics"""
         time_period = request.query_params.get('period', 'week')
         date_threshold = self._get_date_threshold(time_period)
+        previous_period_threshold = self._get_previous_period_threshold(time_period)
         
+        # Current period metrics
+        new_customers = CustomUser.objects.filter(date_joined__gte=date_threshold).count()
         total_customers = CustomUser.objects.count()
         active_customers = CustomUser.objects.filter(
             orders__created_at__gte=date_threshold
         ).distinct().count()
+        returning_customers = CustomUser.objects.filter(
+            orders__created_at__gte=date_threshold
+        ).annotate(
+            order_count=Count('orders')
+        ).filter(order_count__gt=1).count()
         
-        previous_customers = CustomUser.objects.filter(
+        # Previous period for comparison
+        prev_new_customers = CustomUser.objects.filter(
+            date_joined__gte=previous_period_threshold,
             date_joined__lt=date_threshold
         ).count()
         
-        growth_rate = ((total_customers - previous_customers) / previous_customers * 100) if previous_customers > 0 else 0
+        prev_active_customers = CustomUser.objects.filter(
+            orders__created_at__gte=previous_period_threshold,
+            orders__created_at__lt=date_threshold
+        ).distinct().count()
+        
+        # Calculate growth rates
+        new_customer_growth = ((new_customers - prev_new_customers) / prev_new_customers * 100) if prev_new_customers > 0 else 0
+        active_customer_growth = ((active_customers - prev_active_customers) / prev_active_customers * 100) if prev_active_customers > 0 else 0
         
         data = {
+            'new_customers': new_customers,
+            'new_customer_growth': round(new_customer_growth, 2),
             'total_customers': total_customers,
             'active_customers': active_customers,
-            'growth_rate': round(growth_rate, 2),
+            'active_customer_growth': round(active_customer_growth, 2),
+            'returning_customers': returning_customers,
             'period': time_period
         }
         
@@ -2733,64 +2922,71 @@ class DashboardViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=['GET'])
     def order_metrics(self, request):
-        """Get order-related metrics filtered by status"""
-        # Get status filter from query params, or use None to get all statuses
+        """
+        Enhanced order metrics for:
+        1. Order Management page filtering
+        2. Sales analytics charts
+        3. Detailed order breakdowns
+        """
+        time_period = request.query_params.get('period', 'week')
         status_filter = request.query_params.get('status', None)
+        date_threshold = self._get_date_threshold(time_period)
+        previous_period_threshold = self._get_previous_period_threshold(time_period)
         
-        # Base queryset
-        orders = Order.objects.all()
+        # Base queryset for current period
+        current_orders = Order.objects.filter(created_at__gte=date_threshold)
+        previous_orders = Order.objects.filter(
+            created_at__gte=previous_period_threshold,
+            created_at__lt=date_threshold
+        )
         
-        # Apply status filter if provided
-        if status_filter:
-            orders = orders.filter(status=status_filter)
+        # Apply status filter if provided (for Order Management page)
+        filtered_orders = current_orders
+        if status_filter and status_filter != 'all':
+            filtered_orders = current_orders.filter(status=status_filter.upper())
         
-        # Get orders by status (for the summary breakdown)
-        orders_by_status = orders.values('status').annotate(
+        # Status breakdown for Order Management tabs
+        status_breakdown = Order.objects.filter(
+            created_at__gte=date_threshold
+        ).values('status').annotate(
             count=Count('id'),
-            total_value=Sum('total')
-        )
+            total_value=Sum('total'),
+            avg_order_value=Avg('total')
+        ).order_by('status')
         
-        # Get overall totals
-        order_totals = orders.aggregate(
-            total_revenue=Sum('total'),
-            total_orders=Count('id')
-        )
+        # Convert to dict for easier frontend consumption
+        status_summary = {}
+        total_all_orders = 0
         
-        # Get recent trend (last 7 days) for the filtered status
-        today = timezone.now().date()
-        week_ago = today - timedelta(days=7)
+        for status_data in status_breakdown:
+            status = status_data['status'].lower()
+            count = status_data['count']
+            status_summary[status] = {
+                'count': count,
+                'total_value': float(status_data['total_value'] or 0),
+                'avg_order_value': float(status_data['avg_order_value'] or 0)
+            }
+            total_all_orders += count
         
-        daily_trend = orders.filter(
-            created_at__date__gte=week_ago
-        ).annotate(
-            date=TruncDate('created_at')
-        ).values('date').annotate(
-            revenue=Sum('total'),
-            orders=Count('id')
-        ).order_by('date')
-        
-        data = {
-            'orders_by_status': list(orders_by_status),  # Convert QuerySet to list
-            'total_revenue': order_totals['total_revenue'] or 0,
-            'total_orders': order_totals['total_orders'] or 0,
-            'status_filter': status_filter,
-            'daily_trend': list(daily_trend)  # Add daily trend data
+        # Add "all orders" summary
+        status_summary['all'] = {
+            'count': total_all_orders,
+            'total_value': float(current_orders.aggregate(Sum('total'))['total__sum'] or 0),
+            'avg_order_value': float(current_orders.aggregate(Avg('total'))['total__avg'] or 0)
         }
         
-        serializer = DashboardOrderMetricsSerializer(data=data)
-        serializer.is_valid(raise_exception=True)
-        return Response(serializer.data)
-
-
-    @action(detail=False, methods=['GET'])
-    def sales_trend(self, request):
-        """Get sales trend data"""
-        time_period = request.query_params.get('period', 'week')
-        date_threshold = self._get_date_threshold(time_period)
+        # Daily trend for sales chart (last 7-30 days based on period)
+        if time_period == 'week':
+            trend_days = 7
+        elif time_period == 'month':
+            trend_days = 30
+        else:
+            trend_days = 7
+            
+        trend_start = timezone.now().date() - timedelta(days=trend_days)
         
-        sales_data = Order.objects.filter(
-            created_at__gte=date_threshold,
-            status__in=['PROCESSING', 'SHIPPED', 'DELIVERED']
+        daily_trend = current_orders.filter(
+            created_at__date__gte=trend_start
         ).annotate(
             date=TruncDate('created_at')
         ).values('date').annotate(
@@ -2798,36 +2994,68 @@ class DashboardViewSet(viewsets.ViewSet):
             orders=Count('id')
         ).order_by('date')
         
-        serializer = DashboardSalesTrendSerializer(sales_data, many=True)
-        return Response(serializer.data)
-
-    @action(detail=False, methods=['GET'])
-    def recent_orders(self, request):
-        """Get recent orders with details"""
-        orders = Order.objects.select_related('user').prefetch_related(
-            'items__product'
-        ).order_by('-created_at')[:10]
+        # Fill in missing dates with zero values
+        trend_dict = {item['date']: item for item in daily_trend}
+        complete_trend = []
         
-        orders_data = []
-        for order in orders:
-            order_data = {
-                'id': order.id,
-                'user_email': order.user.email,
-                'total': order.total,
+        for i in range(trend_days):
+            date = trend_start + timedelta(days=i)
+            if date in trend_dict:
+                complete_trend.append({
+                    'date': date.isoformat(),
+                    'revenue': float(trend_dict[date]['revenue'] or 0),
+                    'orders': trend_dict[date]['orders']
+                })
+            else:
+                complete_trend.append({
+                    'date': date.isoformat(),
+                    'revenue': 0.0,
+                    'orders': 0
+                })
+        
+        # Recent order activity (for management interface)
+        recent_activity = filtered_orders.select_related('user', 'customer').order_by('-created_at')[:10]
+        
+        activity_data = []
+        for order in recent_activity:
+            customer_name = order.customer.name if order.customer else (
+                order.user.get_full_name() if order.user else 'Unknown'
+            )
+            
+            activity_data.append({
+                'order_id': order.id,
+                'order_number': order.order_number,
+                'customer_name': customer_name,
                 'status': order.status,
-                'created_at': order.created_at,
-                'items': [
-                    {
-                        'product_name': item.product.name,
-                        'quantity': item.quantity,
-                        'price': item.price
-                    } for item in order.items.all()
-                ]
-            }
-            orders_data.append(order_data)
+                'total': float(order.total),
+                'created_at': order.created_at.isoformat(),
+            })
         
-        serializer = DashboardRecentOrderSerializer(orders_data, many=True)
-        return Response(serializer.data)
+        return Response({
+            # For Order Management page tabs/filtering
+            'status_summary': status_summary,
+            
+            # For sales analytics charts
+            'daily_trend': complete_trend,
+            'trend_period_days': trend_days,
+            
+            # Detailed breakdown (existing functionality)
+            'status_breakdown': list(status_breakdown),
+            'total_orders': filtered_orders.count(),
+            'total_revenue': float(filtered_orders.aggregate(Sum('total'))['total__sum'] or 0),
+            'avg_order_value': float(filtered_orders.aggregate(Avg('total'))['total__avg'] or 0),
+            
+            # Recent activity for management interface
+            'recent_activity': activity_data,
+            
+            # Request parameters
+            'status_filter': status_filter,
+            'period': time_period,
+            'date_range': {
+                'start': date_threshold.isoformat(),
+                'end': timezone.now().isoformat()
+            }
+        })
 
     def _get_date_threshold(self, period):
         """Helper method to get date threshold based on period"""
@@ -2839,7 +3067,185 @@ class DashboardViewSet(viewsets.ViewSet):
             'year': now - timedelta(days=365)
         }
         return thresholds.get(period, thresholds['week'])
+    
+    def _get_previous_period_threshold(self, period):
+        """Helper method to get the start of previous period for comparison"""
+        now = timezone.now()
+        current_threshold = self._get_date_threshold(period)
+        
+        # Calculate the duration of current period
+        duration = now - current_threshold
+        
+        # Previous period starts at: current_threshold - duration
+        return current_threshold - duration
+    
+    @action(detail=False, methods=['GET'])
+    def recent_orders(self, request):
+        """Get recent orders for dashboard display - NEW ENDPOINT"""
+        try:
+            limit = int(request.query_params.get('limit', 6))
+            
+            # Use select_related and prefetch_related for efficiency
+            recent_orders = Order.objects.select_related('user', 'customer')\
+                .prefetch_related('items__product')\
+                .order_by('-created_at')[:limit]
+            
+            orders_data = []
+            for order in recent_orders:
+                # Safely get first product image
+                first_item = order.items.first()
+                product_image = None
+                first_product_name = None
+                
+                if first_item:
+                    first_product_name = first_item.product.name
+                    if hasattr(first_item.product, 'main_image') and first_item.product.main_image:
+                        product_image = first_item.product.main_image.url
+                
+                # Use existing customer logic
+                customer_name = ""
+                if order.customer:
+                    customer_name = order.customer.name
+                elif order.user:
+                    customer_name = order.user.get_full_name() or order.user.email
+                
+                orders_data.append({
+                    'id': order.id,
+                    'order_number': order.order_number,
+                    'customer_name': customer_name,
+                    'customer_email': order.user.email if order.user else '',
+                    'total': float(order.total),  # Ensure JSON serializable
+                    'status': order.status,
+                    'status_display': order.get_status_display() if hasattr(order, 'get_status_display') else order.status,
+                    'created_at': order.created_at.isoformat(),
+                    'product_image': product_image,
+                    'items_count': order.items.count(),
+                    'first_product_name': first_product_name
+                })
+            
+            return Response({
+                'recent_orders': orders_data,
+                'total_count': Order.objects.count()
+            })
+            
+        except Exception as e:
+            # Graceful error handling
+            return Response({
+                'recent_orders': [],
+                'total_count': 0,
+                'error': 'Failed to fetch recent orders'
+            }, status=500)
 
+    @action(detail=False, methods=['GET'])
+    def dashboard_summary(self, request):
+        """
+        Consolidated dashboard summary - SAFE VERSION
+        This complements your existing overview_metrics without replacing it
+        """
+        try:
+            time_period = request.query_params.get('period', 'week')
+            date_threshold = self._get_date_threshold(time_period)
+            
+            # Basic counts (safe queries)
+            total_orders = Order.objects.filter(created_at__gte=date_threshold).count()
+            pending_orders = Order.objects.filter(
+                created_at__gte=date_threshold, 
+                status='PENDING'
+            ).count()
+            
+            # Handle different status names safely
+            completed_orders_filters = [
+                {'status': 'DELIVERED'},
+                {'status': 'COMPLETED'},  # In case you use this
+                {'status': 'Completed'}   # In case of different casing
+            ]
+            
+            completed_orders = 0
+            for filter_dict in completed_orders_filters:
+                completed_orders += Order.objects.filter(
+                    created_at__gte=date_threshold,
+                    **filter_dict
+                ).count()
+            
+            # Revenue calculation with error handling
+            revenue_data = Order.objects.filter(
+                created_at__gte=date_threshold
+            ).aggregate(total_revenue=Sum('total'))
+            
+            total_revenue = revenue_data['total_revenue'] or 0
+            
+            return Response({
+                'summary': {
+                    'all_orders': {
+                        'count': total_orders,
+                        'label': 'All Orders'
+                    },
+                    'pending_orders': {
+                        'count': pending_orders,
+                        'label': 'Pending'
+                    },
+                    'completed_orders': {
+                        'count': completed_orders,
+                        'label': 'Completed'
+                    },
+                    'total_revenue': float(total_revenue)
+                },
+                'period': time_period,
+                'last_updated': timezone.now().isoformat()
+            })
+            
+        except Exception as e:
+            # Return safe defaults on error
+            return Response({
+                'summary': {
+                    'all_orders': {'count': 0, 'label': 'All Orders'},
+                    'pending_orders': {'count': 0, 'label': 'Pending'},
+                    'completed_orders': {'count': 0, 'label': 'Completed'},
+                    'total_revenue': 0
+                },
+                'period': time_period,
+                'error': 'Failed to fetch summary data'
+            })
+
+    # SAFE HELPER METHOD - Add this to your DashboardViewSet
+    def _safe_get_order_status_display(self, status):
+        """
+        Safe status display mapping without changing existing logic
+        """
+        ui_status_mapping = {
+            'PENDING': 'Pending',
+            'PROCESSING': 'Processing', 
+            'SHIPPED': 'Shipped',
+            'DELIVERED': 'Completed',  # Map to UI expectation
+            'CANCELLED': 'Cancelled',
+            # Add fallbacks for any other statuses
+            'COMPLETED': 'Completed',
+            'Completed': 'Completed'
+        }
+        return ui_status_mapping.get(status, status)
+
+    # OPTIONAL: Enhanced version of your existing overview_metrics
+    # Only add this if you want to enhance the existing endpoint
+    def _enhance_overview_response(self, response_data):
+        """
+        Helper to enhance your existing overview_metrics response
+        Add this call at the end of your overview_metrics method
+        """
+        # Add UI-friendly status displays
+        if 'orders' in response_data:
+            orders = response_data['orders']
+            if 'completed' in orders:
+                orders['completed']['label'] = 'Completed'
+            if 'pending' in orders:
+                orders['pending']['label'] = 'Pending'
+            if 'all_orders' in orders:
+                orders['all_orders']['label'] = 'All Orders'
+        
+        # Add timestamp
+        response_data['last_updated'] = timezone.now().isoformat()
+        
+        return response_data
+    
 class ProductFilter(django_filters.FilterSet):
     tab = django_filters.CharFilter(method='filter_tab')
     search = django_filters.CharFilter(method='filter_search')

@@ -1052,25 +1052,41 @@ class DashboardCartMetricsSerializer(serializers.Serializer):
     abandoned_rate = serializers.FloatField()
     total_carts = serializers.IntegerField()
     abandoned_carts = serializers.IntegerField()
+    converted_carts = serializers.IntegerField()
+    abandonment_reasons = serializers.DictField(required=False)
     period = serializers.CharField()
 
 class DashboardCustomerMetricsSerializer(serializers.Serializer):
+    new_customers = serializers.IntegerField()
+    new_customer_growth = serializers.FloatField()
     total_customers = serializers.IntegerField()
     active_customers = serializers.IntegerField()
-    growth_rate = serializers.FloatField()
+    active_customer_growth = serializers.FloatField()
+    returning_customers = serializers.IntegerField()
     period = serializers.CharField()
 
-class DashboardOrderStatusSerializer(serializers.Serializer):
+class DashboardOrderStatusBreakdownSerializer(serializers.Serializer):
     status = serializers.CharField()
     count = serializers.IntegerField()
-    total_value = serializers.DecimalField(max_digits=10, decimal_places=2, required=False)
+    total_value = serializers.DecimalField(max_digits=10, decimal_places=2)
+    avg_order_value = serializers.DecimalField(max_digits=10, decimal_places=2)
 
 class DashboardOrderMetricsSerializer(serializers.Serializer):
-    orders_by_status = serializers.ListField()  # Changed to ListField to accept the list directly
-    total_revenue = serializers.DecimalField(max_digits=10, decimal_places=2)
+    status_breakdown = DashboardOrderStatusBreakdownSerializer(many=True)
     total_orders = serializers.IntegerField()
-    status_filter = serializers.CharField(allow_null=True, required=False)  # New field
-    daily_trend = serializers.ListField(required=False)  # New field for daily trend data
+    total_revenue = serializers.DecimalField(max_digits=10, decimal_places=2)
+    avg_order_value = serializers.FloatField()
+    daily_trend = serializers.ListField(required=False)
+    status_filter = serializers.CharField(allow_null=True, required=False)
+    period = serializers.CharField()
+
+# New serializer for the overview endpoint
+class DashboardOverviewSerializer(serializers.Serializer):
+    abandoned_cart = serializers.DictField()
+    customers = serializers.DictField()
+    active_customers = serializers.DictField()
+    orders = serializers.DictField()
+    period = serializers.CharField()
 
 class DashboardSalesTrendSerializer(serializers.Serializer):
     date = serializers.DateField()
@@ -1102,7 +1118,37 @@ class ProductColorSerializer(serializers.ModelSerializer):
         model = ProductColor
         fields = ['id', 'color', 'color_id']
 
+class DashboardRecentOrderItemSerializer(serializers.Serializer):
+    """Safe serializer for recent order items"""
+    id = serializers.IntegerField()
+    order_number = serializers.CharField()
+    customer_name = serializers.CharField()
+    customer_email = serializers.EmailField()
+    total = serializers.FloatField()
+    status = serializers.CharField()
+    status_display = serializers.CharField()
+    created_at = serializers.CharField()  # Already formatted as ISO string
+    product_image = serializers.URLField(allow_null=True)
+    items_count = serializers.IntegerField()
+    first_product_name = serializers.CharField(allow_null=True)
 
+class DashboardRecentOrdersResponseSerializer(serializers.Serializer):
+    """Response serializer for recent orders endpoint"""
+    recent_orders = DashboardRecentOrderItemSerializer(many=True)
+    total_count = serializers.IntegerField()
+    error = serializers.CharField(required=False)
+
+class DashboardSummaryItemSerializer(serializers.Serializer):
+    """Serializer for individual summary items"""
+    count = serializers.IntegerField()
+    label = serializers.CharField()
+
+class DashboardSummaryResponseSerializer(serializers.Serializer):
+    """Response serializer for dashboard summary"""
+    summary = serializers.DictField()
+    period = serializers.CharField()
+    last_updated = serializers.CharField()
+    error = serializers.CharField(required=False)
 
 class ProductVariationSerializer(serializers.ModelSerializer):
     final_price = serializers.SerializerMethodField()
