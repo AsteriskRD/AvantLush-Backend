@@ -2293,3 +2293,2089 @@ For API support, please contact:
 Email: avalusht@gmail.com
 Create a support ticket through the API
 This documentation covers all the endpoints, request/response formats, and error handling for the Avantlush API.
+---
+
+## Admin Dashboard - Product Management UI Endpoints
+
+This section details the API endpoints specifically used by the Product Management section of the Admin Dashboard UI.
+
+### 1. List and Filter Products (Product Table)
+
+This endpoint populates the main product table in the dashboard, supporting pagination, searching, and filtering by tabs (All, Published, Low Stock, Draft) and category.
+
+*   **UI Feature:** Main product listing table, search bar, filter tabs, category filter, pagination.
+*   **Endpoint:** `GET /api/dashboard/product_management_data/`
+*   **Method:** `GET`
+*   **Auth Required:** Yes (Admin)
+*   **Description:** Retrieves a paginated list of products tailored for the admin dashboard, with filtering and search capabilities.
+*   **Query Parameters:**
+    *   `tab` (string, optional): Filters products by status. Values: `all`, `published`, `low_stock`, `draft`. Default: `all`.
+    *   `search` (string, optional): Search term for product name, SKU, or category name.
+    *   `category` (string, optional): Filter by category slug.
+    *   `page` (integer, optional): Page number for pagination. Default: `1`.
+    *   `page_size` (integer, optional): Number of items per page. Default: `10`.
+*   **Success Response (200 OK):**
+    ```json
+    {
+        "products": [
+            {
+                "id": 1,
+                "name": "Ergonomic Chair",
+                "sku": "302012",
+                "category": "Chair",
+                "category_id": 1,
+                "variants": "3 Variants",
+                "variant_count": 3,
+                "stock_quantity": 10,
+                "stock_status": "low_stock", // "out_of_stock", "low_stock", "in_stock"
+                "stock_label": "Low Stock",   // "Out of Stock", "Low Stock", "In Stock"
+                "stock_color": "orange",    // "red", "orange", "green"
+                "price": 121.00,
+                "status": "low_stock", // "published", "draft", "low_stock", "out_of_stock", etc.
+                "status_color": "orange", // "green", "gray", "orange", "red"
+                "created_at": "29 Dec 2022", // Formatted date
+                "updated_at": "29 Dec 2022",
+                "main_image": "https://res.cloudinary.com/...",
+                "is_featured": false,
+                "rating": 0.00,
+                "num_ratings": 0
+            }
+            // ... more products
+        ],
+        "pagination": {
+            "current_page": 1,
+            "total_pages": 10,
+            "total_count": 100,
+            "page_size": 10,
+            "has_next": true,
+            "has_previous": false
+        },
+        "filters": {
+            "tab": "all",
+            "search": "",
+            "category": ""
+        },
+        "tab_counts": {
+            "all": 100,
+            "published": 50,
+            "low_stock": 15,
+            "draft": 35
+        }
+    }
+    ```
+*   **Error Response (401 Unauthorized):**
+    ```json
+    {
+        "detail": "Authentication credentials were not provided."
+    }
+    ```
+*   **Error Response (403 Forbidden):**
+    ```json
+    {
+        "detail": "You do not have permission to perform this action."
+    }
+    ```
+
+### 2. Add New Product
+
+This endpoint is used when the "Add Product" button is clicked.
+
+*   **UI Feature:** "Add Product" button and subsequent form.
+*   **Endpoint:** `POST /api/products/`
+*   **Method:** `POST`
+*   **Auth Required:** Yes (Admin)
+*   **Description:** Creates a new product.
+*   **Request Body (Payload):** (Based on `ProductManagementSerializer`)
+    ```json
+    {
+        "name": "New Awesome Chair",
+        "description": "A very comfortable and stylish chair.",
+        "product_details": ["Adjustable height", "Lumbar support"], // List of strings
+        "category": 1, // Category ID
+        "tags": [1, 2], // List of Tag IDs (optional)
+        "base_price": "199.99", // Renamed from 'price' in serializer to 'base_price' for clarity if it's the base
+        "discount_type": "percentage", // "percentage" or "fixed" (optional)
+        "discount_percentage": "10.00", // (optional)
+        "vat_amount": "5.00", // (optional)
+        "sku": "CHR-NEW-001",
+        "barcode": "1234567890123", // (optional)
+        "stock_quantity": 50,
+        "status": "draft", // "draft", "published", "active", etc.
+        "is_featured": false,
+        "is_physical_product": true,
+        "weight": "15.5", // (optional)
+        "height": "100.0", // (optional)
+        "length": "60.0", // (optional)
+        "width": "60.0", // (optional)
+        "main_image": null, // Can be set via a separate image upload endpoint or included if serializer supports direct upload
+        "image_files": [], // For multipart/form-data image uploads if supported by this endpoint directly
+        "variations": [ // (optional)
+            {
+                "variation_type": "Color", // Kept for backward compatibility
+                "variation": "Red",      // Kept for backward compatibility
+                "price_adjustment": "10.00",
+                "stock_quantity": 10,
+                "sku": "CHR-NEW-001-RED",
+                "is_default": false,
+                "size_ids": [1], // List of Size IDs for this variation
+                "color_ids": [2] // List of Color IDs for this variation
+            }
+        ]
+    }
+    ```
+    *Note: For image uploads, it's common to use `multipart/form-data` and handle `main_image` or `image_files` separately or via dedicated image upload endpoints.*
+*   **Success Response (201 Created):** (Based on `ProductManagementSerializer`)
+    ```json
+    {
+        "id": 101,
+        "name": "New Awesome Chair",
+        "description": "A very comfortable and stylish chair.",
+        "product_details": ["Adjustable height", "Lumbar support"],
+        "category": 1,
+        "category_name": "Chairs",
+        "tags": [1, 2],
+        "status": "draft",
+        "status_display": "Draft",
+        "main_image": null,
+        "images": [], // URLs of additional images
+        "is_featured": false,
+        "is_liked": false, // Assuming not liked upon creation
+        "available_sizes": [], // Populated if sizes are linked
+        "available_colors": [], // Populated if colors are linked
+        "base_price": "199.99",
+        "discount_type": "percentage",
+        "discount_percentage": "10.00",
+        "vat_amount": "5.00",
+        "sku": "CHR-NEW-001",
+        "barcode": "1234567890123",
+        "stock_quantity": 50,
+        "variations": [
+            {
+                "id": 1,
+                "variation_type": "Color",
+                "variation": "Red",
+                "price_adjustment": "10.00",
+                "stock_quantity": 10,
+                "sku": "CHR-NEW-001-RED",
+                "is_default": false,
+                "final_price": 209.99, // base_price + price_adjustment
+                "sizes": [{"id": 1, "name": "Large"}],
+                "colors": [{"id": 2, "name": "Red", "hex_code": "#FF0000"}]
+            }
+        ],
+        "is_physical_product": true,
+        "weight": "15.50",
+        "height": "100.00",
+        "length": "60.00",
+        "width": "60.00",
+        "created_at": "2024-06-05T14:00:00Z",
+        "added_date_formatted": "05 Jun 2024",
+        "variants_count": 1,
+        "all_images": {
+            "main_image": null,
+            "gallery": []
+        }
+    }
+    ```
+*   **Error Response (400 Bad Request):**
+    ```json
+    {
+        "name": ["This field is required."],
+        "sku": ["Product with this SKU already exists."],
+        "base_price": ["A valid number is required."]
+        // ... other validation errors
+    }
+    ```
+
+### 3. Edit Product
+
+This endpoint is used when the "Edit" icon (pencil) in the product table is clicked.
+
+*   **UI Feature:** "Edit" icon and subsequent product editing form.
+*   **Endpoint:** `PUT /api/products/<id>/` or `PATCH /api/products/<id>/`
+*   **Method:** `PUT` (to replace the entire resource) or `PATCH` (to partially update)
+*   **Auth Required:** Yes (Admin)
+*   **Description:** Updates an existing product.
+*   **Request Body (Payload):** (Similar to "Add New Product", fields are optional for `PATCH`)
+    ```json
+    {
+        "name": "Updated Ergonomic Chair",
+        "base_price": "125.00",
+        "stock_quantity": 45,
+        "status": "published"
+        // ... other fields to update
+    }
+    ```
+*   **Success Response (200 OK):** (Similar to the "Add New Product" success response, showing the updated product)
+    ```json
+    {
+        "id": 1, // Existing product ID
+        "name": "Updated Ergonomic Chair",
+        "base_price": "125.00",
+        "stock_quantity": 45,
+        "status": "published",
+        "status_display": "Published",
+        // ... other fields
+    }
+    ```
+*   **Error Response (400 Bad Request):**
+    ```json
+    {
+        "base_price": ["A valid number is required."]
+    }
+    ```
+*   **Error Response (404 Not Found):**
+    ```json
+    {
+        "detail": "Not found."
+    }
+    ```
+
+### 4. Delete Product
+
+This endpoint is used when the "Delete" icon (trash can) in the product table is clicked for a single product.
+
+*   **UI Feature:** "Delete" icon in the product table.
+*   **Endpoint:** `DELETE /api/products/<id>/`
+*   **Method:** `DELETE`
+*   **Auth Required:** Yes (Admin)
+*   **Description:** Deletes a specific product.
+*   **Success Response (204 No Content):** (No body content)
+*   **Error Response (404 Not Found):**
+    ```json
+    {
+        "detail": "Not found."
+    }
+    ```
+
+### 5. View Product Details
+
+This endpoint could be used if clicking the "View" icon (eye) leads to a detailed product view page (though the UI screenshot doesn't explicitly show this page, it's a common action).
+
+*   **UI Feature:** "View" icon in the product table.
+*   **Endpoint:** `GET /api/products/<id>/`
+*   **Method:** `GET`
+*   **Auth Required:** Yes (Admin, if it's an admin-specific detailed view) or No (if it's a public product detail page). The `ProductViewSet` is `AllowAny` for GET by default.
+*   **Description:** Retrieves details for a specific product.
+*   **Success Response (200 OK):** (Based on `ProductManagementSerializer` or `ProductSerializer`)
+    ```json
+    {
+        "id": 1,
+        "name": "Ergonomic Chair",
+        "slug": "ergonomic-chair",
+        "description": "High-quality ergonomic chair.",
+        "price": "121.00", // Or base_price depending on serializer
+        "category": 1,
+        "category_name": "Chair",
+        "images": ["url_to_image1.jpg"],
+        "main_image": "url_to_main_image.jpg",
+        "stock_quantity": 10,
+        "is_featured": false,
+        "is_physical_product": true,
+        "sku": "302012",
+        "status": "low_stock",
+        "rating": "0.00",
+        "num_ratings": 0,
+        "is_liked": false,
+        "product_details": ["Adjustable", "Comfortable"],
+        "variations": [
+            // ... list of variations using ProductVariationSerializer
+        ],
+        // ... other fields from ProductManagementSerializer
+        "created_at": "2022-12-29T00:00:00Z",
+        "updated_at": "2022-12-29T00:00:00Z"
+    }
+    ```
+*   **Error Response (404 Not Found):**
+    ```json
+    {
+        "detail": "Not found."
+    }
+    ```
+
+### 6. Bulk Product Actions
+
+This endpoint handles actions like "Delete Selected", "Publish Selected", "Draft Selected" when multiple products are checked.
+
+*   **UI Feature:** Checkboxes next to products and bulk action dropdown (e.g., "Delete Selected").
+*   **Endpoint:** `POST /api/dashboard/bulk_product_action/`
+*   **Method:** `POST`
+*   **Auth Required:** Yes (Admin)
+*   **Description:** Performs a bulk action (delete, publish, draft, feature) on selected products.
+*   **Request Body (Payload):**
+    ```json
+    {
+        "action": "delete", // "delete", "publish", "draft", "feature"
+        "product_ids": [1, 2, 5] // Array of product IDs
+    }
+    ```
+*   **Success Response (200 OK):**
+    ```json
+    {
+        "message": "3 products deleted successfully" // Message varies based on action
+    }
+    ```
+    For status updates:
+    ```json
+    {
+        "message": "3 products published successfully"
+    }
+    ```
+*   **Error Response (400 Bad Request):**
+    ```json
+    {
+        "error": "Action and product_ids are required"
+    }
+    ```
+    ```json
+    {
+        "error": "Invalid action"
+    }
+    ```
+
+### 7. Export Products
+
+This endpoint is triggered by the "Export" button.
+
+*   **UI Feature:** "Export" button.
+*   **Endpoint:** `GET /api/dashboard/export_products/`
+    *(Note: `ProductViewSet` also has a `/api/products/export/` endpoint. The dashboard might use the one under `/dashboard/` if it has specific formatting or filtering for the dashboard context.)*
+*   **Method:** `GET`
+*   **Auth Required:** Yes (Admin)
+*   **Description:** Exports product data as a CSV file.
+*   **Query Parameters:** (Potentially supports the same filters as the product list: `tab`, `search`, `category`)
+*   **Success Response (200 OK):**
+    *   Content-Type: `text/csv`
+    *   Body: CSV formatted data of products.
+    ```csv
+    Name,SKU,Category,Price,Stock,Status,Created
+    Ergonomic Chair,302012,Chair,121.00,10,Low Stock,2022-12-29
+    Table,301600,Table,400.00,347,Published,2022-09-19
+    ...
+    ```
+*   **Error Response (403 Forbidden):**
+    ```json
+    {
+        "detail": "You do not have permission to perform this action."
+    }
+    ```
+
+### 8. Get Tab Counts for Filtering
+
+This endpoint can provide the counts displayed next to filter tabs (All, Published, Low Stock, Draft).
+
+*   **UI Feature:** Counts next to filter tabs.
+*   **Endpoint:** `GET /api/products/tab_counts/` (Action in `ProductViewSet`)
+    *(Alternatively, this data is also included in the response of `GET /api/dashboard/product_management_data/`)*
+*   **Method:** `GET`
+*   **Auth Required:** Yes (Admin)
+*   **Description:** Retrieves the count of products for each status tab.
+*   **Success Response (200 OK):**
+    ```json
+    {
+        "all": 100,
+        "published": 50,
+        "low_stock": 15, // Products with stock_quantity <= 10
+        "draft": 35
+    }
+    ```
+
+### 9. Get Categories for Filtering
+
+This endpoint populates the "Category" filter dropdown.
+
+*   **UI Feature:** "Filters" button, which likely includes a category dropdown.
+*   **Endpoint:** `GET /api/products/categories/` (Action in `ProductViewSet`)
+*   **Method:** `GET`
+*   **Auth Required:** No (Publicly accessible, but used in admin context here)
+*   **Description:** Retrieves a list of all product categories.
+*   **Success Response (200 OK):**
+    ```json
+    [
+        {
+            "id": 1,
+            "name": "Chair",
+            "slug": "chair",
+            "parent": null
+        },
+        {
+            "id": 2,
+            "name": "Table",
+            "slug": "table",
+            "parent": null
+        }
+        // ... more categories
+    ]
+    ```
+
+### 10. Get Product Sizes and Colors (for Product Form)
+
+These endpoints are used to populate dropdowns for selecting sizes and colors when adding/editing a product with variations.
+
+*   **UI Feature:** Size and Color selection in the "Add Product" / "Edit Product" form, especially for variations.
+*   **Endpoints:**
+    *   `GET /api/products/sizes/` (Action in `ProductViewSet`)
+    *   `GET /api/products/colors/` (Action in `ProductViewSet`)
+*   **Method:** `GET`
+*   **Auth Required:** Yes (Admin)
+*   **Description:** Retrieves all available sizes or colors.
+*   **Success Response for Sizes (200 OK):**
+    ```json
+    [
+        {"id": 1, "name": "Small"},
+        {"id": 2, "name": "Medium"},
+        {"id": 3, "name": "Large"}
+    ]
+    ```
+*   **Success Response for Colors (200 OK):**
+    ```json
+    [
+        {"id": 1, "name": "Red", "hex_code": "#FF0000"},
+        {"id": 2, "name": "Blue", "hex_code": "#0000FF"}
+    ]
+    ```
+
+---
+---
+
+### Admin Dashboard - Overview UI Endpoints
+
+This section details API endpoints supporting the main dashboard overview page, including summary cards, sales charts, and recent orders.
+
+#### 1. Dashboard Overview Metrics (Summary Cards)
+
+Provides aggregated data for the summary cards (All Orders, Pending, Completed, Abandoned Cart, Customers, Active Customers).
+
+*   **UI Feature:** Summary cards at the top of the dashboard.
+*   **Endpoint:** `GET /api/dashboard/overview_metrics/`
+*   **Method:** `GET`
+*   **Auth Required:** Yes (Admin)
+*   **Description:** Retrieves key performance indicators and their changes over a specified period.
+*   **Query Parameters:**
+    *   `period` (string, optional): Time period for metrics. Values: `day`, `week`, `month`, `year`. Default: `week`.
+*   **Success Response (200 OK):**
+    ```json
+    {
+        "abandoned_cart": {
+            "rate": 25.5, // Percentage
+            "change": 5.2, // Percentage point change from previous period
+            "total_carts": 200,
+            "abandoned_count": 51
+        },
+        "customers": {
+            "new_customers": 50,
+            "new_customers_growth": 10.5, // Percentage change
+            "total_customers": 1500,
+            "total_growth": 2.1 // Percentage change
+        },
+        "active_customers": {
+            "count": 350,
+            "growth": 8.0 // Percentage change
+        },
+        "orders": {
+            "all_orders": {
+                "count": 120,
+                "growth": 15.0 // Percentage change
+            },
+            "pending": {
+                "count": 15,
+                "growth": -5.0 // Percentage change
+            },
+            "completed": { // Typically maps to 'DELIVERED' status
+                "count": 90,
+                "growth": 20.0 // Percentage change
+            }
+        },
+        "period": "week",
+        "last_updated": "2024-06-05T14:30:00Z" // Added by _enhance_overview_response
+    }
+    ```
+*   **Error Response (401 Unauthorized):**
+    ```json
+    {
+        "detail": "Authentication credentials were not provided."
+    }
+    ```
+*   **Error Response (403 Forbidden):**
+    ```json
+    {
+        "detail": "You do not have permission to perform this action."
+    }
+    ```
+
+#### 2. Dashboard Summary (Alternative for Summary Cards)
+
+Provides a consolidated summary of key metrics, can also be used for summary cards.
+
+*   **UI Feature:** Summary cards at the top of the dashboard.
+*   **Endpoint:** `GET /api/dashboard/dashboard_summary/`
+*   **Method:** `GET`
+*   **Auth Required:** Yes (Admin)
+*   **Description:** Retrieves a summary of dashboard metrics for a specified period.
+*   **Query Parameters:**
+    *   `period` (string, optional): Time period for metrics. Values: `day`, `week`, `month`, `year`. Default: `week`.
+*   **Success Response (200 OK):**
+    ```json
+    {
+        "summary": {
+            "all_orders": {
+                "count": 120,
+                "label": "All Orders"
+            },
+            "pending_orders": {
+                "count": 15,
+                "label": "Pending"
+            },
+            "completed_orders": { // Maps to 'DELIVERED' or 'COMPLETED' status
+                "count": 90,
+                "label": "Completed"
+            },
+            "total_revenue": 15250.75
+        },
+        "period": "week",
+        "last_updated": "2024-06-05T14:30:00Z"
+    }
+    ```
+*   **Error Response (500 Internal Server Error - if data fetching fails):**
+    ```json
+    {
+        "summary": {
+            "all_orders": {"count": 0, "label": "All Orders"},
+            "pending_orders": {"count": 0, "label": "Pending"},
+            "completed_orders": {"count": 0, "label": "Completed"},
+            "total_revenue": 0
+        },
+        "period": "week",
+        "error": "Failed to fetch summary data"
+    }
+    ```
+
+#### 3. Sales Chart Data
+
+Provides time-series data for generating sales charts (or other metric charts).
+
+*   **UI Feature:** Sales line chart.
+*   **Endpoint:** `GET /api/dashboard/summary-chart-data/`
+*   **Method:** `GET`
+*   **Auth Required:** Yes (Admin)
+*   **Description:** Retrieves data points for a specified metric over a given period, suitable for charts.
+*   **Query Parameters:**
+    *   `metric` (string, required): The metric to retrieve data for. Values: `sales`, `orders_count`, `new_customers_count`.
+    *   `period` (string, optional): Time period for the chart. Values: `last_7_days`, `last_30_days`, `this_month`. Default: `last_7_days`.
+*   **Success Response (200 OK) for `metric=sales` & `period=last_7_days`:**
+    ```json
+    {
+        "chart_data": [
+            {"date": "2024-05-30", "value": "1250.50"},
+            {"date": "2024-05-31", "value": "1800.75"},
+            {"date": "2024-06-01", "value": "950.00"},
+            {"date": "2024-06-02", "value": "2100.25"},
+            {"date": "2024-06-03", "value": "1750.00"},
+            {"date": "2024-06-04", "value": "1900.50"},
+            {"date": "2024-06-05", "value": "2200.00"}
+        ],
+        "metric_label": "Total Sales",
+        "period_label": "Last 7 Days"
+    }
+    ```
+*   **Error Response (400 Bad Request - Invalid Metric):**
+    ```json
+    {
+        "error": "Invalid metric specified. Choose from 'sales', 'orders_count', 'new_customers_count'."
+    }
+    ```
+
+#### 4. Recent Orders Table
+
+Provides data for the table listing recent orders.
+
+*   **UI Feature:** "Recent Orders" table.
+*   **Endpoint:** `GET /api/dashboard/recent_orders/`
+*   **Method:** `GET`
+*   **Auth Required:** Yes (Admin)
+*   **Description:** Retrieves a list of the most recent orders for dashboard display.
+*   **Query Parameters:**
+    *   `limit` (integer, optional): Number of recent orders to fetch. Default: `6`.
+*   **Success Response (200 OK):**
+    ```json
+    {
+        "recent_orders": [
+            {
+                "id": 105,
+                "order_number": "ORD-20240605-0105",
+                "customer_name": "Alice Wonderland",
+                "customer_email": "alice@example.com",
+                "total": 121.00,
+                "status": "DELIVERED", // Raw status from model
+                "status_display": "Completed", // UI-friendly status
+                "created_at": "2024-06-05T10:15:00Z", // ISO format
+                "product_image": "https://res.cloudinary.com/.../chair.jpg", // URL of the first item's image
+                "items_count": 1,
+                "first_product_name": "Ergonomic Chair"
+            },
+            {
+                "id": 104,
+                "order_number": "ORD-20240604-0104",
+                "customer_name": "Bob The Builder",
+                "customer_email": "bob@example.com",
+                "total": 590.00,
+                "status": "PENDING",
+                "status_display": "Pending",
+                "created_at": "2024-06-04T16:30:00Z",
+                "product_image": "https://res.cloudinary.com/.../table.jpg",
+                "items_count": 2,
+                "first_product_name": "Large Dining Table"
+            }
+            // ... more recent orders
+        ],
+        "total_count": 105 // Total orders in the system
+    }
+    ```
+*   **Error Response (500 Internal Server Error - if data fetching fails):**
+    ```json
+    {
+        "recent_orders": [],
+        "total_count": 0,
+        "error": "Failed to fetch recent orders"
+    }
+    ```
+
+---
+---
+
+## Admin Dashboard - Order Management UI Endpoints
+
+This section details the API endpoints supporting the Order Management section of the Admin Dashboard UI.
+
+### 1. List and Filter Orders (Order Table)
+
+This endpoint populates the main order table, supporting pagination, searching, and filtering by status tabs (All order, Processing, Delivered, Cancelled) and date range.
+
+*   **UI Feature:** Main order listing table, search (implicitly, though not shown, usually part of admin tables), filter tabs, "Select Date" filter, pagination.
+*   **Endpoint:** `GET /api/orders/`
+*   **Method:** `GET`
+*   **Auth Required:** Yes (Admin)
+*   **Description:** Retrieves a paginated list of orders, with filtering and search capabilities.
+*   **Query Parameters:**
+    *   `status` (string, optional): Filters orders by status. Values: `PENDING`, `PROCESSING`, `SHIPPED`, `DELIVERED`, `CANCELLED`.
+    *   `created_at_after` (date string, `YYYY-MM-DD`, optional): Filters orders created on or after this date.
+    *   `created_at_before` (date string, `YYYY-MM-DD`, optional): Filters orders created on or before this date.
+    *   `search` (string, optional): Search term for order number, customer email, customer name.
+    *   `ordering` (string, optional): Fields to order by, e.g., `created_at`, `-total`. Default: `-created_at`.
+    *   `page` (integer, optional): Page number for pagination. Default: `1`.
+    *   `page_size` (integer, optional): Number of items per page. Default: (as per global pagination settings).
+*   **Success Response (200 OK):** (Based on `OrderSerializer`)
+    ```json
+    {
+        "count": 100,
+        "next": "http://api/orders/?page=2",
+        "previous": null,
+        "results": [
+            {
+                "id": 302012,
+                "order_number": "ORD-20221229-0001", // Example format
+                "customer_email": "john.bushmill@example.com",
+                "customer_name": "John Bushmill",
+                "items": [ // Typically includes details of the first item or a summary
+                    {
+                        "id": 1,
+                        "product": 50,
+                        "product_name": "Handmade Pouch",
+                        "product_sku": "HMP-001",
+                        "quantity": 1,
+                        "unit_price": "121.00",
+                        "total_price": "121.00",
+                        "variants": {}, // Or details of selected variant
+                        "product_image": "url/to/handmade_pouch.jpg"
+                    }
+                    // Potentially more items if the serializer is configured to return all
+                ],
+                "products_display_string": "Handmade Pouch +2 other products", // Generated by serializer
+                "total": "121.00",
+                "status": "PROCESSING",
+                "status_display": "Processing",
+                "payment": { // Details of the first payment
+                    "id": 1,
+                    "method": "Mastercard", // Or from payment_type on Order
+                    "amount": "121.00",
+                    "status": "PAID", // Payment status
+                    "created_at": "2022-12-29T10:00:00Z"
+                },
+                "payments": [ /* ... full list of payments ... */ ],
+                "shipping_address": "123 Main St, Anytown, USA",
+                "created_at": "2022-12-29T10:00:00Z",
+                "estimated_delivery_date": "Monday, January 02, 2023", // Calculated by serializer
+                "updated_at": "2022-12-29T10:05:00Z",
+                "note": "Customer requested gift wrap.",
+                "payment_type": "CREDIT", // From Order model
+                "order_type": "STANDARD",
+                "order_date": "2022-12-29",
+                "order_time": "10:00:00"
+            }
+            // ... more orders
+        ]
+    }
+    ```
+*   **Error Response (401 Unauthorized / 403 Forbidden):** Standard error responses.
+
+### 2. Add New Order
+
+This endpoint is used when the "Add Order" button is clicked.
+
+*   **UI Feature:** "Add Order" button and the subsequent order creation form.
+*   **Endpoint:** `POST /api/orders/` (or `POST /api/orders/create_order/` if using the dedicated action, or `POST /api/order-create/` if using `OrderCreateView`)
+*   **Method:** `POST`
+*   **Auth Required:** Yes (Admin)
+*   **Description:** Creates a new order.
+*   **Request Body (Payload):** (Based on `OrderCreateEnhancedSerializer` or `OrderCreateSerializer`)
+    ```json
+    {
+        "customer_id": 12, // ID of an existing customer (optional, if not provided, links to request.user)
+        "items": [
+            {
+                "product_id": 50,
+                "quantity": 1,
+                "price": "121.00" // Unit price for this item in this order
+            },
+            {
+                "product_id": 52,
+                "quantity": 2,
+                "price": "50.00"
+            }
+        ],
+        "payment_type": "CREDIT", // e.g., 'CASH', 'CREDIT', 'DEBIT', 'TRANSFER'
+        "order_type": "STANDARD", // e.g., 'STANDARD', 'EXPRESS', 'PICKUP'
+        "status": "PENDING", // Initial order status
+        "order_date": "2024-06-05", // Optional, defaults to now
+        "order_time": "14:30:00", // Optional, defaults to now
+        "note": "Special instructions for delivery.",
+        "shipping_address": "123 New Street",
+        "shipping_city": "New City",
+        "shipping_state": "New State",
+        "shipping_country": "New Country",
+        "shipping_zip": "12345",
+        "billing_address": "123 New Street, New City, New State, 12345, New Country" // (Optional, can be same as shipping)
+        // "payment_method": "Mastercard" // If using OrderCreateSerializer
+    }
+    ```
+*   **Success Response (201 Created):** (Response from `OrderSerializer` after creation)
+    ```json
+    {
+        "id": 302013,
+        "order_number": "ORD-20240605-0106",
+        "customer_email": "new.customer@example.com",
+        "customer_name": "New Customer",
+        "items": [ /* ... created order items ... */ ],
+        "total": "221.00", // Calculated based on items, shipping, tax, discount
+        "status": "PENDING",
+        "status_display": "Pending",
+        // ... other fields as in the GET /api/orders/ response
+    }
+    ```
+*   **Error Response (400 Bad Request):**
+    ```json
+    {
+        "items": ["This field is required.", "Order must have at least one item"],
+        "shipping_address": ["This field may not be blank."]
+        // ... other validation errors
+    }
+    ```
+
+### 3. Edit Order
+
+This endpoint is used when the "Edit" icon (pencil) in the order table is clicked.
+
+*   **UI Feature:** "Edit" icon and subsequent order editing form.
+*   **Endpoint:** `PUT /api/orders/<id>/` or `PATCH /api/orders/<id>/`
+*   **Method:** `PUT` or `PATCH`
+*   **Auth Required:** Yes (Admin)
+*   **Description:** Updates an existing order.
+*   **Request Body (Payload):** (Fields from `OrderSerializer` that are updatable, e.g., status, note, shipping details. Items might be managed via separate item endpoints or a more complex update).
+    ```json
+    {
+        "status": "PROCESSING",
+        "note": "Updated note: Customer called to confirm address.",
+        "shipping_address": "456 Updated St, Updated City"
+        // Potentially other fields like payment_status, items (if supported by update)
+    }
+    ```
+*   **Success Response (200 OK):** (Updated order details, similar to `GET /api/orders/<id>/`)
+    ```json
+    {
+        "id": 302012,
+        "status": "PROCESSING",
+        "status_display": "Processing",
+        "note": "Updated note: Customer called to confirm address.",
+        "shipping_address": "456 Updated St, Updated City",
+        // ... other fields
+    }
+    ```
+*   **Error Response (404 Not Found):**
+    ```json
+    { "detail": "Not found." }
+    ```
+
+### 4. View Order Details
+
+This endpoint is used when the "View" icon (eye) in the order table is clicked.
+
+*   **UI Feature:** "View" icon, leading to an order detail page/modal.
+*   **Endpoint:** `GET /api/orders/<id>/`
+*   **Method:** `GET`
+*   **Auth Required:** Yes (Admin)
+*   **Description:** Retrieves details for a specific order.
+*   **Success Response (200 OK):** (Detailed order information, same as the single order object in the list response)
+    ```json
+    {
+        "id": 302012,
+        "order_number": "ORD-20221229-0001",
+        "customer_email": "john.bushmill@example.com",
+        // ... all fields as shown in the list example for a single order
+    }
+    ```
+*   **Error Response (404 Not Found):**
+    ```json
+    { "detail": "Not found." }
+    ```
+
+### 5. Delete Order
+
+This endpoint is used when the "Delete" icon (trash can) in the order table is clicked.
+
+*   **UI Feature:** "Delete" icon.
+*   **Endpoint:** `DELETE /api/orders/<id>/`
+*   **Method:** `DELETE`
+*   **Auth Required:** Yes (Admin)
+*   **Description:** Deletes a specific order.
+*   **Success Response (204 No Content):** (No body)
+*   **Error Response (404 Not Found):**
+    ```json
+    { "detail": "Not found." }
+    ```
+
+### 6. Export Orders
+
+This endpoint is triggered by the "Export" button.
+
+*   **UI Feature:** "Export" button.
+*   **Endpoint:** `GET /api/orders/export/`
+*   **Method:** `GET`
+*   **Auth Required:** Yes (Admin)
+*   **Description:** Exports order data as a CSV file. Supports current filters applied to the list.
+*   **Query Parameters:** (Same as List Orders: `status`, `created_at_after`, `created_at_before`, `search`)
+*   **Success Response (200 OK):**
+    *   Content-Type: `text/csv`
+    *   Body: CSV formatted data of orders.
+    ```csv
+    Order ID,Date,Customer,Email,Items,Total,Status,Payment Method,Payment Status
+    ORD-20221229-0001,2022-12-29 10:00,John Bushmill,john.bushmill@example.com,"Handmade Pouch (x1)",121.00,Processing,Mastercard,PAID
+    ...
+    ```
+
+### 7. Bulk Order Actions
+
+This endpoint handles actions like "Delete Selected" or changing status for multiple selected orders.
+
+*   **UI Feature:** Checkboxes next to orders and a bulk action dropdown.
+*   **Endpoint:** `POST /api/orders/bulk_action/`
+*   **Method:** `POST`
+*   **Auth Required:** Yes (Admin)
+*   **Description:** Performs a bulk action (e.g., update status, delete) on selected orders.
+*   **Request Body (Payload):**
+    ```json
+    {
+        "order_ids": [302012, 302011],
+        "action": "update_status", // or "delete"
+        "status": "SHIPPED" // Required if action is "update_status"
+    }
+    ```
+*   **Success Response (200 OK):**
+    ```json
+    {
+        "status": "success",
+        "processed": 2 // Number of orders affected
+    }
+    ```
+*   **Error Response (400 Bad Request):**
+    ```json
+    {
+        "error": "order_ids and action are required"
+    }
+    ```
+    ```json
+    {
+        "error": "status is required for update_status action"
+    }
+    ```
+
+### 8. Get Order Status Counts (for Filter Tabs)
+
+This endpoint provides the counts for each order status tab.
+
+*   **UI Feature:** Numerical counts next to filter tabs (All order, Processing, Delivered, Cancelled).
+*   **Endpoint:** `GET /api/dashboard/order_metrics/` (Specifically the `status_summary` part of the response)
+*   **Method:** `GET`
+*   **Auth Required:** Yes (Admin)
+*   **Description:** Retrieves various order metrics, including counts for each status.
+*   **Query Parameters:**
+    *   `period` (string, optional): `day`, `week`, `month`, `year`. Default: `week`.
+*   **Success Response (200 OK - relevant part):**
+    ```json
+    {
+        // ... other metrics ...
+        "status_summary": {
+            "all": {"count": 100, "total_value": 12500.00, "avg_order_value": 125.00},
+            "pending": {"count": 15, "total_value": 1500.00, "avg_order_value": 100.00},
+            "processing": {"count": 25, "total_value": 3000.00, "avg_order_value": 120.00},
+            "shipped": {"count": 30, "total_value": 4500.00, "avg_order_value": 150.00},
+            "delivered": {"count": 20, "total_value": 2500.00, "avg_order_value": 125.00},
+            "cancelled": {"count": 10, "total_value": 1000.00, "avg_order_value": 100.00}
+        },
+        // ... other metrics ...
+    }
+    ```
+
+---
+---
+
+### Admin Dashboard - Order Management UI Endpoints (Continued)
+
+#### 2. Add New Order (Detailed for "Create New Order" Modal)
+
+This endpoint is used when the "Add Order" button is clicked, and the "Create New Order" modal is filled.
+
+*   **UI Feature:** "Add Order" button and the "Create New Order" modal.
+*   **Endpoint:** `POST /api/orders/` (or `POST /api/orders/create_order/` or `POST /api/order-create/`)
+*   **Method:** `POST`
+*   **Auth Required:** Yes (Admin)
+*   **Description:** Creates a new order based on the details provided in the modal.
+*   **Supporting Endpoints for Dropdowns/Search:**
+    *   **Select Customer Dropdown:** Populate with `GET /api/orders/customers/` (See "List Customers for Order Form" below).
+    *   **Payment Type, Order Type, Order Status Dropdowns:** Populate with `GET /api/order-choices/` (See "Get Order Form Choices" below).
+    *   **Search Product Name (for Items):** Use `GET /api/product-search/?q={search_term}` (See "Search Products for Order Form" below).
+*   **Request Body (Payload):** (Based on `OrderCreateEnhancedSerializer` or `OrderCreateSerializer`)
+    ```json
+    {
+        "customer_id": 12, // ID of an existing customer (from GET /api/orders/customers/). If "New Customer" is toggled, create customer first or adapt payload if backend supports inline creation.
+        "payment_type": "CREDIT", // Selected from GET /api/order-choices/
+        "order_type": "STANDARD", // Selected from GET /api/order-choices/
+        "order_date": "2020-12-12", // From date picker
+        "order_time": "12:00:00", // From time picker
+        "status": "PENDING", // Selected from GET /api/order-choices/
+        "note": "Order note content here.",
+        "items": [ // Array of products selected via search
+            {
+                "product_id": 50, // ID of the product
+                "quantity": 1,
+                "price": "121.00" // Unit price for this item at the time of order
+            },
+            {
+                "product_id": 52,
+                "quantity": 2,
+                "price": "50.00"
+            }
+        ],
+        "shipping_address": "123 New Street", // Required if physical products
+        "shipping_city": "New City",
+        "shipping_state": "New State",
+        "shipping_country": "New Country",
+        "shipping_zip": "12345",
+        "billing_address": "123 New Street, New City, New State, 12345, New Country" // Optional
+    }
+    ```
+*   **Success Response (201 Created):** (Response from `OrderSerializer` after creation)
+    ```json
+    {
+        "id": 302013,
+        "order_number": "ORD-20240605-0106",
+        "customer_email": "selected.customer@example.com",
+        "customer_name": "Selected Customer Name",
+        "items": [ /* ... created order items ... */ ],
+        "total": "221.00",
+        "status": "PENDING",
+        "status_display": "Pending",
+        "payment_type": "CREDIT",
+        "order_type": "STANDARD",
+        "order_date": "2020-12-12",
+        "order_time": "12:00:00",
+        "note": "Order note content here.",
+        // ... other fields as in the GET /api/orders/ response
+    }
+    ```
+*   **Error Response (400 Bad Request):**
+    ```json
+    {
+        "items": ["This field is required.", "Order must have at least one item"],
+        "shipping_address": ["This field may not be blank."],
+        "customer_id": ["Invalid pk \"null\" - object does not exist."] // If customer_id is missing or invalid
+    }
+    ```
+
+#### Supporting Endpoints for "Create New Order" Modal:
+
+##### 2a. List Customers for Order Form
+
+*   **UI Feature:** Populating the "Select Customer" dropdown in the "Create New Order" modal.
+*   **Endpoint:** `GET /api/orders/customers/` (Action within `OrderViewSet`)
+*   **Method:** `GET`
+*   **Auth Required:** Yes (Admin)
+*   **Description:** Retrieves a list of customers suitable for selection in an order form.
+*   **Success Response (200 OK):** (Based on `CustomerSimpleSerializer` or `CustomerSerializer`)
+    ```json
+    [
+        {
+            "id": 12,
+            "name": "John Bushmill",
+            "email": "john.bushmill@example.com",
+            "phone": "+1234567890",
+            "display_name": "John Bushmill (john.bushmill@example.com)"
+        },
+        {
+            "id": 15,
+            "name": "Linda Blair",
+            "email": "linda.blair@example.com",
+            "phone": "+0987654321",
+            "display_name": "Linda Blair (linda.blair@example.com)"
+        }
+        // ... more customers
+    ]
+    ```
+
+##### 2b. Get Order Form Choices
+
+*   **UI Feature:** Populating "Payment Type", "Order Type", and "Order Status" dropdowns in the "Create New Order" modal.
+*   **Endpoint:** `GET /api/order-choices/`
+*   **Method:** `GET`
+*   **Auth Required:** Yes (Admin)
+*   **Description:** Retrieves choice options for various order fields.
+*   **Success Response (200 OK):**
+    ```json
+    {
+        "payment_types": [
+            ["CASH", "Cash"],
+            ["CREDIT", "Credit Card"],
+            ["DEBIT", "Debit Card"],
+            ["TRANSFER", "Bank Transfer"]
+        ],
+        "order_types": [
+            ["STANDARD", "Standard"],
+            ["EXPRESS", "Express"],
+            ["PICKUP", "Pickup"]
+        ],
+        "status_choices": [
+            ["PENDING", "Pending"],
+            ["PROCESSING", "Processing"],
+            ["SHIPPED", "Shipped"],
+            ["DELIVERED", "Delivered"],
+            ["CANCELLED", "Cancelled"]
+            // ... other statuses
+        ]
+    }
+    ```
+
+##### 2c. Search Products for Order Form
+
+*   **UI Feature:** "Search product name" input field within the "Items" section of the "Create New Order" modal.
+*   **Endpoint:** `GET /api/product-search/`
+*   **Method:** `GET`
+*   **Auth Required:** Yes (Admin, as it's for an admin creating an order)
+*   **Description:** Searches for products to be added to an order.
+*   **Query Parameters:**
+    *   `q` (string, required): The search term for product name, SKU, or description. Minimum 2 characters.
+*   **Success Response (200 OK):**
+    ```json
+    [ // Array of simplified product data
+        {
+            "id": 50,
+            "name": "Handmade Pouch",
+            "sku": "HMP-001",
+            "price": "121.00",
+            "stock_quantity": 15,
+            "image": "url/to/handmade_pouch.jpg"
+        },
+        {
+            "id": 52,
+            "name": "Smartwatch E2",
+            "sku": "SMW-E2-BLK",
+            "price": "50.00", // Assuming this is the current price
+            "stock_quantity": 30,
+            "image": "url/to/smartwatch_e2.jpg"
+        }
+        // ... up to 10 results
+    ]
+    ```
+*   **Success Response (200 OK - if query too short or no results):**
+    ```json
+    []
+    ```
+
+---
+---
+
+## Admin Dashboard - Customer Management UI Endpoints
+
+This section details the API endpoints supporting the Customer Management section of the Admin Dashboard UI.
+
+### 1. List and Filter Customers (Customer Grid)
+
+This endpoint populates the main customer grid/card view, supporting pagination, searching, and filtering by status tabs (All, Active, Blocked).
+
+*   **UI Feature:** Main customer grid, search bar ("Search customer..."), filter tabs (All, Active, Blocked), pagination.
+*   **Endpoint:** `GET /api/customers/`
+*   **Method:** `GET`
+*   **Auth Required:** Yes (Admin)
+*   **Description:** Retrieves a paginated list of customers, with filtering and search capabilities.
+*   **Query Parameters:**
+    *   `status` (string, optional): Filters customers by status. Values: `active`, `blocked`. If omitted, returns all.
+    *   `search` (string, optional): Search term for customer name, email, or phone.
+    *   `ordering` (string, optional): Fields to order by, e.g., `created_at`, `name`, `orders_count`, `balance`. Default: `-created_at`.
+    *   `page` (integer, optional): Page number for pagination. Default: `1`.
+    *   `page_size` (integer, optional): Number of items per page. Default: (as per `CustomerPagination`, e.g., 10).
+    *   `created_at_after` (date string, `YYYY-MM-DD`, optional): Filter by customer creation date.
+    *   `created_at_before` (date string, `YYYY-MM-DD`, optional): Filter by customer creation date.
+    *   `orders_count` (integer, optional): Filter by exact number of orders.
+    *   `balance` (decimal, optional): Filter by exact total balance.
+*   **Success Response (200 OK):** (Based on `CustomerSerializer`)
+    ```json
+    {
+        "count": 100,
+        "next": "http://api/customers/?page=2",
+        "previous": null,
+        "results": [
+            {
+                "id": 1,
+                "name": "John Bushmill",
+                "email": "john.bushmill@example.com",
+                "phone": "+1234567890",
+                "status": "active", // "active" or "blocked"
+                "orders_count": 12, // Example value
+                "balance": "12091.00", // Example value
+                "created_at": "2023-10-26T10:00:00Z"
+            },
+            {
+                "id": 2,
+                "name": "Laura Prichet",
+                "email": "laura.prichet@example.com",
+                "phone": "+0987654321",
+                "status": "blocked",
+                "orders_count": 5,
+                "balance": "5500.50",
+                "created_at": "2023-11-15T14:30:00Z"
+            }
+            // ... more customers
+        ]
+    }
+    ```
+*   **Error Response (401 Unauthorized / 403 Forbidden):** Standard error responses.
+
+### 2. Add New Customer
+
+This endpoint is used when the "Add Customer" button is clicked.
+
+*   **UI Feature:** "Add Customer" button and the subsequent customer creation form/modal.
+*   **Endpoint:** `POST /api/customers/` (or `POST /api/customers/add_customer/`)
+*   **Method:** `POST`
+*   **Auth Required:** Yes (Admin)
+*   **Description:** Creates a new customer.
+*   **Request Body (Payload):** (Based on `CustomerCreateSerializer`)
+    ```json
+    {
+        "name": "Jane Doe",
+        "email": "jane.doe@example.com",
+        "country_code": "+1", // Optional
+        "local_phone_number": "5551234567", // Optional
+        "password": "secureNewPassword123", // Optional, if creating a user account for the customer
+        "create_user_account": true, // Boolean, defaults to false. If true and password provided, a CustomUser is created.
+        "address": { // Optional, AddressSerializer fields
+            "full_name": "Jane Doe",
+            "email": "jane.doe@example.com",
+            "phone_number": "+15551234567",
+            "street_address": "123 Oak St",
+            "city": "Anytown",
+            "state": "CA",
+            "country": "USA",
+            "zip_code": "90210",
+            "is_default": true
+        }
+    }
+    ```
+*   **Success Response (201 Created):** (Based on `CustomerCreateSerializer` which might return limited fields, or `CustomerDetailSerializer` if the view returns the full object)
+    ```json
+    {
+        // Response from CustomerCreateSerializer might be simpler,
+        // but a GET after create would use CustomerDetailSerializer.
+        // Assuming response from CustomerDetailSerializer for consistency:
+        "id": 3,
+        "name": "Jane Doe",
+        "email": "jane.doe@example.com",
+        "phone": "+15551234567", // Formatted by model's save method
+        "status": "active",
+        "orders_count": 0,
+        "balance": "0.00",
+        "created_at": "2024-06-05T15:00:00Z",
+        "recent_orders": []
+    }
+    ```
+*   **Error Response (400 Bad Request):**
+    ```json
+    {
+        "email": ["customer with this email already exists."],
+        "local_phone_number": ["Phone number is required when country code is provided."]
+    }
+    ```
+
+### 3. View Customer Details
+
+This endpoint is used when an admin wants to see more details about a specific customer (e.g., by clicking on a customer card or a "View" action from the three-dot menu).
+
+*   **UI Feature:** Clicking a customer card or a "View" action from the three-dot menu.
+*   **Endpoint:** `GET /api/customers/<id>/`
+*   **Method:** `GET`
+*   **Auth Required:** Yes (Admin)
+*   **Description:** Retrieves detailed information for a specific customer.
+*   **Success Response (200 OK):** (Based on `CustomerDetailSerializer`)
+    ```json
+    {
+        "id": 1,
+        "name": "John Bushmill",
+        "email": "john.bushmill@example.com",
+        "phone": "+1234567890",
+        "status": "active",
+        "orders_count": 12,
+        "balance": "12091.00",
+        "created_at": "2023-10-26T10:00:00Z",
+        "recent_orders": [ // Example, list of recent orders
+            {
+                "id": 101,
+                "order_number": "ORD-20240101-001",
+                "total": "150.00",
+                "status": "DELIVERED",
+                // ... other order fields from OrderSerializer
+            }
+        ]
+    }
+    ```
+*   **Error Response (404 Not Found):**
+    ```json
+    { "detail": "Not found." }
+    ```
+
+### 4. Edit Customer
+
+This endpoint is used when an admin edits an existing customer's details (e.g., via an "Edit" action from the three-dot menu).
+
+*   **UI Feature:** "Edit" action from the three-dot menu, leading to an edit form/modal.
+*   **Endpoint:** `PUT /api/customers/<id>/` or `PATCH /api/customers/<id>/`
+*   **Method:** `PUT` or `PATCH`
+*   **Auth Required:** Yes (Admin)
+*   **Description:** Updates an existing customer's details.
+*   **Request Body (Payload):** (Fields from `CustomerDetailSerializer` or a specific update serializer)
+    ```json
+    {
+        "name": "John B. Bushmill",
+        "phone": "+1234567899" // Note: if sending country_code and local_phone_number, use those instead.
+        // "status": "blocked" // To change status, usually done via bulk_action or a dedicated status update endpoint.
+    }
+    ```
+*   **Success Response (200 OK):** (Updated customer details, based on `CustomerDetailSerializer`)
+    ```json
+    {
+        "id": 1,
+        "name": "John B. Bushmill",
+        "email": "john.bushmill@example.com",
+        "phone": "+1234567899",
+        "status": "active",
+        // ... other fields
+    }
+    ```
+*   **Error Response (404 Not Found):**
+    ```json
+    { "detail": "Not found." }
+    ```
+
+### 5. Delete Customer
+
+This endpoint is used when an admin deletes a customer (e.g., via a "Delete" action from the three-dot menu).
+
+*   **UI Feature:** "Delete" action from the three-dot menu.
+*   **Endpoint:** `DELETE /api/customers/<id>/`
+*   **Method:** `DELETE`
+*   **Auth Required:** Yes (Admin)
+*   **Description:** Deletes a specific customer (and their associated user account if one exists).
+*   **Success Response (204 No Content):** (No body)
+*   **Error Response (404 Not Found):**
+    ```json
+    { "detail": "Not found." }
+    ```
+
+### 6. Export Customers
+
+This endpoint is triggered by the "Export" button on the customer list page.
+
+*   **UI Feature:** "Export" button.
+*   **Endpoint:** `GET /api/customers/export/`
+*   **Method:** `GET`
+*   **Auth Required:** Yes (Admin)
+*   **Description:** Exports customer data as a CSV file. Supports current filters applied to the list.
+*   **Query Parameters:** (Same as List Customers: `status`, `search`, `created_at_after`, etc.)
+*   **Success Response (200 OK):**
+    *   Content-Type: `text/csv`
+    *   Body: CSV formatted data of customers.
+    ```csv
+    ID,Name,Email,Phone,Status,Orders,Total Balance,Created
+    1,John Bushmill,john.bushmill@example.com,+1234567890,Active,12,$12091.00,2023-10-26
+    ...
+    ```
+
+### 7. Bulk Customer Actions
+
+This endpoint handles actions like "Delete Selected" or changing status for multiple selected customers.
+
+*   **UI Feature:** Checkboxes on customer cards and a bulk action dropdown.
+*   **Endpoint:** `POST /api/customers/bulk_action/`
+*   **Method:** `POST`
+*   **Auth Required:** Yes (Admin)
+*   **Description:** Performs a bulk action (e.g., update status, delete) on selected customers.
+*   **Request Body (Payload):**
+    ```json
+    {
+        "customer_ids": [1, 2, 5], // Array of customer IDs
+        "action": "update_status", // "update_status" or "delete"
+        "status": "blocked", // Required if action is "update_status"; "active" or "blocked"
+        "select_all": false, // Optional: if true, applies to all customers matching current filters
+        "exclude_ids": [] // Optional: if select_all is true, IDs to exclude from the bulk action
+    }
+    ```
+*   **Success Response (200 OK):**
+    ```json
+    {
+        "status": "success",
+        "affected": 3 // Number of customers affected
+    }
+    ```
+*   **Error Response (400 Bad Request):**
+    ```json
+    {
+        "error": "No customers selected"
+    }
+    ```
+    ```json
+    {
+        "error": "Invalid status" // If status for update_status is not 'active' or 'blocked'
+    }
+    ```
+
+### 8. Get Customer Statistics (for Detail View)
+
+This endpoint provides detailed statistics for a single customer, often shown on a customer detail page.
+
+*   **UI Feature:** Could be part of a customer detail view accessed via the "View" action.
+*   **Endpoint:** `GET /api/customers/<id>/statistics/`
+*   **Method:** `GET`
+*   **Auth Required:** Yes (Admin)
+*   **Description:** Retrieves statistics for a specific customer.
+*   **Success Response (200 OK):**
+    ```json
+    {
+        "total_orders": 12,
+        "total_spent": "12091.00",
+        "monthly_orders": 3, // Orders in the current month
+        "avg_order_value": "1007.58",
+        "abandoned_carts_count": 1,
+        "order_status_counts": {
+            "pending": 1,
+            "processing": 2,
+            "shipped": 3,
+            "completed": 5, // 'DELIVERED' status
+            "cancelled": 1,
+            "returned": 0,
+            "damaged": 0
+        },
+        "recent_orders": [ // Array of simplified order objects (from OrderSerializer)
+            {
+                "id": 101,
+                "order_number": "ORD-20240101-001",
+                "total": "150.00",
+                "status": "DELIVERED",
+                // ... other relevant order fields
+            }
+        ]
+    }
+    ```
+*   **Error Response (404 Not Found):**
+    ```json
+    { "detail": "Not found." }
+    ```
+
+---
+---
+
+#### Admin Dashboard - Customer Detail View UI Endpoints
+
+This section details API endpoints supporting the "Customer Details" page within the Admin Dashboard.
+
+##### 1. Get Customer Details (Main Info Panel)
+
+*   **UI Feature:** Left panel displaying customer's avatar, name, status, ID, email, address, phone, last transaction, and last online.
+*   **Endpoint:** `GET /api/customers/<id>/`
+*   **Method:** `GET`
+*   **Auth Required:** Yes (Admin)
+*   **Description:** Retrieves detailed information for a specific customer.
+*   **Success Response (200 OK):** (Based on `CustomerDetailSerializer`, potentially needing to ensure `profile.photo.url`, default `Address`, and `user.last_login` are included)
+    ```json
+    {
+        "id": 1, // Customer ID (e.g., ID-011221 in UI is likely derived from this)
+        "name": "Linda Blair",
+        "email": "lindablair@mail.com",
+        "phone": "050 414 8778", // Formatted phone
+        "status": "active", // Derived from user.is_active
+        "orders_count": 10, // From annotation
+        "balance": "12091.00", // From annotation
+        "created_at": "2023-01-15T10:00:00Z",
+        "user_details": { // Assuming user details are nested or part of profile
+            "last_login": "2024-06-04T12:00:00Z", // For "Last Online"
+            "profile_photo_url": "url/to/linda_blair_avatar.jpg" // If available
+        },
+        "default_address": { // Assuming default address is included
+            "street_address": "1833 Bel Meadow Drive",
+            "city": "Fontana",
+            "state": "California",
+            "zip_code": "92335",
+            "country": "USA"
+        },
+        "recent_orders": [ /* ... from CustomerDetailSerializer ... */ ]
+        // "last_transaction_date": "2022-12-12" // This would be derived from recent_orders or a dedicated field
+    }
+    ```
+    *Note: "Last Transaction" date would typically be the `created_at` of the most recent order from the `recent_orders` list (available via `GET /api/customers/<id>/statistics/`) or by fetching the customer's latest order.*
+
+*   **Error Response (404 Not Found):**
+    ```json
+    { "detail": "Not found." }
+    ```
+
+##### 2. Get Customer Statistics (Summary Cards)
+
+*   **UI Feature:** Summary cards for Total Orders, Abandoned Cart, and order counts by status (All Orders, Pending, Completed, Canceled, Returned, Damaged). The UI shows an "All-time" filter.
+*   **Endpoint:** `GET /api/customers/<id>/statistics/`
+*   **Method:** `GET`
+*   **Auth Required:** Yes (Admin)
+*   **Description:** Retrieves lifetime statistics for a specific customer, including order counts by status and abandoned cart information.
+    *(Note: This endpoint currently provides "All-time" statistics. If per-period filtering (e.g., "Last 30 days") is needed for these cards on the customer detail page, this endpoint would require modification to accept a `period` parameter.)*
+*   **Success Response (200 OK):**
+    ```json
+    {
+        "total_orders": 25, // Maps to "Total Orders" card (UI shows 25,00.00 - likely a display format issue)
+        "total_spent": "12091.00", // Could be displayed if needed
+        "monthly_orders": 3, // Example: orders in the current month
+        "avg_order_value": "483.64",
+        "abandoned_carts_count": 2, // Maps to "Abandoned Cart" card
+        "order_status_counts": { // Maps to "All Orders", "Pending", "Completed", etc. cards
+            "pending": 2,
+            "processing": 0, // Example
+            "shipped": 0,    // Example
+            "completed": 8,  // 'DELIVERED' status from backend maps to "Completed"
+            "cancelled": 0,
+            "returned": 0,
+            "damaged": 0
+            // Note: "All Orders" count for the card can be derived from summing these, or is `total_orders`.
+        },
+        "recent_orders": [ /* ... list of recent order objects ... */ ]
+    }
+    ```
+*   **Error Response (404 Not Found):**
+    ```json
+    { "detail": "Not found." } // If the customer ID is invalid
+    ```
+
+##### 3. Get Customer Transaction History (Order List)
+
+*   **UI Feature:** "Transaction History" table listing the customer's orders.
+*   **Endpoint:** `GET /api/orders/`
+*   **Method:** `GET`
+*   **Auth Required:** Yes (Admin)
+*   **Description:** Retrieves a paginated list of orders, filtered for the specific customer.
+*   **Query Parameters:**
+    *   `user_id` (integer, required): The ID of the user associated with the customer. (Or `customer_id=<customer_id>` if your `OrderFilter` supports direct filtering by `customer` foreign key).
+    *   `created_at_after` (date string, `YYYY-MM-DD`, optional): For "Select Date" filter.
+    *   `created_at_before` (date string, `YYYY-MM-DD`, optional): For "Select Date" filter.
+    *   `status` (string, optional): For further filtering by status if the "Filters" button provides this.
+    *   `page` (integer, optional): Page number.
+    *   `page_size` (integer, optional): Items per page.
+    *   `ordering` (string, optional): e.g., `-created_at`.
+*   **Success Response (200 OK):** (Based on `OrderSerializer`, same structure as the main order list but filtered)
+    ```json
+    {
+        "count": 10, // Total orders for this customer matching filters
+        "next": "...",
+        "previous": null,
+        "results": [
+            {
+                "id": 302002,
+                "order_number": "ORD-20231212-0001",
+                "customer_name": "Linda Blair", // Should be redundant if already on customer page
+                "customer_email": "lindablair@mail.com",
+                "products_display_string": "Handmade Pouch +3 other products",
+                "total": "121.00",
+                "status": "PROCESSING",
+                "status_display": "Processing",
+                "created_at": "2023-12-12T00:00:00Z", // Used for "Date" column
+                "payment": { "method": "Mastercard", /* ... */ }
+                // ... other fields from OrderSerializer
+            },
+            {
+                "id": 301901,
+                "order_number": "ORD-20231201-0002",
+                "products_display_string": "Smartwatch E2 +1 other products",
+                "total": "590.00",
+                "status": "PROCESSING",
+                "status_display": "Processing",
+                "created_at": "2023-12-01T00:00:00Z",
+                "payment": { "method": "Visa", /* ... */ }
+            }
+            // ... more orders for this customer
+        ]
+    }
+    ```
+
+---
+
+## Customer Management API Documentation
+# Base URL
+/api/customers/
+Authentication
+All endpoints require authentication with IsAdminUser permission class.
+Include in headers: Authorization: Bearer <your-token>
+
+📋 Customer Endpoints
+1. List All Customers
+GET /api/customers/
+Query Parameters:
+
+page (int): Page number for pagination
+page_size (int): Items per page (max: 100, default: 10)
+search (string): Search in name, email, phone
+status (string): Filter by 'active' or 'blocked'
+ordering (string): Sort by fields (created_at, name, orders_count, balance)
+created_at_after (date): Filter created after date (YYYY-MM-DD)
+created_at_before (date): Filter created before date (YYYY-MM-DD)
+
+Response:
+json{
+  "count": 150,
+  "next": "http://api/customers/?page=2",
+  "previous": null,
+  "results": [
+    {
+      "id": 1,
+      "name": "John Doe",
+      "email": "john@example.com",
+      "phone": "+2348123456789",
+      "status": "active",
+      "orders_count": 5,
+      "balance": "1250.00",
+      "created_at": "2024-01-15T10:30:00Z"
+    }
+  ]
+}
+2. Create New Customer
+POST /api/customers/
+Request Body:
+json{
+  "name": "Jane Smith",
+  "email": "jane@example.com",
+  "country_code": "+234",
+  "local_phone_number": "8123456789",
+  "create_user_account": true,
+  "password": "securepassword123",
+  "address": {
+    "full_name": "Jane Smith",
+    "email": "jane@example.com",
+    "phone_number": "+2348123456789",
+    "street_address": "123 Main Street",
+    "city": "Lagos",
+    "state": "Lagos",
+    "country": "Nigeria",
+    "zip_code": "100001",
+    "is_default": true
+  }
+}
+Response (Success):
+json{
+  "id": 2,
+  "name": "Jane Smith",
+  "email": "jane@example.com",
+  "phone": "+2348123456789",
+  "created_at": "2024-01-15T10:30:00Z"
+}
+Response (Error):
+json{
+  "name": ["This field is required."],
+  "email": ["Enter a valid email address."],
+  "phone_number": ["Please enter a valid phone number"]
+}
+3. Get Customer Details
+GET /api/customers/{id}/
+Response:
+json{
+  "id": 1,
+  "name": "John Doe",
+  "email": "john@example.com",
+  "phone": "+2348123456789",
+  "status": "active",
+  "orders_count": 5,
+  "balance": "1250.00",
+  "created_at": "2024-01-15T10:30:00Z",
+  "recent_orders": [
+    {
+      "id": 101,
+      "order_number": "ORD-20240115-0001",
+      "status": "DELIVERED",
+      "total": "250.00",
+      "created_at": "2024-01-10T14:30:00Z"
+    }
+  ]
+}
+4. Update Customer
+PUT/PATCH /api/customers/{id}/
+Request Body:
+json{
+  "name": "John Smith",
+  "email": "johnsmith@example.com",
+  "country_code": "+234",
+  "local_phone_number": "8123456790"
+}
+5. Delete Customer
+DELETE /api/customers/{id}/
+Response:
+json{
+  "detail": "Customer deleted successfully"
+}
+
+📊 Customer Statistics
+GET /api/customers/{id}/statistics/
+Response:
+json{
+  "total_orders": 5,
+  "total_spent": "1250.00",
+  "monthly_orders": 2,
+  "avg_order_value": "250.00",
+  "abandoned_carts_count": 1,
+  "order_status_counts": {
+    "pending": 1,
+    "processing": 0,
+    "shipped": 0,
+    "completed": 3,
+    "cancelled": 1,
+    "returned": 0,
+    "damaged": 0
+  },
+  "recent_orders": [...]
+}
+
+🔄 Bulk Operations
+POST /api/customers/bulk_action/
+Bulk Status Update
+json{
+  "action": "update_status",
+  "status": "blocked",
+  "customer_ids": [1, 2, 3]
+}
+Bulk Delete
+json{
+  "action": "delete",
+  "customer_ids": [1, 2, 3]
+}
+Select All with Exclusions
+json{
+  "action": "update_status",
+  "status": "active",
+  "select_all": true,
+  "exclude_ids": [5, 6]
+}
+Response:
+json{
+  "status": "success",
+  "affected": 3
+}
+
+📤 Export Customers
+GET /api/customers/export/
+Query Parameters: Same as list endpoint for filtering
+Response: CSV file download with headers:
+ID,Name,Email,Phone,Status,Orders,Total Balance,Created
+
+🏠 Address Management
+List Customer Addresses
+GET /api/addresses/
+Response:
+json[
+  {
+    "id": 1,
+    "full_name": "John Doe",
+    "email": "john@example.com",
+    "phone_number": "+2348123456789",
+    "street_address": "123 Main Street",
+    "city": "Lagos",
+    "state": "Lagos",
+    "country": "Nigeria",
+    "zip_code": "100001",
+    "is_default": true,
+    "created_at": "2024-01-15T10:30:00Z",
+    "updated_at": "2024-01-15T10:30:00Z"
+  }
+]
+Create Address
+POST /api/addresses/
+Request Body:
+json{
+  "full_name": "John Doe",
+  "email": "john@example.com",
+  "phone_number": "+2348123456789",
+  "street_address": "456 Second Street",
+  "city": "Abuja",
+  "state": "FCT",
+  "country": "Nigeria",
+  "zip_code": "900001",
+  "is_default": false
+}
+Update Address
+PUT/PATCH /api/addresses/{id}/
+Delete Address
+DELETE /api/addresses/{id}/
+Set Default Address
+POST /api/addresses/{id}/set_default/
+
+📱 Profile Management
+Get User Profile
+GET /api/profiles/
+Update Profile
+PUT/PATCH /api/profiles/{id}/
+Update User Details
+PATCH /api/profiles/update-details/
+Request Body:
+json{
+  "full_name": "John Smith",
+  "email": "john.smith@example.com",
+  "phone_number": "8123456789",
+  "country_code": "+234"
+}
+Upload Profile Photo
+POST /api/profiles/upload_photo/
+Request: Form data with photo file
+Remove Profile Photo
+DELETE /api/profiles/remove_photo/
+
+🚨 Error Response Format
+All endpoints return consistent error responses:
+json{
+  "status": "error",
+  "success": false,
+  "message": "Validation error",
+  "errors": {
+    "field_name": "Error message"
+  }
+}
+✅ Success Response Format
+json{
+  "status": "success", 
+  "success": true,
+  "message": "Operation completed successfully",
+  "data": { ... }
+}
+
+🔍 Search & Filter Examples
+Search customers by name or email:
+GET /api/customers/?search=john
+Filter by status and date range:
+GET /api/customers/?status=active&created_at_after=2024-01-01
+Sort by balance descending:
+GET /api/customers/?ordering=-balance
+Combined filters:
+GET /api/customers/?search=gmail&status=active&ordering=-created_at&page_size=25
+
+📝 Field Validation Rules
+Customer Creation:
+
+name: Required, max 255 characters
+email: Required, valid email format, must be unique
+country_code: Optional, must start with '+', max 5 characters
+local_phone_number: Optional, max 20 characters
+password: Optional, required only if create_user_account is true
+
+Phone Number:
+
+Country code and local number are validated together
+Both must be provided if either is provided
+Formatted phone number is auto-generated
+
+Address:
+
+All address fields are validated for presence and format
+Email format validation
+Phone number format validation
+Zip code cannot be empty and max 20 characters
+
+
+## Customer Management API Documentation
+# Overview
+This documentation covers all API endpoints for customer management in your system, based on the provided backend code and UI requirements.
+Authentication
+All endpoints require authentication unless specified otherwise.
+
+Header: Authorization: Bearer <token>
+Permission: Admin users only for customer management endpoints
+
+
+Customer Endpoints
+1. List Customers
+GET /api/customers/
+Description: Retrieve a paginated list of customers with filtering and search capabilities.
+Query Parameters:
+page=1                    # Page number
+page_size=10             # Items per page (max 100)
+search=john              # Search by name, email, or phone
+status=active            # Filter by status: active, blocked
+created_at_after=2024-01-01    # Filter by creation date
+created_at_before=2024-12-31   # Filter by creation date
+ordering=-created_at     # Sort by: created_at, name, orders_count, balance
+Response:
+json{
+  "count": 150,
+  "next": "http://api/customers/?page=2",
+  "previous": null,
+  "results": [
+    {
+      "id": 1,
+      "name": "John Doe",
+      "email": "john@example.com",
+      "phone": "+1234567890",
+      "status": "active",
+      "orders_count": 5,
+      "balance": 1250.00,
+      "created_at": "2024-01-15T10:30:00Z"
+    }
+  ]
+}
+2. Create Customer
+POST /api/customers/
+Description: Create a new customer with optional user account and address.
+Request Body:
+json{
+  "name": "John Doe",
+  "email": "john@example.com",
+  "country_code": "+1",
+  "local_phone_number": "2345678901",
+  "create_user_account": true,
+  "password": "securepassword123",
+  "address": {
+    "full_name": "John Doe",
+    "email": "john@example.com",
+    "phone_number": "+12345678901",
+    "street_address": "123 Main St, Apt 4B",
+    "city": "New York",
+    "state": "NY",
+    "country": "United States",
+    "zip_code": "10001",
+    "is_default": true
+  }
+}
+Response:
+json{
+  "id": 1,
+  "name": "John Doe",
+  "email": "john@example.com",
+  "phone": "+12345678901",
+  "country_code": "+1",
+  "local_phone_number": "2345678901",
+  "created_at": "2024-01-15T10:30:00Z"
+}
+3. Get Customer Details
+GET /api/customers/{id}/
+Description: Retrieve detailed information about a specific customer.
+Response:
+json{
+  "id": 1,
+  "name": "John Doe",
+  "email": "john@example.com",
+  "phone": "+12345678901",
+  "status": "active",
+  "orders_count": 5,
+  "balance": 1250.00,
+  "created_at": "2024-01-15T10:30:00Z",
+  "recent_orders": [
+    {
+      "id": 101,
+      "order_number": "ORD-20240115-0001",
+      "status": "DELIVERED",
+      "total": 299.99,
+      "created_at": "2024-01-10T14:20:00Z"
+    }
+  ]
+}
+4. Update Customer
+PUT/PATCH /api/customers/{id}/
+Description: Update customer information.
+Request Body (PATCH example):
+json{
+  "name": "John Smith",
+  "phone": "+12345678902"
+}
+5. Delete Customer
+DELETE /api/customers/{id}/
+Description: Delete a customer and optionally their user account.
+Response:
+json{
+  "status": "success",
+  "message": "Customer deleted successfully"
+}
+6. Customer Statistics
+GET /api/customers/{id}/statistics/
+Description: Get detailed statistics for a specific customer.
+Response:
+json{
+  "total_orders": 5,
+  "total_spent": 1250.00,
+  "monthly_orders": 2,
+  "avg_order_value": 250.00,
+  "abandoned_carts_count": 1,
+  "order_status_counts": {
+    "pending": 1,
+    "processing": 0,
+    "shipped": 0,
+    "completed": 3,
+    "cancelled": 1,
+    "returned": 0,
+    "damaged": 0
+  },
+  "recent_orders": [...]
+}
+7. Bulk Actions
+POST /api/customers/bulk_action/
+Description: Perform bulk operations on multiple customers.
+Request Body:
+json{
+  "action": "update_status",
+  "customer_ids": [1, 2, 3],
+  "status": "blocked"
+}
+Alternative for select all:
+json{
+  "action": "delete",
+  "select_all": true,
+  "exclude_ids": [5, 10]
+}
+Available Actions:
+
+update_status: Change customer status (active/blocked)
+delete: Remove customers
+
+8. Export Customers
+GET /api/customers/export/
+Description: Export customer data as CSV file.
+Query Parameters: Same as list endpoint for filtering
+Response: CSV file download
+
+Address Management Endpoints
+1. List Customer Addresses
+GET /api/addresses/
+Description: Get addresses for the authenticated user.
+Response:
+json[
+  {
+    "id": 1,
+    "full_name": "John Doe",
+    "email": "john@example.com",
+    "phone_number": "+12345678901",
+    "street_address": "123 Main St, Apt 4B",
+    "city": "New York",
+    "state": "NY",
+    "country": "United States",
+    "zip_code": "10001",
+    "is_default": true,
+    "created_at": "2024-01-15T10:30:00Z",
+    "updated_at": "2024-01-15T10:30:00Z"
+  }
+]
+2. Create Address
+POST /api/addresses/
+Request Body:
+json{
+  "full_name": "John Doe",
+  "email": "john@example.com",
+  "phone_number": "+12345678901",
+  "street_address": "456 Oak Street",
+  "city": "Boston",
+  "state": "MA",
+  "country": "United States",
+  "zip_code": "02101",
+  "is_default": false
+}
+3. Update Address
+PUT/PATCH /api/addresses/{id}/
+4. Delete Address
+DELETE /api/addresses/{id}/
+5. Set Default Address
+POST /api/addresses/{id}/set_default/
+
+Profile Management Endpoints
+1. Get Profile
+GET /api/profile/
+2. Update Profile
+PUT/PATCH /api/profile/{id}/
+3. Upload Profile Photo
+POST /api/profile/upload_photo/
+4. Remove Profile Photo
+DELETE /api/profile/remove_photo/
+5. Update User Details
+PATCH /api/profile/update-details/
+
+Missing Backend Features for UI
+1. Customer Address Integration
+Your current Customer model doesn't have direct address fields. You need to either:
+Option A: Add address fields to Customer model:
+pythonclass Customer(models.Model):
+    # ... existing fields ...
+    street_address = models.TextField(blank=True)
+    city = models.CharField(max_length=100, blank=True)
+    state = models.CharField(max_length=100, blank=True)
+    country = models.CharField(max_length=100, blank=True)
+    zip_code = models.CharField(max_length=20, blank=True)
+    billing_same_as_shipping = models.BooleanField(default=True)
+    billing_address = models.TextField(blank=True)
+    billing_city = models.CharField(max_length=100, blank=True)
+    billing_state = models.CharField(max_length=100, blank=True)
+    billing_country = models.CharField(max_length=100, blank=True)
+    billing_zip_code = models.CharField(max_length=20, blank=True)
+Option B: Create relationship to existing Address model:
+pythonclass Customer(models.Model):
+    # ... existing fields ...
+    shipping_address = models.ForeignKey(Address, on_delete=models.SET_NULL, null=True, blank=True, related_name='shipping_customers')
+    billing_address = models.ForeignKey(Address, on_delete=models.SET_NULL, null=True, blank=True, related_name='billing_customers')
+2. Enhanced Customer Creation API
+Update CustomerCreateSerializer to handle the address fields from your UI form.
+3. Country/State Lists API
+Consider adding endpoints for:
+
+GET /api/countries/ - List of countries
+GET /api/countries/{country_code}/states/ - States for a country
+
+Error Handling
+All endpoints return errors in this format:
+json{
+  "status": "error",
+  "success": false,
+  "message": "Validation error",
+  "errors": {
+    "email": "This email is already in use.",
+    "phone_number": "Please enter a valid phone number"
+  }
+}
+Success Responses
+Success responses follow this format:
+json{
+  "status": "success",
+  "success": true,
+  "message": "Customer created successfully",
+  "data": { ... }
+}

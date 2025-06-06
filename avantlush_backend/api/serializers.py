@@ -615,6 +615,7 @@ class OrderSerializer(serializers.ModelSerializer):
     status_display = serializers.SerializerMethodField()
     payment = serializers.SerializerMethodField()
     estimated_delivery_date = serializers.SerializerMethodField()
+    products_display_string = serializers.SerializerMethodField()
     
     # Add this method to get the first payment (if any)
     def get_payment(self, obj):
@@ -653,12 +654,25 @@ class OrderSerializer(serializers.ModelSerializer):
         model = Order
         fields = [
             'id', 'order_number', 'customer_email', 'customer_name',
-            'items', 'total', 'status', 'status_display', 'payment', 'payments',
+            'items', 'products_display_string', 'total', 'status', 'status_display', 'payment', 'payments',
             'shipping_address', 'created_at', 'estimated_delivery_date',
             'updated_at', 'note', 'payment_type', 'order_type',
             'order_date', 'order_time'
         ]
         read_only_fields = ['id', 'order_number', 'created_at', 'updated_at']
+
+    def get_products_display_string(self, obj):
+        items = obj.items.all()  # Get all related order items
+        if not items:
+            return "No products"
+        
+        first_item_product_name = items[0].product.name
+        
+        if len(items) == 1:
+            return first_item_product_name
+        else:
+            others_count = len(items) - 1
+            return f"{first_item_product_name} +{others_count} other product{'s' if others_count > 1 else ''}"
     
     def get_customer_name(self, obj):
         if obj.user.first_name or obj.user.last_name:
@@ -738,6 +752,111 @@ class FlatOrderItemSerializer(serializers.ModelSerializer):
             'updated_at', 'payment_type', 'order_type', 'product_image',
             'order_date', 'order_time'
         ]
+
+class ProductForOrderSerializer(serializers.ModelSerializer):
+    """Simplified product serializer for order creation"""
+    formatted_price = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Product
+        fields = ['id', 'name', 'sku', 'price', 'formatted_price', 
+                 'stock_quantity', 'main_image']
+    
+    def get_formatted_price(self, obj):
+        return f"${obj.price:,.2f}"
+    
+class OrderCreateEnhancedSerializer(serializers.ModelSerializer):
+    """Enhanced order creation serializer"""
+    items = serializers.ListField(
+        child=serializers.DictField(),
+        write_only=True,
+        help_text="List of order items with product_id, quantity, price"
+    )
+    customer_id = serializers.IntegerField(write_only=True, required=False)
+    
+    # Add these fields to match your UI
+    order_date = serializers.DateField(required=False)
+    order_time = serializers.TimeField(required=False)
+    
+    class Meta:
+        model = Order
+        fields = [
+            'customer_id', 'items', 'payment_type', 'order_type', 
+            'status', 'order_date', 'order_time', 'note',
+            'shipping_address', 'shipping_city', 'shipping_state',
+            'shipping_country', 'shipping_zip'
+        ]
+    
+    def validate_items(self, items):
+        """Validate order items"""
+        if not items:
+            raise serializers.ValidationError("Order must have at least one item")
+        
+        for item in items:
+            if 'product_id' not in item:
+                raise serializers.ValidationError("Each item must have a product_id")
+            if 'quantity' not in item or item['quantity'] <= 0:
+                raise serializers.ValidationError("Each item must have a valid quantity")
+                
+            # Check if product exists and has enough stock
+            try:
+                product = Product.objects.get(id=item['product_id'])
+                if product.stock_quantity < item['quantity']:
+                    raise serializers.ValidationError(
+                        f"Not enough stock for {product.name}. Available: {product.stock_quantity}"
+                    )
+            except Product.DoesNotExist:
+                raise serializers.ValidationError(f"Product with ID {item['product_id']} does not exist")
+        
+        return items
+    
+    def create(self, validated_data):
+        items_data = validated_data.pop('items')
+        customer_id = validated_data.pop('customer_id', None)
+        
+        # Set customer if provided
+        if customer_id:
+            try:
+                customer = Customer.objects.get(id=customer_id)
+                validated_data['customer'] = customer
+                if customer.user:
+                    validated_data['user'] = customer.user
+            except Customer.DoesNotExist:
+                raise serializers.ValidationError("Customer not found")
+        
+        # Set current user if no customer user
+        if 'user' not in validated_data:
+            validated_data['user'] = self.context['request'].user
+        
+        # Create order
+        order = Order.objects.create(**validated_data)
+        
+        # Create order items and calculate totals
+        subtotal = 0
+        for item_data in items_data:
+            product = Product.objects.get(id=item_data['product_id'])
+            quantity = item_data['quantity']
+            
+            # Use provided price or product price
+            unit_price = item_data.get('price', product.price)
+            
+            order_item = OrderItem.objects.create(
+                order=order,
+                product=product,
+                quantity=quantity,
+                price=unit_price
+            )
+            subtotal += order_item.subtotal
+            
+            # Update product stock
+            product.stock_quantity -= quantity
+            product.save()
+        
+        # Update order totals
+        order.subtotal = subtotal
+        order.save()  # This will trigger total calculation in the model
+        
+        return order
         
 class OrderCreateSerializer(serializers.ModelSerializer):
     items = serializers.ListField(
@@ -1150,6 +1269,37 @@ class DashboardSummaryResponseSerializer(serializers.Serializer):
     last_updated = serializers.CharField()
     error = serializers.CharField(required=False)
 
+class ProductTableSerializer(serializers.ModelSerializer):
+    """
+    Serializer for product table display
+    """
+    category_name = serializers.CharField(source='category.name', read_only=True)
+    variant_count = serializers.SerializerMethodField()
+    stock_status = serializers.SerializerMethodField()
+    formatted_price = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Product
+        fields = [
+            'id', 'name', 'sku', 'category_name', 'variant_count',
+            'stock_quantity', 'stock_status', 'price', 'formatted_price',
+            'status', 'created_at', 'main_image', 'is_featured'
+        ]
+    
+    def get_variant_count(self, obj):
+        return obj.variations.count()
+    
+    def get_stock_status(self, obj):
+        if obj.stock_quantity == 0:
+            return {'status': 'out_of_stock', 'label': 'Out of Stock', 'color': 'red'}
+        elif obj.stock_quantity <= 10:
+            return {'status': 'low_stock', 'label': 'Low Stock', 'color': 'orange'}
+        else:
+            return {'status': 'in_stock', 'label': 'In Stock', 'color': 'green'}
+    
+    def get_formatted_price(self, obj):
+        return f"${obj.price:,.2f}"
+
 class ProductVariationSerializer(serializers.ModelSerializer):
     final_price = serializers.SerializerMethodField()
     
@@ -1256,6 +1406,7 @@ class ProductManagementSerializer(serializers.ModelSerializer):
     variations = ProductVariationSerializer(many=True, required=False)
     variants_count = serializers.SerializerMethodField()
     status_display = serializers.SerializerMethodField()
+    added_date_formatted = serializers.SerializerMethodField() # For "Added" column
     main_image = serializers.SerializerMethodField()
     
     is_liked = serializers.SerializerMethodField()
@@ -1280,11 +1431,11 @@ class ProductManagementSerializer(serializers.ModelSerializer):
             'is_physical_product', 'weight', 'height', 
             'length', 'width',
             # Additional
-            'created_at', 'variants_count',
+            'created_at', 'added_date_formatted', 'variants_count',
             # Don't forget to add the all_images field here
             'all_images'
         ]
-        read_only_fields = ['created_at', 'id']
+        read_only_fields = ['created_at', 'id', 'added_date_formatted']
         extra_kwargs = {
             'status': {'required': False, 'default': 'draft'}
         }
@@ -1354,13 +1505,23 @@ class ProductManagementSerializer(serializers.ModelSerializer):
         return obj.variations.count() if hasattr(obj, 'variations') else 0
 
     def get_status_display(self, obj):
-        status_mapping = {
-            'published': 'Published',
-            'draft': 'Draft',
-            'inactive': 'Inactive',
-            'out_of_stock': 'Low Stock'
-        }
-        return status_mapping.get(obj.status, obj.status)
+        # Using the model's get_status_display method is preferred if it exists and is accurate.
+        # Assuming Product model has get_X_display() for choice fields.
+        # Or, implement more detailed logic based on UI:
+        if obj.status == 'published':
+            return 'Published'
+        elif obj.status == 'draft':
+            return 'Draft'
+        # The UI shows "Low Stock" for stock 0, or if status is 'low_stock' or 'out_of_stock'
+        elif obj.stock_quantity == 0 or obj.status in ['low_stock', 'out_of_stock']:
+            return 'Low Stock'
+        # Fallback to the model's display name for other statuses
+        return obj.get_status_display() if hasattr(obj, 'get_status_display') else obj.status
+
+    def get_added_date_formatted(self, obj):
+        if obj.created_at:
+            return obj.created_at.strftime('%d %b %Y')
+        return None
 
     def handle_image_upload(self, image):
         try:
@@ -1451,6 +1612,18 @@ class ProductManagementSerializer(serializers.ModelSerializer):
         instance.save()
         return instance
     
+
+class CustomerSimpleSerializer(serializers.ModelSerializer):
+    """Simple customer serializer for dropdowns"""
+    display_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Customer
+        fields = ['id', 'name', 'email', 'phone', 'display_name']
+    
+    def get_display_name(self, obj):
+        return f"{obj.name} ({obj.email})"
+
 class CarouselItemSerializer(serializers.ModelSerializer):
     """Serializer for carousel items with all fields for admin use"""
     image_url = serializers.SerializerMethodField()
@@ -1483,6 +1656,7 @@ class CarouselItemPublicSerializer(serializers.ModelSerializer):
         """Get the Cloudinary URL for the image"""
         return obj.image.url if obj.image else None
     
+""""    
 class CustomerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Customer
@@ -1513,3 +1687,136 @@ class CustomerCreateSerializer(serializers.ModelSerializer):
         )
         
         return customer
+"""
+
+
+# Add these serializers to your serializers.py file
+
+class CustomerSerializer(serializers.ModelSerializer):
+    """Simple customer serializer for listing"""
+    status = serializers.SerializerMethodField()
+    orders_count = serializers.IntegerField(read_only=True)
+    balance = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    
+    class Meta:
+        model = Customer
+        fields = ['id', 'name', 'email', 'phone', 'status', 'orders_count', 'balance', 'created_at']
+    
+    def get_status(self, obj):
+        # If you add status field to model, use: return obj.status
+        # For now, using user.is_active:
+        if obj.user:
+            return 'active' if obj.user.is_active else 'blocked'
+        return 'active'
+
+class CustomerDetailSerializer(serializers.ModelSerializer):
+    """Detailed customer serializer"""
+    status = serializers.SerializerMethodField()
+    orders_count = serializers.IntegerField(read_only=True)
+    balance = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    recent_orders = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Customer
+        fields = [
+            'id', 'name', 'email', 'phone', 'status', 'orders_count', 
+            'balance', 'created_at', 'recent_orders'
+        ]
+    
+    def get_status(self, obj):
+        if obj.user:
+            return 'active' if obj.user.is_active else 'blocked'
+        return 'active'
+    
+    def get_recent_orders(self, obj):
+        recent_orders = Order.objects.filter(customer=obj).order_by('-created_at')[:5]
+        return OrderSerializer(recent_orders, many=True).data
+
+class CustomerCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating new customers"""
+    password = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    create_user_account = serializers.BooleanField(default=False, write_only=True)
+    country_code = serializers.CharField(max_length=5, required=False, allow_blank=True, allow_null=True)
+    local_phone_number = serializers.CharField(max_length=20, required=False, allow_blank=True, allow_null=True)
+    address = AddressSerializer(required=False, write_only=True, allow_null=True)
+    
+    class Meta:
+        model = Customer
+        fields = [
+            'name', 'email', 'country_code', 'local_phone_number', 'address',
+            'password', 'create_user_account'
+        ]
+        # Note: 'phone' field is removed as it will be auto-populated by the model's save() method.
+
+    def validate(self, data):
+        country_code = data.get('country_code')
+        local_phone_number = data.get('local_phone_number')
+
+        # Only validate if both country_code and local_phone_number are provided
+        if country_code and local_phone_number:
+            from .utils import validate_phone_format # Import here to avoid circular issues
+            is_valid, error_message = validate_phone_format(country_code, local_phone_number)
+            if not is_valid:
+                raise serializers.ValidationError({'phone_number': error_message})
+        elif country_code and not local_phone_number:
+            raise serializers.ValidationError({'local_phone_number': 'Phone number is required when country code is provided.'})
+        elif local_phone_number and not country_code:
+            raise serializers.ValidationError({'country_code': 'Country code is required when phone number is provided.'})
+            
+        return data
+    
+    def create(self, validated_data):
+        password = validated_data.pop('password', None)
+        create_user_account = validated_data.pop('create_user_account', False)
+        address_data = validated_data.pop('address', None)
+        
+        # Create customer
+        customer = Customer.objects.create(**validated_data)
+        
+        # Optionally create user account
+        if create_user_account and password:
+            # Ensure email is unique for CustomUser
+            if CustomUser.objects.filter(email=customer.email).exists():
+                # If an admin is creating a customer for an existing user,
+                # try to link them if the customer isn't already linked.
+                existing_user = CustomUser.objects.get(email=customer.email)
+                if not customer.user:
+                    customer.user = existing_user
+            else:
+                user = CustomUser.objects.create_user(
+                    email=customer.email,
+                    password=password,
+                    # Attempt to get first_name and last_name from customer.name
+                    # This part might need adjustment based on how names are typically entered.
+                    first_name=customer.name.split(' ')[0] if ' ' in customer.name else customer.name,
+                    last_name=' '.join(customer.name.split(' ')[1:]) if ' ' in customer.name else ''
+                )
+                customer.user = user
+            customer.save()
+
+        # Optionally create address if address_data is provided and user exists
+        if address_data and customer.user:
+            # Ensure all required fields for AddressSerializer are present or have defaults
+            # The AddressSerializer itself will validate the fields.
+            # We pass customer.user to link the address to the user.
+            Address.objects.create(user=customer.user, **address_data)
+            # If you want to set this as the default address, you might add:
+            # Address.objects.filter(user=customer.user).update(is_default=False)
+            # address_instance.is_default = True
+            # address_instance.save()
+            # However, this logic is usually handled in a dedicated "set default address" endpoint.
+
+        return customer
+
+class ChartDataPointSerializer(serializers.Serializer):
+    """Serializer for a single data point in a chart (e.g., date and value)."""
+    date = serializers.DateField() # Could also be DateTimeField if time is relevant
+    value = serializers.DecimalField(max_digits=12, decimal_places=2) # Adjust precision as needed
+
+class SummaryChartResponseSerializer(serializers.Serializer):
+    """Serializer for the overall response of the summary chart data."""
+    chart_data = ChartDataPointSerializer(many=True)
+    metric_label = serializers.CharField()
+    period_label = serializers.CharField()
+    # You could add total_value_for_period here if needed
+    # total_value_for_period = serializers.DecimalField(max_digits=15, decimal_places=2)

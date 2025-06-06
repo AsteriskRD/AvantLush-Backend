@@ -35,6 +35,11 @@ from .views import (
     CarouselViewSet,
     admin_login, 
     check_admin_access,
+    OrderCreateView,
+    OrderUpdateView,
+    order_choices,
+    ProductDetailForOrderView,
+    CustomerListView,
 )
 
 # Router setup
@@ -57,6 +62,7 @@ router.register(r'product-management', ProductViewSet, basename='product-managem
 router.register(r'customers', CustomerViewSet, basename='customer')
 router.register(r'products/(?P<product_id>\d+)/reviews', ProductReviewViewSet, basename='product-reviews')
 router.register(r'carousel', CarouselViewSet, basename='carousel')
+
 # URL patterns
 urlpatterns = [
     # Authentication & User Management
@@ -122,10 +128,22 @@ urlpatterns = [
     path('cart/apply-discount/', CartViewSet.as_view({'post': 'apply_discount'})),
     path('cart/clear/', CartViewSet.as_view({'post': 'clear'})),
 
-    # Orders & Tracking
+    # Orders & Tracking (EXISTING + NEW ORDER MANAGEMENT ENDPOINTS)
     path('orders/<int:pk>/tracking/', OrderViewSet.as_view({'get': 'tracking_history'})),
     path('orders/<int:pk>/tracking/add/', OrderViewSet.as_view({'post': 'add_tracking_event'})),
     path('orders/filter-by-date/', OrderViewSet.as_view({'get': 'filter_by_date'})),
+    
+    path('api/orders/create/', OrderCreateView.as_view(), name='order-create'),
+    path('api/orders/<int:pk>/update/', OrderUpdateView.as_view(), name='order-update'),
+    path('api/orders/choices/', order_choices, name='order-choices'),
+    path('api/products/<int:pk>/for-order/', ProductDetailForOrderView.as_view(), name='product-for-order'),
+    path('api/customers/list/', CustomerListView.as_view(), name='customer-list'),
+
+    # NEW: Additional Order Management Endpoints
+    path('orders/export/', OrderViewSet.as_view({'get': 'export'}), name='order-export'),
+    path('orders/summary/', OrderViewSet.as_view({'get': 'summary'}), name='order-summary'),
+    path('orders/flat/', OrderViewSet.as_view({'get': 'flat_orders'}), name='flat-orders'),
+    path('orders/bulk-action/', OrderViewSet.as_view({'post': 'bulk_action'}), name='bulk-action'),
 
     # Support & Checkout
     path('support/submit/', SupportTicketViewSet.as_view({'post': 'submit'})),

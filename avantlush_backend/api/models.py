@@ -379,15 +379,33 @@ class CartItem(models.Model):
         return f"{self.quantity} x {self.product.name}{size_info}{color_info} in {self.cart}"
         
 class Customer(models.Model):
+    STATUS_CHOICES = [
+        ('active', 'Active'),
+        ('blocked', 'Blocked'),
+    ]
+    
     user = models.ForeignKey('CustomUser', on_delete=models.CASCADE, null=True, blank=True)
     name = models.CharField(max_length=255)
     email = models.EmailField()
-    phone = models.CharField(max_length=20, blank=True)
+    country_code = models.CharField(max_length=5, blank=True, null=True) # e.g. +234
+    local_phone_number = models.CharField(max_length=20, blank=True, null=True) # The number without country code
+    phone = models.CharField(max_length=30, blank=True) # Stores the fully formatted number
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')  # ADD THIS
     created_at = models.DateTimeField(auto_now_add=True)
-    
+
+    def save(self, *args, **kwargs):
+        if self.country_code and self.local_phone_number:
+            # Import here to avoid circular dependency if utils imports models
+            from .utils import format_phone_number
+            self.phone = format_phone_number(self.country_code, self.local_phone_number)
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return self.name
-    
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.name
 class Order(models.Model):
     PAYMENT_TYPE_CHOICES = [
         ('CASH', 'Cash'),
@@ -408,6 +426,8 @@ class Order(models.Model):
         ('SHIPPED', 'Shipped'),
         ('DELIVERED', 'Delivered'),
         ('CANCELLED', 'Cancelled'),
+        ('RETURNED', 'Returned'),
+        ('DAMAGED', 'Damaged'),
     ]
 
     PAYMENT_STATUS_CHOICES = [

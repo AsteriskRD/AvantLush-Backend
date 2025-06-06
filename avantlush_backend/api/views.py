@@ -34,9 +34,9 @@ from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework_simplejwt.tokens import AccessToken
 from rest_framework_simplejwt.exceptions import TokenError
 from django.utils import timezone
-from django.db.models import Count, Sum, F, Q
-from django.db.models.functions import TruncDate
-from datetime import timedelta
+from django.db.models import Count, Sum, F, Q, DecimalField, Value
+from django.db.models.functions import TruncDate, Coalesce, TruncDay, TruncMonth, TruncWeek
+from datetime import timedelta, date
 
 from .models import SupportTicket, TicketResponse
 
@@ -158,7 +158,7 @@ from .serializers import (
     SizeSerializer,
     ColorSerializer,
     FlatOrderItemSerializer,
-    
+    SummaryChartResponseSerializer, # Added for dashboard chart
     
 )
 
@@ -1760,6 +1760,72 @@ class OrderViewSet(viewsets.ModelViewSet):
         order.save()
         return Response(OrderSerializer(order).data)  
     
+class OrderCreateView(generics.CreateAPIView):
+    """Create new order - matches your 'Create Order' button"""
+    queryset = Order.objects.all()
+    serializer_class = OrderCreateSerializer
+    permission_classes = [IsAdminUser]
+    
+    def perform_create(self, serializer):
+        # If no user is provided, create order for selected customer
+        customer_id = self.request.data.get('customer_id')
+        if customer_id:
+            customer = Customer.objects.get(id=customer_id)
+            if customer.user:
+                serializer.save(user=customer.user, customer=customer)
+            else:
+                # Handle case where customer has no user account
+                serializer.save(customer=customer)
+        else:
+            serializer.save(user=self.request.user)
+
+class OrderUpdateView(generics.RetrieveUpdateAPIView):
+    """Update existing order - for editing orders"""
+    queryset = Order.objects.all()
+    serializer_class = OrderSerializer
+    permission_classes = [IsAdminUser]
+
+@api_view(['GET'])
+def product_search(request):
+    """Product search API - matches your product search box"""
+    query = request.GET.get('q', '')
+    if len(query) < 2:
+        return Response([])
+    
+    products = Product.objects.filter(
+        Q(name__icontains=query) | 
+        Q(sku__icontains=query) |
+        Q(description__icontains=query),
+        status='active'
+    )[:10]  # Limit to 10 results
+    
+    # Simple product data for search dropdown
+    product_data = [{
+        'id': p.id,
+        'name': p.name,
+        'sku': p.sku,
+        'price': str(p.price),
+        'stock_quantity': p.stock_quantity,
+        'image': p.main_image.url if p.main_image else None
+    } for p in products]
+    
+    return Response(product_data)
+
+@api_view(['GET'])
+def order_choices(request):
+    """Get all dropdown choices for order form"""
+    return Response({
+        'payment_types': Order.PAYMENT_TYPE_CHOICES,
+        'order_types': Order.ORDER_TYPE_CHOICES,
+        'status_choices': Order.STATUS_CHOICES,
+    })
+
+class ProductDetailForOrderView(generics.RetrieveAPIView):
+    """Get product details when adding to order"""
+    queryset = Product.objects.filter(status='active')
+    serializer_class = ProductSerializer
+    permission_classes = [IsAdminUser]
+
 # Product Search and Filtering Views
 class ProductSearchView(generics.ListAPIView):
     serializer_class = ProductSerializer
@@ -3135,6 +3201,202 @@ class DashboardViewSet(viewsets.ViewSet):
                 'total_count': 0,
                 'error': 'Failed to fetch recent orders'
             }, status=500)
+        
+    @action(detail=False, methods=['GET'])
+    def product_management_data(self, request):
+            """
+            Enhanced endpoint for Product Management page data
+            Matches the table interface in your screenshot
+            """
+            # Get filter parameters
+            tab = request.query_params.get('tab', 'all')
+            search = request.query_params.get('search', '')
+            category = request.query_params.get('category', '')
+            page = int(request.query_params.get('page', 1))
+            page_size = int(request.query_params.get('page_size', 10))
+            
+            # Base queryset
+            queryset = Product.objects.select_related('category').prefetch_related('variations')
+            
+            # Apply tab filtering
+            if tab == 'published':
+                queryset = queryset.filter(status='published')
+            elif tab == 'low_stock':
+                queryset = queryset.filter(stock_quantity__lte=10)
+            elif tab == 'draft':
+                queryset = queryset.filter(status='draft')
+            
+            # Apply search
+            if search:
+                queryset = queryset.filter(
+                    Q(name__icontains=search) | 
+                    Q(sku__icontains=search) |
+                    Q(category__name__icontains=search)
+                )
+            
+            # Apply category filter
+            if category:
+                queryset = queryset.filter(category__slug=category)
+            
+            # Get total count for pagination
+            total_count = queryset.count()
+            
+            # Apply pagination
+            start = (page - 1) * page_size
+            end = start + page_size
+            products = queryset[start:end]
+            
+            # Serialize product data to match your table structure
+            product_data = []
+            for product in products:
+                # Get variant count
+                variant_count = product.variations.count()
+                
+                # Get stock status
+                if product.stock_quantity == 0:
+                    stock_status = 'out_of_stock'
+                    stock_label = 'Out of Stock'
+                    stock_color = 'red'
+                elif product.stock_quantity <= 10:
+                    stock_status = 'low_stock'
+                    stock_label = 'Low Stock'
+                    stock_color = 'orange'
+                else:
+                    stock_status = 'in_stock'
+                    stock_label = 'In Stock'
+                    stock_color = 'green'
+                
+                # Get status display
+                status_colors = {
+                    'published': 'green',
+                    'draft': 'gray',
+                    'active': 'blue',
+                    'inactive': 'red'
+                }
+                
+                product_data.append({
+                    'id': product.id,
+                    'name': product.name,
+                    'sku': product.sku,
+                    'category': product.category.name if product.category else 'Uncategorized',
+                    'category_id': product.category.id if product.category else None,
+                    'variants': f"{variant_count} Variants" if variant_count > 0 else "No Variants",
+                    'variant_count': variant_count,
+                    'stock_quantity': product.stock_quantity,
+                    'stock_status': stock_status,
+                    'stock_label': stock_label,
+                    'stock_color': stock_color,
+                    'price': float(product.price),
+                    'status': product.status,
+                    'status_color': status_colors.get(product.status, 'gray'),
+                    'created_at': product.created_at.strftime('%d %b %Y'),
+                    'updated_at': product.updated_at.strftime('%d %b %Y'),
+                    'main_image': product.main_image.url if product.main_image else None,
+                    'is_featured': product.is_featured,
+                    'rating': float(product.rating) if product.rating else 0,
+                    'num_ratings': product.num_ratings
+                })
+            
+            # Calculate pagination info
+            total_pages = (total_count + page_size - 1) // page_size
+            
+            return Response({
+                'products': product_data,
+                'pagination': {
+                    'current_page': page,
+                    'total_pages': total_pages,
+                    'total_count': total_count,
+                    'page_size': page_size,
+                    'has_next': page < total_pages,
+                    'has_previous': page > 1
+                },
+                'filters': {
+                    'tab': tab,
+                    'search': search,
+                    'category': category
+                },
+                'tab_counts': {
+                    'all': Product.objects.count(),
+                    'published': Product.objects.filter(status='published').count(),
+                    'low_stock': Product.objects.filter(stock_quantity__lte=10).count(),
+                    'draft': Product.objects.filter(status='draft').count()
+                }
+            })
+        
+    @action(detail=False, methods=['POST'])
+    def bulk_product_action(self, request):
+        """
+        Handle bulk actions on products (delete, change status, etc.)
+        """
+        action = request.data.get('action')
+        product_ids = request.data.get('product_ids', [])
+        
+        if not action or not product_ids:
+            return Response({
+                'error': 'Action and product_ids are required'
+            }, status=400)
+        
+        products = Product.objects.filter(id__in=product_ids)
+        
+        if action == 'delete':
+            deleted_count = products.count()
+            products.delete()
+            return Response({
+                'message': f'{deleted_count} products deleted successfully'
+            })
+        
+        elif action == 'publish':
+            updated_count = products.update(status='published')
+            return Response({
+                'message': f'{updated_count} products published successfully'
+            })
+        
+        elif action == 'draft':
+            updated_count = products.update(status='draft')
+            return Response({
+                'message': f'{updated_count} products moved to draft'
+            })
+        
+        elif action == 'feature':
+            updated_count = products.update(is_featured=True)
+            return Response({
+                'message': f'{updated_count} products marked as featured'
+            })
+        
+        else:
+            return Response({
+                'error': 'Invalid action'
+            }, status=400)
+    
+    @action(detail=False, methods=['GET'])
+    def export_products(self, request):
+        """
+        Export products data as CSV
+        """
+        import csv
+        from django.http import HttpResponse
+        
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="products.csv"'
+        
+        writer = csv.writer(response)
+        writer.writerow([
+            'Name', 'SKU', 'Category', 'Price', 'Stock', 'Status', 'Created'
+        ])
+        
+        products = Product.objects.select_related('category').all()
+        for product in products:
+            writer.writerow([
+                product.name,
+                product.sku,
+                product.category.name if product.category else '',
+                product.price,
+                product.stock_quantity,
+                product.status,
+                product.created_at.strftime('%Y-%m-%d')
+            ])
+        
+        return response
 
     @action(detail=False, methods=['GET'])
     def dashboard_summary(self, request):
@@ -3223,14 +3485,12 @@ class DashboardViewSet(viewsets.ViewSet):
             'Completed': 'Completed'
         }
         return ui_status_mapping.get(status, status)
+    
 
     # OPTIONAL: Enhanced version of your existing overview_metrics
     # Only add this if you want to enhance the existing endpoint
     def _enhance_overview_response(self, response_data):
-        """
-        Helper to enhance your existing overview_metrics response
-        Add this call at the end of your overview_metrics method
-        """
+        
         # Add UI-friendly status displays
         if 'orders' in response_data:
             orders = response_data['orders']
@@ -3245,7 +3505,93 @@ class DashboardViewSet(viewsets.ViewSet):
         response_data['last_updated'] = timezone.now().isoformat()
         
         return response_data
-    
+
+    @action(detail=False, methods=['GET'], url_path='summary-chart-data')
+    def summary_chart_data(self, request):
+        metric = request.query_params.get('metric', 'sales')
+        period = request.query_params.get('period', 'last_7_days') # e.g., last_7_days, last_30_days, this_month
+
+        today = timezone.now().date()
+        data_points = []
+        queryset = None
+        annotation_value = None
+        period_label = ""
+
+        # Determine date range and grouping
+        if period == 'last_7_days':
+            start_date = today - timedelta(days=6)
+            end_date = today
+            trunc_func = TruncDay
+            period_label = "Last 7 Days"
+        elif period == 'last_30_days':
+            start_date = today - timedelta(days=29)
+            end_date = today
+            trunc_func = TruncDay # Could also be TruncWeek if preferred for longer periods
+            period_label = "Last 30 Days"
+        elif period == 'this_month':
+            start_date = today.replace(day=1)
+            end_date = today
+            trunc_func = TruncDay
+            period_label = "This Month"
+        # Add more periods like 'last_month', 'this_year' as needed
+        else:
+            # Default to last 7 days if period is invalid
+            start_date = today - timedelta(days=6)
+            end_date = today
+            trunc_func = TruncDay
+            period_label = "Last 7 Days"
+
+        # Metric specific logic
+        metric_label = ""
+        if metric == 'sales':
+            queryset = Order.objects.filter(created_at__date__range=[start_date, end_date])
+            annotation_value = Sum('total')
+            metric_label = "Total Sales"
+        elif metric == 'orders_count':
+            queryset = Order.objects.filter(created_at__date__range=[start_date, end_date])
+            annotation_value = Count('id')
+            metric_label = "Total Orders"
+        elif metric == 'new_customers_count':
+            queryset = CustomUser.objects.filter(date_joined__date__range=[start_date, end_date])
+            annotation_value = Count('id')
+            metric_label = "New Customers"
+        else:
+            return Response({"error": "Invalid metric specified. Choose from 'sales', 'orders_count', 'new_customers_count'."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        if queryset is not None and annotation_value is not None:
+            # Group by the truncated date and annotate
+            # For CustomUser, the date field is date_joined, for Order it's created_at
+            date_field_name = 'date_joined__date' if metric == 'new_customers_count' else 'created_at__date'
+            
+            # Ensure correct date field for truncation
+            trunc_date_field = 'date_joined' if metric == 'new_customers_count' else 'created_at'
+
+            summary = queryset.annotate(
+                date_period=trunc_func(trunc_date_field)
+            ).values('date_period').annotate(
+                metric_value=Coalesce(annotation_value, Value(0, output_field=DecimalField() if metric == 'sales' else models.IntegerField()))
+            ).order_by('date_period')
+            
+            # Fill in missing dates with zero values for a continuous chart
+            # Create a dictionary of existing data points
+            summary_dict = {item['date_period'].strftime('%Y-%m-%d'): item['metric_value'] for item in summary}
+
+            current_date = start_date
+            while current_date <= end_date:
+                date_str = current_date.strftime('%Y-%m-%d')
+                value = summary_dict.get(date_str, Decimal('0.00') if metric == 'sales' else 0)
+                data_points.append({'date': current_date, 'value': value})
+                current_date += timedelta(days=1)
+        
+        serializer = SummaryChartResponseSerializer(data={
+            'chart_data': data_points,
+            'metric_label': metric_label,
+            'period_label': period_label
+        })
+        serializer.is_valid(raise_exception=True) # Should always be valid if data is prepared correctly
+        return Response(serializer.data)
+
 class ProductFilter(django_filters.FilterSet):
     tab = django_filters.CharFilter(method='filter_tab')
     search = django_filters.CharFilter(method='filter_search')
@@ -3531,6 +3877,81 @@ class ProductViewSet(viewsets.ModelViewSet):
             )
         
         return Response(serializer.data)
+    
+    @action(detail=True, methods=['POST'])
+    def duplicate(self, request, pk=None):
+        """
+        Duplicate a product
+        """
+        try:
+            original_product = self.get_object()
+            
+            # Create duplicate
+            duplicate_product = Product.objects.create(
+                name=f"{original_product.name} (Copy)",
+                description=original_product.description,
+                price=original_product.price,
+                base_price=original_product.base_price,
+                stock_quantity=0,  # Start with 0 stock
+                category=original_product.category,
+                status='draft',  # Start as draft
+                is_physical_product=original_product.is_physical_product,
+                weight=original_product.weight,
+                height=original_product.height,
+                length=original_product.length,
+                width=original_product.width,
+                product_details=original_product.product_details,
+                # Generate new SKU
+                sku=f"{original_product.sku}-COPY-{timezone.now().strftime('%Y%m%d%H%M%S')}"
+            )
+            
+            # Copy variations
+            for variation in original_product.variations.all():
+                new_variation = ProductVariation.objects.create(
+                    product=duplicate_product,
+                    variation_type=variation.variation_type,
+                    variation=variation.variation,
+                    price_adjustment=variation.price_adjustment,
+                    stock_quantity=0,
+                    sku=f"{variation.sku}-COPY-{timezone.now().strftime('%Y%m%d%H%M%S')}",
+                    size=variation.size,
+                    color=variation.color
+                )
+                # Copy ManyToMany relationships
+                new_variation.sizes.set(variation.sizes.all())
+                new_variation.colors.set(variation.colors.all())
+            
+            return Response({
+                'message': 'Product duplicated successfully',
+                'product_id': duplicate_product.id
+            })
+            
+        except Exception as e:
+            return Response({
+                'error': f'Failed to duplicate product: {str(e)}'
+            }, status=500)
+    
+    @action(detail=True, methods=['POST'])
+    def update_stock(self, request, pk=None):
+        """
+        Quick stock update
+        """
+        product = self.get_object()
+        new_stock = request.data.get('stock_quantity')
+        
+        if new_stock is not None:
+            product.stock_quantity = new_stock
+            product.save()
+            
+            return Response({
+                'message': 'Stock updated successfully',
+                'new_stock': product.stock_quantity
+            })
+        
+        return Response({
+            'error': 'stock_quantity is required'
+        }, status=400)
+    
     @action(detail=True, methods=['POST'], url_path='upload-image')
     def upload_image(self, request, pk=None):
         """Handle image uploads for products"""
@@ -3943,6 +4364,13 @@ class CustomerFilterSet(FilterSet):
             balance=Sum('order__total')
         ).filter(balance=value)
 
+class CustomerListView(generics.ListAPIView):
+    queryset = Customer.objects.all()
+    serializer_class = CustomerSerializer  # Simple serializer needed
+    permission_classes = [IsAdminUser]
+
+# Updated CustomerViewSet with fixes
+
 class CustomerViewSet(viewsets.ModelViewSet):
     queryset = Customer.objects.all()
     serializer_class = CustomerDetailSerializer
@@ -3955,18 +4383,30 @@ class CustomerViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdminUser]
 
     def get_queryset(self):
-        queryset = super().get_queryset().annotate(
-            orders_count=Count('order'),
-            balance=Sum('order__total')
+        queryset = super().get_queryset().select_related('user').annotate(
+            orders_count=Count('order', distinct=True),
+            balance=Coalesce(Sum('order__total'), Value(0, output_field=DecimalField()), output_field=DecimalField())
         )
         
         status = self.request.query_params.get('status')
         if status:
             if status.lower() == 'active':
-                queryset = queryset.filter(user__is_active=True)
+                # Filter for customers with active user accounts OR no user account
+                queryset = queryset.filter(
+                    Q(user__is_active=True) | Q(user__isnull=True)
+                )
             elif status.lower() == 'blocked':
-                queryset = queryset.filter(user__is_active=False)
+                # Filter for customers with inactive user accounts
+                queryset = queryset.filter(user__is_active=False, user__isnull=False)
+        
         return queryset
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return CustomerCreateSerializer
+        elif self.action == 'list':
+            return CustomerSerializer
+        return CustomerDetailSerializer
 
     @action(detail=False, methods=['POST'])
     def bulk_action(self, request):
@@ -3986,19 +4426,27 @@ class CustomerViewSet(viewsets.ModelViewSet):
                 'error': 'No customers selected'
             }, status=status.HTTP_400_BAD_REQUEST)
 
+        customers = Customer.objects.filter(id__in=customer_ids)
+
         if action == 'update_status':
             new_status = request.data.get('status')
             if new_status not in ['active', 'blocked']:
                 return Response({
                     'error': 'Invalid status'
                 }, status=status.HTTP_400_BAD_REQUEST)
-                
-            Customer.objects.filter(id__in=customer_ids).update(
-                user__is_active=(new_status == 'active')
-            )
+            
+            # Update user accounts if they exist
+            for customer in customers:
+                if customer.user:
+                    customer.user.is_active = (new_status == 'active')
+                    customer.user.save()
 
         elif action == 'delete':
-            Customer.objects.filter(id__in=customer_ids).delete()
+            # Also delete associated user accounts if they exist
+            for customer in customers:
+                if customer.user:
+                    customer.user.delete()
+            customers.delete()
 
         return Response({'status': 'success', 'affected': len(customer_ids)})
 
@@ -4010,21 +4458,22 @@ class CustomerViewSet(viewsets.ModelViewSet):
         response['Content-Disposition'] = f'attachment; filename="customers-{timezone.now().strftime("%Y%m%d")}.csv"'
         
         writer = csv.writer(response)
-        writer.writerow(['ID', 'Name', 'Email', 'Phone', 'Status', 'Orders', 'Total Balance'])
+        writer.writerow(['ID', 'Name', 'Email', 'Phone', 'Status', 'Orders', 'Total Balance', 'Created'])
         
         for customer in queryset:
-            orders_count = Order.objects.filter(customer=customer).count()
-            total_balance = Order.objects.filter(customer=customer).aggregate(
-                total=Sum('total'))['total'] or 0
+            status_display = 'Active'
+            if customer.user:
+                status_display = 'Active' if customer.user.is_active else 'Blocked'
             
             writer.writerow([
                 customer.id,
                 customer.name,
                 customer.email,
                 customer.phone,
-                'Active' if customer.user.is_active else 'Blocked',
-                orders_count,
-                total_balance
+                status_display,
+                customer.orders_count,
+                f"${customer.balance:,.2f}",
+                customer.created_at.strftime('%Y-%m-%d')
             ])
         
         return response
@@ -4038,9 +4487,44 @@ class CustomerViewSet(viewsets.ModelViewSet):
         total_spent = orders.aggregate(total=Sum('total'))['total'] or 0
         recent_orders = orders.order_by('-created_at')[:5]
         
+        # Additional statistics
+        monthly_orders = orders.filter(
+            created_at__gte=timezone.now().replace(day=1)
+        ).count()
+        
+        avg_order_value = total_spent / total_orders if total_orders > 0 else 0
+
+        # Abandoned cart count for this customer
+        abandoned_carts_count = 0
+        if customer.user:  # Check if the customer is linked to a user
+            # Use a setting for threshold, default to 24 hours
+            abandoned_cart_threshold_hours = getattr(settings, 'ABANDONED_CART_THRESHOLD_HOURS', 24)
+            abandoned_threshold_time = timezone.now() - timedelta(hours=abandoned_cart_threshold_hours)
+            
+            abandoned_carts_count = Cart.objects.filter(
+                user=customer.user,
+                updated_at__lt=abandoned_threshold_time,
+                items__isnull=False  # Ensures the cart has items and is not empty
+            ).distinct().count()
+
+        # Order status counts
+        order_status_counts = {
+            'pending': orders.filter(status='PENDING').count(),
+            'processing': orders.filter(status='PROCESSING').count(), # Added for completeness, UI might not show it
+            'shipped': orders.filter(status='SHIPPED').count(),       # Added for completeness, UI might not show it
+            'completed': orders.filter(status='DELIVERED').count(), # 'DELIVERED' maps to 'Completed' in UI
+            'cancelled': orders.filter(status='CANCELLED').count(),
+            'returned': orders.filter(status='RETURNED').count(),
+            'damaged': orders.filter(status='DAMAGED').count(),
+        }
+        
         return Response({
             'total_orders': total_orders,
             'total_spent': total_spent,
+            'monthly_orders': monthly_orders,
+            'avg_order_value': avg_order_value,
+            'abandoned_carts_count': abandoned_carts_count,
+            'order_status_counts': order_status_counts,
             'recent_orders': OrderSerializer(recent_orders, many=True).data
         })
 
