@@ -9,7 +9,6 @@ pip install -r requirements.txt
 echo "Running database migrations..."
 python manage.py migrate
 
-
 #echo "Populating initial product data..."
 #python manage.py populate_products || true
 
@@ -24,15 +23,14 @@ python manage.py migrate
 echo "Syncing product variations..."
 python manage.py sync_product_variations || true  # Add || true to prevent build failure
 
-#create superuser
-#echo "Creating superuser..."
-#python manage.py ensure_superuser
-#echo "Superuser creation completed"
+# Create superuser
+echo "Creating superuser..."
+python manage.py ensure_superuser
+echo "Superuser creation completed"
 
 echo "Populating ordertable..."
 python manage.py create_dummy_orders --email danieludechukwu117@gmail.com --count 5 || true
 echo "Order Population completed"
-
 
 echo "Collecting static files..."
 python manage.py collectstatic --no-input
