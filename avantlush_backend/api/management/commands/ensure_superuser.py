@@ -15,6 +15,10 @@ class Command(BaseCommand):
             {
                 'email': 'danieludechukwu117@gmail.com',
                 'password': 'Dan1234',  
+            },
+            {
+                'email': 'homehorizoninc@outlook.com',
+                'password': 'Home1234',  # You can change this password
             }
         ]
         
