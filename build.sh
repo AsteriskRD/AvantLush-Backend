@@ -10,7 +10,7 @@ echo "Running database migrations..."
 python manage.py migrate
 
 echo "Populating initial product data..."
-python manage.py populate_products || true
+python manage.py populate_products --clear || true
 
 #echo "Fixing product table..."
 #python manage.py fix_product_table || true  # Add || true to prevent build failure

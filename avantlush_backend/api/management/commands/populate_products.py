@@ -7,11 +7,26 @@ import uuid
 class Command(BaseCommand):
     help = 'Populate the database with sample furniture products'
 
+    def add_arguments(self, parser):
+        parser.add_argument(
+            '--clear',
+            action='store_true',
+            help='Clear existing products before populating',
+        )
+
     def generate_sku(self, name, category_prefix):
         """Generate a unique SKU based on product name and category"""
         return f"{category_prefix}-{uuid.uuid4().hex[:8].upper()}"
 
-    def handle(self, *args, **kwargs):
+    def handle(self, *args, **options):
+        # Clear existing products if --clear flag is used
+        if options['clear']:
+            existing_count = Product.objects.count()
+            Product.objects.all().delete()
+            self.stdout.write(
+                self.style.WARNING(f'Cleared {existing_count} existing products')
+            )
+
         # Create main categories
         chairs_category, _ = Category.objects.get_or_create(
             name="Chairs",
@@ -257,6 +272,7 @@ class Command(BaseCommand):
         ]
 
         # Create products
+        created_count = 0
         for product_data in products:
             name = product_data["name"]
             product, created = Product.objects.get_or_create(
@@ -283,6 +299,7 @@ class Command(BaseCommand):
             )
             
             if created:
+                created_count += 1
                 self.stdout.write(
                     self.style.SUCCESS(f'Successfully created product "{name}"')
                 )
@@ -292,5 +309,5 @@ class Command(BaseCommand):
                 )
 
         self.stdout.write(
-            self.style.SUCCESS(f'Successfully processed {len(products)} products')
+            self.style.SUCCESS(f'Successfully created {created_count} new products out of {len(products)} total products')
         )
