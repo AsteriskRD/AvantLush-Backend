@@ -67,14 +67,16 @@ class ProductAdminForm(forms.ModelForm):
 
     class Meta:
         model = Product
-        fields = '__all__'
+        # ✅ EXCLUDE the images field completely from the form
+        exclude = ['images']
         widgets = {
             'description': forms.Textarea(attrs={'rows': 4}),
         }
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Hide the original JSON field
+        
+        # Hide the original JSON field for product_details
         if 'product_details' in self.fields:
             self.fields['product_details'].widget = forms.HiddenInput()
         
@@ -88,21 +90,13 @@ class ProductAdminForm(forms.ModelForm):
         # Handle product details text conversion
         details_text = cleaned_data.get('product_details_text', '')
         if details_text:
-            # Split by new lines and remove empty lines
             details_list = [line.strip() for line in details_text.split('\n') if line.strip()]
             cleaned_data['product_details'] = details_list
         else:
             cleaned_data['product_details'] = []
         
-        # Handle the image uploads and append them to the images JSON field
-        image_upload = cleaned_data.get('image_uploads')
-        if image_upload:
-            instance = self.instance
-            current_images = instance.images if instance.pk and instance.images else []
-            
-            # Store the Cloudinary URL in the images array
-            current_images.append(image_upload.url)
-            cleaned_data['images'] = current_images
+        # ✅ REMOVED: All image_uploads handling for JSON field
+        # No longer adding uploaded images to the images JSON field
         
         return cleaned_data
 
@@ -176,19 +170,13 @@ class ProductAdmin(admin.ModelAdmin):
         return "No main image"
     image_preview.short_description = 'Main Image'
     
-    def display_additional_images(self, obj):
-        if not obj.images:
-            return "No additional images"
-        
-        html = []
-        for img_url in obj.images[:3]:
-            html.append(f'<img src="{img_url}" width="50" height="50" style="margin-right: 5px;" />')
-        
-        if len(obj.images) > 3:
-            html.append(f'<span>+{len(obj.images) - 3} more</span>')
-            
-        return format_html(''.join(html))
-    display_additional_images.short_description = 'Additional Images'
+    def additional_image_preview(self, obj):
+        if obj.image_uploads:
+            return format_html('<img src="{}" width="50" height="50" style="margin-right: 5px;" />', obj.image_uploads.url)
+        return "No additional image"
+    additional_image_preview.short_description = 'Additional Image'
+    
+    # ✅ REMOVED: display_additional_images method since we're not using JSON field
     
     def product_category(self, obj):
         return obj.category.name if obj.category else '-'
@@ -196,7 +184,7 @@ class ProductAdmin(admin.ModelAdmin):
     
     list_display = (
         'image_preview',
-        'display_additional_images',
+        'additional_image_preview',  # ✅ Show the file upload image instead
         'name',
         'sku',
         'price',
@@ -206,33 +194,17 @@ class ProductAdmin(admin.ModelAdmin):
         'is_featured'
     )
     
-    list_filter = (
-        StockFilter,
-        'status',
-        'is_featured',
-        'category',
-        'created_at'
-    )
-    
-    search_fields = (
-        'name',
-        'description',
-        'sku',
-        'category__name'
-    )
-    
-    readonly_fields = (
-        'created_at',
-        'updated_at',
-        'rating',
-        'num_ratings'
-    )
+    list_filter = ('status', 'is_featured', 'category', 'created_at')
+    search_fields = ('name', 'sku', 'description')
+    prepopulated_fields = {'slug': ('name',)}
+    filter_horizontal = ('tags',)
     
     fieldsets = (
         ('Basic Information', {
             'fields': (
                 'name',
                 'description',
+                'product_details_text',
                 'sku',
                 'slug',
                 'category',
@@ -243,48 +215,22 @@ class ProductAdmin(admin.ModelAdmin):
             'fields': (
                 'main_image',
                 'image_uploads',
-                'images',
+                # ✅ COMPLETELY REMOVED: 'images' field
             ),
-            'description': 'Upload product images. Main image will be displayed as the primary product image.'
+            'description': 'Upload product images using the file upload fields above.'
         }),
-        ('Pricing', {
+        ('Pricing & Inventory', {
             'fields': (
                 'price',
-                'base_price',
-                'discount_type',
-                'discount_percentage',
-                'vat_amount'
-            )
-        }),
-        ('Inventory', {
-            'fields': (
                 'stock_quantity',
                 'status',
-                'barcode'
+                'is_featured'
             )
         }),
-        ('Available Variations', {
-            'fields': [],
-            'description': 'Product variations are managed in the sections below. Add available sizes and colors, then create specific variations.'
-        }),
-        ('Product Details', {
-            'fields': (
-                'product_details_text', 
-                'is_featured',
-                'is_physical_product',
-                'weight',
-                'height',
-                'length',
-                'width'
-            ),
-            'description': 'Enter product details as a list of features. Each item will be displayed as a bullet point.'
-        }),
-        ('Metrics', {
+        ('SEO & Metadata', {
             'fields': (
                 'rating',
                 'num_ratings',
-                'created_at',
-                'updated_at'
             ),
             'classes': ('collapse',)
         })

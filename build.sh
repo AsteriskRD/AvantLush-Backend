@@ -9,8 +9,8 @@ pip install -r requirements.txt
 echo "Running database migrations..."
 python manage.py migrate
 
-echo "Populating initial product data..."
-python manage.py populate_products || true
+#echo "Populating initial product data..."
+#python manage.py populate_products || true
 
 #echo "Fixing product table..."
 #python manage.py fix_product_table || true  # Add || true to prevent build failure
@@ -20,8 +20,8 @@ python manage.py populate_products || true
 #python manage.py update_product_images || true  # Add || true to prevent build failure
 
 # Add product variations sync command
-echo "Syncing product variations..."
-python manage.py sync_product_variations || true  # Add || true to prevent build failure
+#echo "Syncing product variations..."
+#python manage.py sync_product_variations || true  # Add || true to prevent build failure
 
 # Create superuser
 echo "Creating superuser..."
