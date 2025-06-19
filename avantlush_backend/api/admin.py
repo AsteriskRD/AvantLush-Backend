@@ -5,9 +5,10 @@ from django.utils.html import format_html
 from django.contrib.admin import SimpleListFilter
 from cloudinary.forms import CloudinaryFileField
 from cloudinary.models import CloudinaryField
+from cloudinary.uploader import upload
+import json
 from django import forms
 from django.db import models
-from django.forms import FileInput
 from .models import (
     WaitlistEntry,
     CustomUser,
@@ -33,6 +34,23 @@ from .models import (
     ProductColor,
 )
 
+# Custom widget for multiple file uploads
+class MultipleFileInput(forms.ClearableFileInput):
+    allow_multiple_selected = True
+
+class MultipleFileField(forms.FileField):
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault("widget", MultipleFileInput())
+        super().__init__(*args, **kwargs)
+
+    def clean(self, data, initial=None):
+        single_file_clean = super().clean
+        if isinstance(data, (list, tuple)):
+            result = [single_file_clean(d, initial) for d in data]
+        else:
+            result = single_file_clean(data, initial)
+        return result
+
 # Product Forms
 class ProductAdminForm(forms.ModelForm):
     product_details_text = forms.CharField(
@@ -52,23 +70,16 @@ class ProductAdminForm(forms.ModelForm):
         required=False
     )
     
-    image_uploads = CloudinaryFileField(
-        options={
-            'folder': 'products/',
-            'allowed_formats': ['jpg', 'png'],
-            'crop': 'limit',
-            'width': 1000,
-            'height': 1000,
-        },
+    # ✅ FIXED: Use custom MultipleFileField
+    additional_images = MultipleFileField(
         required=False,
         label="Additional Images",
-        help_text="Upload additional product images"
+        help_text="Select multiple images to upload. Hold Ctrl/Cmd to select multiple files."
     )
 
     class Meta:
         model = Product
-        # ✅ EXCLUDE the images field completely from the form
-        exclude = ['images']
+        exclude = ['images']  # Keep excluding the JSON field from form
         widgets = {
             'description': forms.Textarea(attrs={'rows': 4}),
         }
@@ -79,6 +90,10 @@ class ProductAdminForm(forms.ModelForm):
         # Hide the original JSON field for product_details
         if 'product_details' in self.fields:
             self.fields['product_details'].widget = forms.HiddenInput()
+        
+        # Hide the single image_uploads field since we're using multiple upload
+        if 'image_uploads' in self.fields:
+            self.fields['image_uploads'].widget = forms.HiddenInput()
         
         # If we're editing an existing product, populate the text field
         if self.instance.pk and hasattr(self.instance, 'product_details') and self.instance.product_details:
@@ -95,22 +110,22 @@ class ProductAdminForm(forms.ModelForm):
         else:
             cleaned_data['product_details'] = []
         
-        # ✅ REMOVED: All image_uploads handling for JSON field
-        # No longer adding uploaded images to the images JSON field
-        
         return cleaned_data
 
-from django.forms.widgets import ClearableFileInput
+
 class ProductVariationForm(forms.ModelForm):
-    
+
     class Meta:
         model = ProductVariation
-        fields = ['variation_type', 'variation', 'price_adjustment', 
-                 'stock_quantity', 'sku', 'is_default', 
+
+
+        fields = ['variation_type', 'variation', 'price_adjustment',
+                 'stock_quantity', 'sku', 'is_default',
                  # Old single fields (for backward compatibility)
                  'size', 'color',
                  # New many-to-many fields
                  'sizes', 'colors']
+
 # Filters
 class StockFilter(SimpleListFilter):
     title = 'stock status'
@@ -145,10 +160,10 @@ class ProductVariationInline(admin.StackedInline):
         ('sizes', 'colors'),
         ('price_adjustment', 'stock_quantity'),
         ('sku', 'is_default'),
-        
+
     )
 
-    
+
 
 class ProductSizeInline(admin.TabularInline):
     model = ProductSize
@@ -162,7 +177,8 @@ class ProductColorInline(admin.TabularInline):
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
     form = ProductAdminForm
-    inlines = [ProductVariationInline, ProductColorInline, ProductVariationInline]
+
+    inlines = [ProductVariationInline, ProductColorInline, ProductSizeInline]
     
     def image_preview(self, obj):
         if obj.main_image:
@@ -170,13 +186,19 @@ class ProductAdmin(admin.ModelAdmin):
         return "No main image"
     image_preview.short_description = 'Main Image'
     
-    def additional_image_preview(self, obj):
-        if obj.image_uploads:
-            return format_html('<img src="{}" width="50" height="50" style="margin-right: 5px;" />', obj.image_uploads.url)
-        return "No additional image"
-    additional_image_preview.short_description = 'Additional Image'
-    
-    # ✅ REMOVED: display_additional_images method since we're not using JSON field
+    def additional_images_preview(self, obj):
+        if obj.images and len(obj.images) > 0:
+            html = []
+            # Show first 3 additional images
+            for img_url in obj.images[:3]:
+                html.append(f'<img src="{img_url}" width="50" height="50" style="margin-right: 5px;" />')
+            
+            if len(obj.images) > 3:
+                html.append(f'<span>+{len(obj.images) - 3} more</span>')
+            
+            return format_html(''.join(html))
+        return "No additional images"
+    additional_images_preview.short_description = 'Additional Images'
     
     def product_category(self, obj):
         return obj.category.name if obj.category else '-'
@@ -184,7 +206,7 @@ class ProductAdmin(admin.ModelAdmin):
     
     list_display = (
         'image_preview',
-        'additional_image_preview',  # ✅ Show the file upload image instead
+        'additional_images_preview',
         'name',
         'sku',
         'price',
@@ -214,10 +236,9 @@ class ProductAdmin(admin.ModelAdmin):
         ('Images', {
             'fields': (
                 'main_image',
-                'image_uploads',
-                # ✅ COMPLETELY REMOVED: 'images' field
+                'additional_images',  # ✅ NEW: Multiple file upload
             ),
-            'description': 'Upload product images using the file upload fields above.'
+            'description': 'Upload main image and additional images. You can select multiple files for additional images.'
         }),
         ('Pricing & Inventory', {
             'fields': (
@@ -240,18 +261,61 @@ class ProductAdmin(admin.ModelAdmin):
     save_on_top = True
     
     def save_model(self, request, obj, form, change):
-        # Explicitly set product_details from the form's cleaned data
+        # Handle product details
         if 'product_details' in form.cleaned_data:
             obj.product_details = form.cleaned_data['product_details']
-            
         
-        admin.ModelAdmin.save_model(self, request, obj, form, change)
+        # ✅ Handle multiple additional images
+        additional_images = request.FILES.getlist('additional_images')
+        if additional_images:
+            uploaded_urls = []
+            
+            # Keep existing images if editing (so you don't lose old images)
+            if change and obj.images:
+                uploaded_urls.extend(obj.images)
+            
+            # Upload new images to Cloudinary
+            for image_file in additional_images:
+                try:
+                    result = upload(
+                        image_file,
+                        folder='products/',
+                        allowed_formats=['jpg', 'png', 'jpeg'],
+                        crop='limit',
+                        width=1000,
+                        height=1000
+                    )
+                    uploaded_urls.append(result['secure_url'])
+                    messages.success(request, f"Successfully uploaded {image_file.name}")
+                except Exception as e:
+                    messages.error(request, f"Failed to upload {image_file.name}: {str(e)}")
+            
+            # Update the images JSON field
+            obj.images = uploaded_urls
+        
+        super().save_model(request, obj, form, change)
+
+    def get_readonly_fields(self, request, obj=None):
+
+        return []
+
+
+    def clear_additional_images(self, request, queryset):
+        for product in queryset:
+            product.images = []
+            product.save()
+        self.message_user(request, f"Cleared additional images for {queryset.count()} products.")
+    clear_additional_images.short_description = "Clear additional images"
+    
+    actions = ['clear_additional_images']
+    
     def save_formset(self, request, form, formset, change):
         instances = formset.save(commit=False)
         
         for instance in instances:
             instance.save()
-            
+
+
 # Other Admin Registrations
 class CustomUserAdmin(UserAdmin):
     list_display = ('email', 'location', 'is_active', 'date_joined', 'is_staff')
@@ -318,7 +382,8 @@ class CarouselItemAdmin(admin.ModelAdmin):
             'fields': ('order', 'active', 'created_at', 'updated_at')
         }),
     )
-    
+
+
 @admin.register(ProductVariation)
 class ProductVariationAdmin(admin.ModelAdmin):
     form = ProductVariationForm
@@ -327,41 +392,43 @@ class ProductVariationAdmin(admin.ModelAdmin):
     search_fields = ('product__name', 'sku')
     
     def save_model(self, request, obj, form, change):
-        """Override save_model to sync sizes and colors when a variation is saved"""
+
         super().save_model(request, obj, form, change)
-        # Sync available sizes and colors for the product
+
         self.sync_product_variations(obj.product)
-        
+
+    
     def save_formset(self, request, form, formset, change):
-        """Override save_formset to sync sizes and colors after formset is saved"""
+
         instances = formset.save()
         
-        # If this is a ProductVariation formset, sync the product variations
+
         if formset.model == ProductVariation and instances:
             for instance in instances:
                 self.sync_product_variations(instance.product)
-                
+
+    
     def sync_product_variations(self, product):
-        """Sync sizes and colors for a product based on its variations"""
+
         self.sync_available_sizes(product)
         self.sync_available_colors(product)
-        messages.success(request, f"Product '{product.name}' variants synchronized successfully")
+
     
     def sync_available_sizes(self, product):
-        """Synchronize available sizes for the product based on its variations"""
-        # Get all sizes from variations
+
+
         variation_sizes = set()
         for variation in product.variations.all():
-            # Add sizes from ManyToMany relationship
+
             variation_sizes.update(size.id for size in variation.sizes.all())
-            # Add size from ForeignKey relationship if exists
+
             if variation.size:
                 variation_sizes.add(variation.size.id)
         
-        # Clear existing product sizes
+
         ProductSize.objects.filter(product=product).delete()
         
-        # Create new product sizes
+
         for size_id in variation_sizes:
             try:
                 size = Size.objects.get(id=size_id)
@@ -369,26 +436,26 @@ class ProductVariationAdmin(admin.ModelAdmin):
             except Size.DoesNotExist:
                 pass
         
-        # Update available_sizes field if you're using it (seems to be a JSONField)
+
         product.available_sizes = list(variation_sizes)
-        # Use update to avoid triggering other save signals
+
         Product.objects.filter(id=product.id).update(available_sizes=list(variation_sizes))
     
     def sync_available_colors(self, product):
-        """Synchronize available colors for the product based on its variations"""
-        # Get all colors from variations
+
+
         variation_colors = set()
         for variation in product.variations.all():
-            # Add colors from ManyToMany relationship
+
             variation_colors.update(color.id for color in variation.colors.all())
-            # Add color from ForeignKey relationship if exists
+
             if variation.color:
                 variation_colors.add(variation.color.id)
         
-        # Clear existing product colors
+
         ProductColor.objects.filter(product=product).delete()
         
-        # Create new product colors
+
         for color_id in variation_colors:
             try:
                 color = Color.objects.get(id=color_id)
@@ -396,10 +463,9 @@ class ProductVariationAdmin(admin.ModelAdmin):
             except Color.DoesNotExist:
                 pass
         
-        # Update available_colors field if you're using it (seems to be a JSONField)
+
         product.available_colors = list(variation_colors)
-        # Use update to avoid triggering other save signals
-        Product.objects.filter(id=product.id).update(available_colors=list(variation_colors))    
+        Product.objects.filter(id=product.id).update(available_colors=list(variation_colors))
 
 @admin.register(Size)
 class SizeAdmin(admin.ModelAdmin):
