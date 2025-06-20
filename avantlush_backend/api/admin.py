@@ -130,14 +130,6 @@ class ProductVariationForm(forms.ModelForm):
             'colors'
         ]
 
-
-
-
-
-
-
-
-
 # Filters
 class StockFilter(SimpleListFilter):
     title = 'stock status'
@@ -253,6 +245,8 @@ class ProductAdmin(admin.ModelAdmin):
         ('Pricing & Inventory', {
             'fields': (
                 'price',
+                'discount_type',
+                'discount_value',
                 'stock_quantity',
                 'status',
                 'is_featured'
