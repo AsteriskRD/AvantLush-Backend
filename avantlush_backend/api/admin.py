@@ -117,14 +117,26 @@ class ProductVariationForm(forms.ModelForm):
 
     class Meta:
         model = ProductVariation
+        fields = [
+            'price_adjustment',
+            'stock_quantity', 
+            'sku', 
+            'is_default',
+            # Old single fields (for backward compatibility)
+            'size', 
+            'color',
+            # New many-to-many fields
+            'sizes', 
+            'colors'
+        ]
 
 
-        fields = ['variation_type', 'variation', 'price_adjustment',
-                 'stock_quantity', 'sku', 'is_default',
-                 # Old single fields (for backward compatibility)
-                 'size', 'color',
-                 # New many-to-many fields
-                 'sizes', 'colors']
+
+
+
+
+
+
 
 # Filters
 class StockFilter(SimpleListFilter):
@@ -153,14 +165,12 @@ class ProductVariationInline(admin.StackedInline):
     form = ProductVariationForm
     extra = 1
     fields = (
-        ('variation_type', 'variation'),
-        # Old single fields (for backward compatibility)
+        # Start from sizes as requested
         ('size', 'color'),
         # New many-to-many fields
         ('sizes', 'colors'),
         ('price_adjustment', 'stock_quantity'),
         ('sku', 'is_default'),
-
     )
 
 

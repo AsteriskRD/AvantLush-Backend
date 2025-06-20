@@ -1392,11 +1392,12 @@ class ProductManagementSerializer(serializers.ModelSerializer):
         choices=['percentage', 'fixed'], 
         required=False
     )
-    discount_percentage = serializers.DecimalField(
+    discount_value = serializers.DecimalField(
         max_digits=5, 
         decimal_places=2, 
         required=False
     )
+
     vat_amount = serializers.DecimalField(
         max_digits=5, 
         decimal_places=2, 
@@ -1423,7 +1424,7 @@ class ProductManagementSerializer(serializers.ModelSerializer):
             'image_files', 'is_featured', 'is_liked', 'available_sizes', 'available_colors',
             'variations',
             # Pricing
-            'base_price', 'discount_type', 'discount_percentage', 
+            'base_price', 'discount_type', 'discount_value', 
             'vat_amount',
             # Inventory
             'sku', 'barcode', 'stock_quantity', 'variations',

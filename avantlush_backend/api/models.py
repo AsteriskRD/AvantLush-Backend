@@ -147,7 +147,8 @@ class Product(models.Model):
         ('percentage', 'Percentage'),
         ('fixed', 'Fixed Amount')
     ], null=True, blank=True)
-    discount_percentage = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    discount_value = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, 
+                                   help_text="Enter discount amount (percentage or fixed value based on discount type)")
     vat_amount = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     
     # Inventory fields
