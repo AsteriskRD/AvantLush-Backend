@@ -610,7 +610,8 @@ class Payment(models.Model):
         ('PENDING', 'Pending'),
         ('COMPLETED', 'Completed'),
         ('FAILED', 'Failed'),
-        ('REFUNDED', 'Refunded')
+        ('REFUNDED', 'Refunded'),
+        ('CANCELLED', 'Cancelled')
     ]
 
     PAYMENT_METHOD_CHOICES = [
@@ -618,7 +619,9 @@ class Payment(models.Model):
         ('MASTERCARD', 'Mastercard'),
         ('PAYPAL', 'PayPal'),
         ('GOOGLE_PAY', 'Google Pay'),
-        ('STRIPE', 'Stripe')
+        ('STRIPE', 'Stripe'),
+        ('CLOVER', 'Clover'),
+        ('CLOVER_HOSTED', 'Clover Hosted Checkout')
     ]
 
     card_last_four = models.CharField(max_length=4, null=True, blank=True)
@@ -640,6 +643,17 @@ class Payment(models.Model):
     def __str__(self):
         return f"Payment {self.transaction_id} for Order {self.order.id}"
     
+    clover_checkout_session_id = models.CharField(max_length=255, null=True, blank=True, help_text="Clover hosted checkout session ID")
+    clover_checkout_url = models.URLField(null=True, blank=True, help_text="Clover hosted checkout URL")
+    clover_payment_id = models.CharField(max_length=255, null=True, blank=True, help_text="Clover payment ID after completion")
+
+    def __str__(self):
+        return f"Payment {self.transaction_id} for Order {self.order.id}"
+    
+    class Meta:
+        ordering = ['-created_at']
+
+
 class SavedPaymentMethod(models.Model):
     PAYMENT_TYPES = (
         ('STRIPE', 'Stripe'),

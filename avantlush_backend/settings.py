@@ -199,6 +199,8 @@ ACCOUNT_AUTHENTICATION_METHOD = 'email'
 ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_UNIQUE_EMAIL = True
 
+
+
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
@@ -221,6 +223,22 @@ BACKEND_URL = os.getenv('BACKEND_URL', 'http://localhost:8000')
 # For Render deployment
 if 'RENDER' in os.environ:
     BACKEND_URL = 'https://avantlush-backend-2s6k.onrender.com'
+
+# Production Clover Configuration
+CLOVER_ENVIRONMENT = os.getenv('CLOVER_ENVIRONMENT', 'SANDBOX')
+CLOVER_MERCHANT_ID = os.getenv('CLOVER_MERCHANT_ID', 'X4SS3ZCHCN4S1')
+CLOVER_PRIVATE_TOKEN = os.getenv('CLOVER_PRIVATE_TOKEN', 'ae91c2e6-e81e-c28d-ec2a-c1afb6bd2858')
+CLOVER_WEBHOOK_SECRET = os.getenv('CLOVER_WEBHOOK_SECRET', 'your_secure_webhook_secret_here')
+
+# Production redirect URLs
+CLOVER_REDIRECT_URLS = {
+    'SUCCESS': f"{FRONTEND_URL}/checkout/success",
+    'FAILURE': f"{FRONTEND_URL}/checkout/failure", 
+    'CANCEL': f"{FRONTEND_URL}/checkout/cancel",
+}
+
+CLOVER_WEBHOOK_URL = f"{BACKEND_URL}/api/webhooks/clover-hosted/"
+
 
 # Google OAuth2 settings
 # Instead of hardcoding the callback URL, I'm using an environment variable

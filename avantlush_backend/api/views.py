@@ -1,4 +1,19 @@
 # Django imports
+import json
+import logging
+from django.views.decorators.csrf import csrf_exempt
+from django.http import HttpResponse
+from django.utils.decorators import method_decorator
+from django.views.decorators.http import require_http_methods
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework import status
+from .services import CloverPaymentService
+from .serializers import CloverWebhookSerializer, CloverPaymentStatusSerializer
+from .models import Payment, Order
+
+logger = logging.getLogger(__name__)
 import requests
 from django.conf import settings
 from django.contrib.auth import authenticate
@@ -717,6 +732,197 @@ def check_admin_access(request):
         'has_admin_access': has_access
     })
 
+@csrf_exempt
+@api_view(['POST'])
+@require_http_methods(["POST"])
+def clover_hosted_webhook(request):
+    """
+    Handle Clover Hosted Checkout webhooks
+    This endpoint receives notifications when payments are completed, failed, or cancelled
+    """
+    try:
+        # Get raw payload and signature
+        payload = request.body.decode('utf-8')
+        signature = request.META.get('HTTP_CLOVER_SIGNATURE', '')
+        
+        logger.info(f"Received Clover webhook - Payload length: {len(payload)}")
+        logger.debug(f"Webhook payload: {payload[:500]}...")  # Log first 500 chars for debugging
+        
+        # Verify webhook signature for security
+        clover_service = CloverPaymentService()
+        if not clover_service.verify_webhook_signature(payload, signature):
+            logger.warning("Invalid Clover webhook signature")
+            return HttpResponse('Invalid signature', status=400)
+        
+        # Parse webhook data
+        try:
+            webhook_data = json.loads(payload)
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON in webhook payload: {str(e)}")
+            return HttpResponse('Invalid JSON', status=400)
+        
+        # Validate webhook data structure
+        webhook_serializer = CloverWebhookSerializer(data=webhook_data)
+        if not webhook_serializer.is_valid():
+            logger.error(f"Invalid webhook data structure: {webhook_serializer.errors}")
+            return HttpResponse('Invalid webhook data', status=400)
+        
+        # Extract webhook information
+        webhook_type = webhook_data.get('type', '')
+        webhook_status = webhook_data.get('status', '')
+        checkout_session_id = webhook_data.get('data', '')  # This contains the checkout session UUID
+        payment_id = webhook_data.get('id', '')
+        
+        logger.info(f"Processing webhook - Type: {webhook_type}, Status: {webhook_status}, Session: {checkout_session_id}")
+        
+        # Find the payment record by checkout session ID
+        try:
+            payment = Payment.objects.get(clover_checkout_session_id=checkout_session_id)
+            order = payment.order
+            
+            logger.info(f"Found payment record for order {order.order_number}")
+            
+            # Update payment and order status based on webhook status
+            if webhook_status == 'APPROVED':
+                payment.status = 'COMPLETED'
+                payment.clover_payment_id = payment_id
+                payment.transaction_id = payment_id or payment.transaction_id
+                
+                # Update order status
+                order.status = 'PROCESSING'
+                order.payment_status = 'PAID'
+                order.save()
+                
+                logger.info(f"Payment approved for order {order.order_number}")
+                
+            elif webhook_status == 'DECLINED':
+                payment.status = 'FAILED'
+                order.status = 'CANCELLED'
+                order.payment_status = 'FAILED'
+                order.save()
+                
+                logger.info(f"Payment declined for order {order.order_number}")
+                
+            elif webhook_status == 'CANCELLED':
+                payment.status = 'CANCELLED'
+                # Don't change order status - user might try again with different payment method
+                
+                logger.info(f"Payment cancelled for order {order.order_number}")
+            
+            else:
+                logger.warning(f"Unknown webhook status: {webhook_status}")
+            
+            # Store complete webhook response for debugging and audit trail
+            payment.gateway_response = webhook_data
+            payment.save()
+            
+            logger.info(f"Payment record updated successfully for session {checkout_session_id}")
+            
+        except Payment.DoesNotExist:
+            logger.warning(f"Payment not found for checkout session: {checkout_session_id}")
+            # This might be a webhook for a session we don't know about
+            # Return 200 to prevent Clover from retrying
+            return HttpResponse('Payment not found', status=200)
+        
+        except Exception as e:
+            logger.error(f"Error processing payment update: {str(e)}")
+            return HttpResponse(f'Payment processing error: {str(e)}', status=500)
+        
+        return HttpResponse('OK', status=200)
+        
+    except Exception as e:
+        logger.error(f"Webhook processing error: {str(e)}")
+        return HttpResponse(f'Webhook error: {str(e)}', status=500)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def clover_hosted_payment_status(request, order_id):
+    """
+    Check Clover hosted payment status for a specific order
+    Used by frontend to check payment status after redirect from Clover
+    """
+    try:
+        # Get order and verify ownership
+        order = Order.objects.get(id=order_id, user=request.user)
+        
+        # Find Clover hosted payment for this order
+        payment = Payment.objects.filter(
+            order=order, 
+            payment_method='CLOVER_HOSTED'
+        ).order_by('-created_at').first()  # Get most recent payment attempt
+        
+        if not payment:
+            return Response(
+                {'error': 'No Clover hosted payment found for this order'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Prepare response data
+        response_data = {
+            'order_id': order.id,
+            'order_number': order.order_number,
+            'payment_status': payment.status,
+            'order_status': order.status,
+            'session_id': payment.clover_checkout_session_id,
+            'payment_id': payment.clover_payment_id,
+            'amount': payment.amount,
+            'created_at': payment.created_at,
+            'updated_at': payment.updated_at
+        }
+        
+        # Serialize and return response
+        serializer = CloverPaymentStatusSerializer(data=response_data)
+        if serializer.is_valid():
+            return Response(serializer.validated_data)
+        else:
+            logger.error(f"Serialization error: {serializer.errors}")
+            return Response(response_data)  # Return raw data if serialization fails
+        
+    except Order.DoesNotExist:
+        return Response(
+            {'error': 'Order not found or access denied'}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        logger.error(f"Error checking payment status: {str(e)}")
+        return Response(
+            {'error': f'Failed to check payment status: {str(e)}'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+# Add this helper view to get all payments for an order (useful for debugging)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def order_payments_list(request, order_id):
+    """
+    Get all payment attempts for an order
+    Useful for debugging and customer service
+    """
+    try:
+        order = Order.objects.get(id=order_id, user=request.user)
+        payments = Payment.objects.filter(order=order).order_by('-created_at')
+        
+        payments_data = []
+        for payment in payments:
+            payments_data.append({
+                'id': payment.id,
+                'payment_method': payment.payment_method,
+                'status': payment.status,
+                'amount': payment.amount,
+                'transaction_id': payment.transaction_id,
+                'created_at': payment.created_at,
+                'clover_session_id': payment.clover_checkout_session_id,
+                'clover_payment_id': payment.clover_payment_id
+            })
+        
+        return Response({
+            'order_id': order.id,
+            'order_number': order.order_number,
+            'payments': payments_data
+        })
+        
+    except Order.DoesNotExist:
+        return Response({'error': 'Order not found'}, status=404)
 
 @action(detail=False, methods=['get'])
 def featured(self, request):
@@ -1421,6 +1627,139 @@ class CartViewSet(viewsets.ModelViewSet):
         CartItem.objects.filter(cart=cart).delete()
         return Response({'status': 'success'})
     
+    @action(detail=False, methods=['POST'])
+    def create_clover_hosted_checkout(self, request):
+        """
+        Create Clover Hosted Checkout session
+        POST /api/checkout/clover-hosted/create/
+        """
+        try:
+            # Validate request data
+            from .serializers import CloverHostedCheckoutRequestSerializer
+            serializer = CloverHostedCheckoutRequestSerializer(
+                data=request.data, 
+                context={'request': request}
+            )
+            
+            if not serializer.is_valid():
+                return Response({
+                    'success': False,
+                    'error': 'Invalid request data',
+                    'details': serializer.errors
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            order_id = serializer.validated_data['order_id']
+            order = Order.objects.get(id=order_id, user=request.user)
+            
+            # Check if order already has a pending payment
+            existing_payment = Payment.objects.filter(
+                order=order,
+                payment_method='CLOVER_HOSTED',
+                status='PENDING'
+            ).first()
+            
+            if existing_payment and existing_payment.clover_checkout_url:
+                # Return existing checkout URL if still valid
+                return Response({
+                    'success': True,
+                    'checkout_url': existing_payment.clover_checkout_url,
+                    'session_id': existing_payment.clover_checkout_session_id,
+                    'message': 'Using existing checkout session'
+                })
+            
+            # Prepare customer data
+            customer_data = {'email': request.user.email}
+            
+            # Get customer info from profile if available
+            if hasattr(request.user, 'profile') and request.user.profile:
+                profile = request.user.profile
+                if profile.full_name:
+                    name_parts = profile.full_name.split(' ', 1)
+                    customer_data['first_name'] = name_parts[0]
+                    if len(name_parts) > 1:
+                        customer_data['last_name'] = name_parts[1]
+                if profile.phone_number:
+                    customer_data['phone'] = profile.phone_number
+            
+            # Prepare order items
+            items_data = []
+            for item in order.items.all():
+                items_data.append({
+                    'name': item.product.name,
+                    'price': str(item.price),
+                    'quantity': item.quantity,
+                    'description': item.product.description[:100] if item.product.description else ''
+                })
+            
+            # Prepare redirect URLs
+            success_url = serializer.validated_data.get('success_url')
+            failure_url = serializer.validated_data.get('failure_url')
+            
+            redirect_urls = {
+                'success': success_url or f"{settings.FRONTEND_URL}/checkout/success?order_id={order.id}",
+                'failure': failure_url or f"{settings.FRONTEND_URL}/checkout/failure?order_id={order.id}"
+            }
+            
+            # Prepare order data for Clover
+            order_data = {
+                'customer': customer_data,
+                'items': items_data,
+                'redirect_urls': redirect_urls,
+                'order_id': order.id,
+                'order_number': order.order_number,
+                'total_amount': float(order.total)
+            }
+            
+            # Create Clover hosted checkout session
+            clover_service = CloverPaymentService()
+            result = clover_service.create_hosted_checkout_session(order_data)
+            
+            if result['success']:
+                # Create or update payment record
+                payment, created = Payment.objects.get_or_create(
+                    order=order,
+                    payment_method='CLOVER_HOSTED',
+                    defaults={
+                        'amount': order.total,
+                        'status': 'PENDING',
+                        'transaction_id': f"clover_hosted_{order.id}_{timezone.now().timestamp()}"
+                    }
+                )
+                
+                # Store Clover session details
+                payment.clover_checkout_session_id = result['session_id']
+                payment.clover_checkout_url = result['checkout_url']
+                payment.save()
+                
+                logger.info(f"Clover hosted checkout created for order {order.order_number}")
+                
+                return Response({
+                    'success': True,
+                    'checkout_url': result['checkout_url'],
+                    'session_id': result['session_id'],
+                    'expires_at': result.get('expires_at'),
+                    'message': 'Clover checkout session created successfully'
+                })
+            else:
+                logger.error(f"Failed to create Clover checkout: {result.get('error')}")
+                return Response({
+                    'success': False,
+                    'error': result.get('error', 'Failed to create checkout session')
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                
+        except Order.DoesNotExist:
+            return Response({
+                'success': False,
+                'error': 'Order not found or access denied'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Clover checkout creation failed: {str(e)}")
+            return Response({
+                'success': False,
+                'error': f'Failed to create checkout session: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    
 class CartItemViewSet(viewsets.ModelViewSet):
     serializer_class = CartItemSerializer
     permission_classes = [IsAuthenticated]  #Changed from AllowAny to IsAuthenticated
@@ -1519,6 +1858,7 @@ class CartItemViewSet(viewsets.ModelViewSet):
         
         return Response(debug_data)
     
+
 class OrderViewSet(viewsets.ModelViewSet):
     queryset = Order.objects.all().select_related('user', 'customer').prefetch_related('items__product', 'payments')
     filterset_class = OrderFilter
@@ -2384,8 +2724,15 @@ class CheckoutViewSet(viewsets.ViewSet):
                 },
                 {
                     'id': 'clover',
-                    'name': 'Clover',
-                    'enabled': True
+                    'name': 'Clover Direct',
+                    'enabled': True,
+                    'type': 'card'
+                },
+                {
+                    'id': 'clover_hosted', 
+                    'name': 'Clover Secure Checkout', 
+                    'enabled': True, 
+                    'type': 'redirect'
                 }
             ]
         })
@@ -2701,7 +3048,88 @@ class CheckoutViewSet(viewsets.ViewSet):
             return Response({
                 'error': 'Invalid shipping method or address'
             }, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['GET'])
+def payment_methods(request):
+    """Get available payment methods - Simple endpoint"""
+    return Response({
+        "success": True,
+        "payment_methods": [
+            {
+                "id": "clover_hosted",
+                "name": "Clover Hosted Checkout",
+                "description": "Secure payment processing with Clover",
+                "type": "redirect",
+                "enabled": True
+            },
+            {
+                "id": "stripe",
+                "name": "Credit/Debit Card",
+                "description": "Pay with Visa, Mastercard, etc.",
+                "type": "card",
+                "enabled": True
+            }
+        ]
+    })
+
+@api_view(['POST'])
+def create_checkout_session(request):
+    """Create checkout session - Simple endpoint"""
+    try:
+        data = request.data
+        payment_method = data.get('payment_method')
+        order_data = data.get('order_data', {})
         
+        if payment_method != 'clover_hosted':
+            return Response({
+                "success": False,
+                "error": "Only Clover Hosted checkout is currently supported"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Validate required fields
+        required_fields = ['total_amount', 'order_number']
+        for field in required_fields:
+            if field not in order_data:
+                return Response({
+                    "success": False,
+                    "error": f"Missing required field: {field}"
+                }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Prepare order data for Clover
+        clover_order_data = {
+            'total_amount': float(order_data['total_amount']),
+            'order_number': order_data['order_number'],
+            'order_id': order_data.get('order_id', order_data['order_number']),
+            'currency': order_data.get('currency', 'USD'),
+            'customer': order_data.get('customer', {}),
+            'items': order_data.get('items', []),
+            'redirect_urls': {
+                'success': f"{settings.FRONTEND_URL}/checkout/success",
+                'failure': f"{settings.FRONTEND_URL}/checkout/failure",
+                'cancel': f"{settings.FRONTEND_URL}/checkout/cancel"
+            }
+        }
+        
+        # Create Clover checkout session
+        clover_service = CloverPaymentService()
+        result = clover_service.create_hosted_checkout_session(clover_order_data)
+        
+        if result['success']:
+            return Response(result)  # <-- Return the COMPLETE result
+        else:
+            logger.error(f"Clover checkout session creation failed: {result['error']}")
+            return Response({
+                "success": False,
+                "error": result['error']
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+    except Exception as e:
+        logger.error(f"Error creating checkout session: {str(e)}")
+        return Response({
+            "success": False,
+            "error": "Internal server error"
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
 class ShippingMethodViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = ShippingMethod.objects.filter(is_active=True)
     serializer_class = ShippingMethodSerializer

@@ -1614,6 +1614,61 @@ class ProductManagementSerializer(serializers.ModelSerializer):
         return instance
     
 
+class CloverWebhookSerializer(serializers.Serializer):
+    """Serializer for validating Clover webhook data"""
+    type = serializers.CharField(help_text="Webhook event type")
+    status = serializers.CharField(help_text="Payment status (APPROVED, DECLINED, CANCELLED)")
+    data = serializers.CharField(help_text="Checkout session ID")
+    id = serializers.CharField(required=False, help_text="Payment ID")
+    timestamp = serializers.IntegerField(required=False, help_text="Event timestamp")
+    amount = serializers.IntegerField(required=False, help_text="Payment amount in cents")
+    currency = serializers.CharField(required=False, default="USD", help_text="Payment currency")
+    
+    def validate_status(self, value):
+        """Validate webhook status"""
+        valid_statuses = ['APPROVED', 'DECLINED', 'CANCELLED', 'PENDING']
+        if value not in valid_statuses:
+            raise serializers.ValidationError(f"Invalid status. Must be one of: {valid_statuses}")
+        return value
+
+class CloverHostedCheckoutRequestSerializer(serializers.Serializer):
+    """Serializer for Clover hosted checkout creation request"""
+    order_id = serializers.IntegerField(help_text="Order ID to create checkout for")
+    success_url = serializers.URLField(required=False, help_text="Success redirect URL")
+    failure_url = serializers.URLField(required=False, help_text="Failure redirect URL")
+    
+    def validate_order_id(self, value):
+        """Validate that order exists and belongs to user"""
+        request = self.context.get('request')
+        if not request or not request.user:
+            raise serializers.ValidationError("Authentication required")
+        
+        try:
+            order = Order.objects.get(id=value, user=request.user)
+            return value
+        except Order.DoesNotExist:
+            raise serializers.ValidationError("Order not found or access denied")
+
+class CloverHostedCheckoutResponseSerializer(serializers.Serializer):
+    """Serializer for Clover hosted checkout creation response"""
+    success = serializers.BooleanField()
+    checkout_url = serializers.URLField(required=False)
+    session_id = serializers.CharField(required=False)
+    expires_at = serializers.DateTimeField(required=False)
+    message = serializers.CharField(required=False)
+    error = serializers.CharField(required=False)
+
+class CloverPaymentStatusSerializer(serializers.Serializer):
+    """Serializer for Clover payment status response"""
+    order_id = serializers.IntegerField()
+    payment_status = serializers.CharField()
+    order_status = serializers.CharField()
+    session_id = serializers.CharField(required=False)
+    payment_id = serializers.CharField(required=False)
+    amount = serializers.DecimalField(max_digits=10, decimal_places=2)
+    created_at = serializers.DateTimeField(required=False)
+    updated_at = serializers.DateTimeField(required=False)
+
 class CustomerSimpleSerializer(serializers.ModelSerializer):
     """Simple customer serializer for dropdowns"""
     display_name = serializers.SerializerMethodField()

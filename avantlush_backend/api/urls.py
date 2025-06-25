@@ -40,6 +40,14 @@ from .views import (
     order_choices,
     ProductDetailForOrderView,
     CustomerListView,
+    ColorViewSet,
+    SizeViewSet,
+    clover_hosted_webhook,
+    clover_hosted_payment_status,
+    order_payments_list,
+    payment_methods,
+    create_checkout_session,
+    
 )
 
 # Router setup
@@ -62,7 +70,8 @@ router.register(r'product-management', ProductViewSet, basename='product-managem
 router.register(r'customers', CustomerViewSet, basename='customer')
 router.register(r'products/(?P<product_id>\d+)/reviews', ProductReviewViewSet, basename='product-reviews')
 router.register(r'carousel', CarouselViewSet, basename='carousel')
-
+router.register(r'colors', ColorViewSet, basename='color')
+router.register(r'sizes', SizeViewSet, basename='size')
 # URL patterns
 urlpatterns = [
     # Authentication & User Management
@@ -145,8 +154,35 @@ urlpatterns = [
     path('orders/flat/', OrderViewSet.as_view({'get': 'flat_orders'}), name='flat-orders'),
     path('orders/bulk-action/', OrderViewSet.as_view({'post': 'bulk_action'}), name='bulk-action'),
 
+    #Clover url configuration
+    path('checkout/clover-hosted/create/', 
+         CheckoutViewSet.as_view({'post': 'create_clover_hosted_checkout'}), 
+         name='clover-hosted-checkout-create'),
+
+    
+    path('checkout/clover-hosted/status/<int:order_id>/', 
+         clover_hosted_payment_status, 
+         name='clover-hosted-payment-status'),
+
+    path('checkout/clover-hosted/status/<int:order_id>/', 
+         clover_hosted_payment_status, 
+         name='clover-hosted-payment-status'),
+    
+    path('webhooks/clover-hosted/', 
+         clover_hosted_webhook, 
+         name='clover-hosted-webhook'),
+    
+    path('orders/<int:order_id>/payments/', 
+         order_payments_list, 
+         name='order-payments-list'),
+
+    
     # Support & Checkout
     path('support/submit/', SupportTicketViewSet.as_view({'post': 'submit'})),
+    path('checkout/payment_methods/', payment_methods, name='checkout-payment-methods'),
+    path('checkout/payment-methods/', payment_methods, name='checkout-payment-methods-alt'),
+    path('checkout/create-session/', create_checkout_session, name='checkout-create-session'),
+
 
     # External App URLs
     path('api/', include('checkout.urls')),
