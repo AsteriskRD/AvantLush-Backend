@@ -47,6 +47,7 @@ from .views import (
     order_payments_list,
     payment_methods,
     create_checkout_session,
+    test_complete_checkout,
     
 )
 
@@ -87,7 +88,9 @@ urlpatterns = [
     path('forgot-password/', forgot_password, name='forgot_password'),
     path('reset-password/<str:uidb64>/<str:token>/', reset_password, name='reset_password'),
     path('auth/validate-token/', TokenValidationView.as_view(), name='validate-token'),
-    
+   
+     path('test-complete-checkout/', test_complete_checkout, name='test-complete-checkout'),
+
     # Product & Wishlist
     path('products/search/', ProductSearchView.as_view(), name='product-search'),
     path('wishlist-items/<int:product_id>/remove/', WishlistItemViewSet.as_view({'delete': 'remove_by_product_id'})),

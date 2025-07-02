@@ -196,6 +196,10 @@ from django_filters import FilterSet, NumberFilter
 from .models import Order, SavedPaymentMethod
 from .services import CloverPaymentService
 
+from django.db import transaction
+
+logger = logging.getLogger(__name__)
+
 class WaitlistRateThrottle(AnonRateThrottle):
     rate = '5/minute'  # Limit to 5 requests per minute per IP
 
@@ -923,6 +927,68 @@ def order_payments_list(request, order_id):
         
     except Order.DoesNotExist:
         return Response({'error': 'Order not found'}, status=404)
+
+@api_view(['POST'])
+def test_complete_checkout(request):
+    """Test complete checkout flow - no auth required"""
+    try:
+        from django.contrib.auth import get_user_model
+        
+        data = request.data
+        print(f"🔍 DEBUG: Received test checkout data: {data}")
+        
+        # Get or create a test user for the order
+        User = get_user_model()
+        test_user, created = User.objects.get_or_create(
+            email='test-checkout@example.com',
+            defaults={
+                'first_name': 'Test',
+                'last_name': 'Checkout',
+                'is_active': True
+            }
+        )
+        
+        if created:
+            test_user.set_password('testpass123')
+            test_user.save()
+            print(f"✅ Created test user: {test_user.email}")
+        else:
+            print(f"✅ Using existing test user: {test_user.email}")
+        
+        # Create test order WITH user
+        order = Order.objects.create(
+            user=test_user,  # ✅ Add the required user field
+            order_number=f"TEST-{timezone.now().strftime('%Y%m%d%H%M%S')}",
+            total=Decimal(str(data.get('total_amount', 75.00))),
+            subtotal=Decimal(str(data.get('total_amount', 75.00))) - Decimal('5.00'),
+            shipping_cost=Decimal('5.00'),
+            status='PENDING',
+            payment_status='PENDING',
+            shipping_address="123 Test St, Test City, CA 12345",
+            shipping_city="Test City",
+            shipping_state="CA",
+            shipping_country="US",
+            shipping_zip="12345"
+        )
+        
+        print(f"✅ Created test order: {order.order_number} for user: {test_user.email}")
+        
+        # Process payment using your method
+        payment_data = {'card_data': data.get('card_data', {})}
+        
+        # Create a mock CheckoutViewSet instance to use the method
+        checkout_view = CheckoutViewSet()
+        result = checkout_view._process_clover_direct_payment(order, payment_data, False)
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Test checkout error: {str(e)}")
+        return Response({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
 
 @action(detail=False, methods=['get'])
 def featured(self, request):
@@ -2849,10 +2915,15 @@ class CheckoutViewSet(viewsets.ViewSet):
         payment_data = request.data.get('payment_data')
         order_id = request.data.get('order_id')
         save_card = request.data.get('save_card', False)
-
+        
         try:
             order = Order.objects.get(id=order_id, user=request.user)
             
+            # Handle Clover Direct Payment
+            if payment_method.upper() == 'CLOVER' or payment_method == 'clover_direct':
+                return self._process_clover_direct_payment(order, payment_data, save_card)
+            
+            # Handle other payment methods
             payment_service = self._get_payment_service(payment_method)
             if not payment_service:
                 return Response({
@@ -2879,12 +2950,14 @@ class CheckoutViewSet(viewsets.ViewSet):
                     payment.card_expiry = payment_data['card_details'].get('exp_date')
                     payment.save()
                 
-                order.status = 'PAID'
+                order.status = 'PROCESSING'  # Changed from 'PAID' to 'PROCESSING'
+                order.payment_status = 'PAID'  # Add this line
                 order.save()
                 
                 return Response({
                     'status': 'success',
-                    'payment_id': payment.id
+                    'payment_id': payment.id,
+                    'transaction_id': result['transaction_id']
                 })
             
             return Response({
@@ -2896,7 +2969,7 @@ class CheckoutViewSet(viewsets.ViewSet):
             return Response({
                 'status': 'error',
                 'message': 'Order not found'
-            }, status=status.HTTP_404_NOT_FOUND)
+            }, status=status.HTTP_404_NOT_FOUND)    
     
     @action(detail=False, methods=['GET'])
     def saved_payment_methods(self, request):
@@ -2925,9 +2998,80 @@ class CheckoutViewSet(viewsets.ViewSet):
             'VISA': StripePaymentService(),
             'MASTERCARD': StripePaymentService(),
             'CLOVER': CloverPaymentService(),
+            'CLOVER_HOSTED': CloverPaymentService(),
         }
         return services.get(payment_method.upper())
 
+    def _process_clover_direct_payment(self, order, payment_data, save_card):
+        """Process Clover direct payment"""
+        try:
+            # Extract card data
+            card_data = payment_data.get('card_data', {})
+            if not card_data:
+                return Response({
+                    'status': 'error',
+                    'message': 'Card data is required for Clover direct payment'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Prepare order data for Clover
+            order_data = {
+                'total_amount': float(order.total),
+                'order_number': order.order_number,
+                'order_id': str(order.id),
+                'currency': 'USD'
+            }
+            
+            # Initialize Clover service and process payment
+            clover_service = CloverPaymentService()
+            result = clover_service.process_direct_payment(order_data, card_data)
+            
+            if result['success']:
+                # Create payment record
+                payment = Payment.objects.create(
+                    order=order,
+                    amount=order.total,
+                    payment_method='CLOVER',
+                    transaction_id=result['transaction_id'],
+                    status='COMPLETED',
+                    gateway_response=result.get('response', {}),
+                    card_last_four=result.get('card_last_four', ''),
+                    card_brand=result.get('card_brand', ''),
+                    save_card=save_card
+                )
+                
+                # Update order status
+                order.status = 'PROCESSING'
+                order.payment_status = 'PAID'
+                order.save()
+                
+                # Clear user's cart
+                try:
+                    cart = Cart.objects.get(user=order.user)
+                    cart.items.all().delete()
+                except Cart.DoesNotExist:
+                    pass
+                
+                return Response({
+                    'status': 'success',
+                    'message': 'Payment processed successfully',
+                    'payment_id': payment.id,
+                    'transaction_id': result['transaction_id'],
+                    'order_id': order.id,
+                    'order_number': order.order_number
+                })
+            else:
+                return Response({
+                    'status': 'error',
+                    'message': result.get('error', 'Payment failed'),
+                    'details': result.get('details', {})
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+        except Exception as e:
+            logger.error(f"Clover direct payment error: {str(e)}")
+            return Response({
+                'status': 'error',
+                'message': f'Payment processing error: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     def _calculate_discount(self, promocode, subtotal):
         """Calculate discount amount based on promocode"""
         # Implement your discount logic here
@@ -3079,12 +3223,15 @@ def create_checkout_session(request):
         data = request.data
         payment_method = data.get('payment_method')
         order_data = data.get('order_data', {})
+        card_data = data.get('card_data', {})  # Add this line
         
-        if payment_method != 'clover_hosted':
+        # Update this condition to support both methods
+        if payment_method not in ['clover_hosted', 'clover_direct']:
             return Response({
                 "success": False,
-                "error": "Only Clover Hosted checkout is currently supported"
+                "error": "Supported payment methods: clover_hosted, clover_direct"
             }, status=status.HTTP_400_BAD_REQUEST)
+
         
         # Validate required fields
         required_fields = ['total_amount', 'order_number']
@@ -3095,39 +3242,34 @@ def create_checkout_session(request):
                     "error": f"Missing required field: {field}"
                 }, status=status.HTTP_400_BAD_REQUEST)
         
-        # Prepare order data for Clover
-        clover_order_data = {
-            'total_amount': float(order_data['total_amount']),
-            'order_number': order_data['order_number'],
-            'order_id': order_data.get('order_id', order_data['order_number']),
-            'currency': order_data.get('currency', 'USD'),
-            'customer': order_data.get('customer', {}),
-            'items': order_data.get('items', []),
-            'redirect_urls': {
-                'success': f"{settings.FRONTEND_URL}/checkout/success",
-                'failure': f"{settings.FRONTEND_URL}/checkout/failure",
-                'cancel': f"{settings.FRONTEND_URL}/checkout/cancel"
-            }
-        }
-        
-        # Create Clover checkout session
+        # Import and initialize Clover service
+        from .services import CloverPaymentService
         clover_service = CloverPaymentService()
-        result = clover_service.create_hosted_checkout_session(clover_order_data)
         
-        if result['success']:
-            return Response(result)  # <-- Return the COMPLETE result
-        else:
-            logger.error(f"Clover checkout session creation failed: {result['error']}")
-            return Response({
-                "success": False,
-                "error": result['error']
-            }, status=status.HTTP_400_BAD_REQUEST)
+        # Handle different payment methods
+        if payment_method == 'clover_hosted':
+            result = clover_service.create_hosted_checkout_session(order_data)
+        elif payment_method == 'clover_direct':
+            # Validate card data for direct payment
+            required_card_fields = ['number', 'exp_month', 'exp_year', 'cvv']
+            for field in required_card_fields:
+                if field not in card_data:
+                    return Response({
+                        "success": False,
+                        "error": f"Missing required card field: {field}"
+                    }, status=status.HTTP_400_BAD_REQUEST)
             
-    except Exception as e:
-        logger.error(f"Error creating checkout session: {str(e)}")
+            result = clover_service.process_direct_payment(order_data, card_data)
+        
         return Response({
-            "success": False,
-            "error": "Internal server error"
+            "is_success": result.get('success', False),
+            "data": result
+        })
+        
+    except Exception as e:
+        return Response({
+            "is_success": False,
+            "data": {"success": False, "error": str(e)}
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
 class ShippingMethodViewSet(viewsets.ReadOnlyModelViewSet):

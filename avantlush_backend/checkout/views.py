@@ -21,7 +21,7 @@ def create_checkout_session(request):
                     "error": f"Missing required field: {field}"
                 }, status=status.HTTP_400_BAD_REQUEST)
         
-        # Prepare order data for Clover
+        # Prepare order data for Clover with proper redirect URLs
         clover_order_data = {
             'total_amount': float(order_data['total_amount']),
             'order_number': order_data['order_number'],
@@ -31,7 +31,7 @@ def create_checkout_session(request):
             'items': order_data.get('items', []),
             'redirect_urls': order_data.get('redirect_urls', {
                 'success': f"{settings.FRONTEND_URL}/checkout/success",
-                'failure': f"{settings.FRONTEND_URL}/checkout/failure",
+                'failure': f"{settings.FRONTEND_URL}/checkout/failure", 
                 'cancel': f"{settings.FRONTEND_URL}/checkout/cancel"
             })
         }
@@ -41,8 +41,7 @@ def create_checkout_session(request):
         result = clover_service.create_hosted_checkout_session(clover_order_data)
         
         if result['success']:
-            # CHANGE: Return the COMPLETE result (middleware will wrap it safely)
-            return Response(result)  # <-- This is the only change!
+            return Response(result)  # Return complete result
         else:
             logger.error(f"Clover checkout session creation failed: {result['error']}")
             return Response({

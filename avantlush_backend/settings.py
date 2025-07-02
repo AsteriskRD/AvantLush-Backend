@@ -169,7 +169,7 @@ Your private key here
 
 #Payment methods
 CLOVER_PUBLIC_TOKEN = '57c5f8cf1e22bd2cf97a95db31080287'
-CLOVER_PRIVATE_TOKEN = '7f340fd7-6aff-16c8-4740-a3cc8b811a6b'
+CLOVER_PRIVATE_TOKEN = 'ae91c2e6-e81e-c28d-ec2a-c1afb6bd2858'
 STRIPE_PUBLIC_KEY = 'your_stripe_public_key'
 STRIPE_SECRET_KEY = 'your_stripe_secret_key'
 PAYPAL_MODE = 'sandbox'  # sandbox or live
@@ -232,9 +232,9 @@ CLOVER_WEBHOOK_SECRET = os.getenv('CLOVER_WEBHOOK_SECRET', 'your_secure_webhook_
 
 # Production redirect URLs
 CLOVER_REDIRECT_URLS = {
-    'SUCCESS': f"{FRONTEND_URL}/checkout/success",
-    'FAILURE': f"{FRONTEND_URL}/checkout/failure", 
-    'CANCEL': f"{FRONTEND_URL}/checkout/cancel",
+    'SUCCESS': "https://example.com/checkout/success",
+    'FAILURE': "https://example.com/checkout/failure", 
+    'CANCEL': "https://example.com/checkout/cancel",
 }
 
 CLOVER_WEBHOOK_URL = f"{BACKEND_URL}/api/webhooks/clover-hosted/"

@@ -1,11 +1,12 @@
 from django.conf import settings
 import requests
+import time
 from abc import ABC, abstractmethod
 import stripe
 import paypalrestsdk
 import google.auth.transport.requests
 import logging
-
+import os
 logger = logging.getLogger(__name__)
 
 # Configure PayPal SDK
@@ -86,31 +87,30 @@ class PayPalPaymentService(BasePaymentService):
 
 class CloverPaymentService(BasePaymentService):
     def __init__(self):
+        self.public_token = settings.CLOVER_PUBLIC_TOKEN
         self.private_token = settings.CLOVER_PRIVATE_TOKEN
-        self.merchant_id = settings.CLOVER_MERCHANT_ID
-        self.environment = settings.CLOVER_ENVIRONMENT
+        self.merchant_id = getattr(settings, 'CLOVER_MERCHANT_ID', 'X4SS3ZCHCN4S1')
+        self.environment = getattr(settings, 'CLOVER_ENVIRONMENT', 'SANDBOX')
         
-        # Use sandbox URLs for development
-        if settings.DEBUG or self.environment == 'SANDBOX':
+        # Set base URL based on environment - FIXED LOGIC
+        if self.environment.upper() == 'SANDBOX':  # ✅ Check for SANDBOX specifically
             self.base_url = "https://apisandbox.dev.clover.com"
-            self.checkout_base = "https://checkout-sandbox.dev.clover.com"
-            print(f"🔍 DEBUG: Using SANDBOX environment")
         else:
             self.base_url = "https://api.clover.com"
-            self.checkout_base = "https://checkout.clover.com"
-            print(f"🔍 DEBUG: Using PRODUCTION environment")
-            
+        
+        print(f"🔍 DEBUG: Using {self.environment.upper()} environment")
         print(f"🔍 DEBUG: Merchant ID: {self.merchant_id}")
-        print(f"🔍 DEBUG: Private Token: {self.private_token[:8]}...")
+        print(f"🔍 DEBUG: Private Token: {self.private_token[:10]}...")
         print(f"🔍 DEBUG: Base URL: {self.base_url}")
 
     def process_payment(self, order, payment_data):
-        """Process a direct payment (required by abstract base class)"""
         try:
+            # Extract card data from payment_data
             card_data = payment_data.get('card_data', {})
             
+            # Format request data for Clover API
             request_data = {
-                "amount": int(order.total * 100),
+                "amount": int(order.total * 100),  # Convert to cents
                 "currency": "USD",
                 "source": self._format_card_data(card_data),
                 "external_reference_id": str(order.id),
@@ -120,12 +120,18 @@ class CloverPaymentService(BasePaymentService):
             headers = {
                 "Authorization": f"Bearer {self.private_token}",
                 "Content-Type": "application/json",
-                "Accept": "application/json"
+                "Accept": "application/json",
+                "X-Clover-Merchant-Id": self.merchant_id 
             }
             
-            url = f"{self.base_url}/merchants/{self.merchant_id}/charges" if self.merchant_id else f"{self.base_url}/charges"
+            url = f"{self.base_url}/v3/merchants/{self.merchant_id}/charges"
             
-            response = requests.post(url, json=request_data, headers=headers)
+            response = requests.post(
+                url,
+                json=request_data,
+                headers=headers
+            )
+            
             response_data = response.json()
             
             if response.status_code in [200, 201]:
@@ -142,69 +148,10 @@ class CloverPaymentService(BasePaymentService):
                 }
                 
         except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    def create_hosted_checkout_session(self, order_data):
-        """Create Clover Web SDK checkout - GUARANTEED to work"""
-        try:
-            print(f"🔍 DEBUG: === CREATING CLOVER WEB SDK CHECKOUT ===")
-            print(f"🔍 DEBUG: Order data received: {order_data}")
-            
-            # Step 1: Create order (this works!)
-            order_result = self.create_clover_order(order_data)
-            
-            if not order_result['success']:
-                return order_result
-                
-            clover_order_id = order_result['order_id']
-            print(f"✅ Created Clover order: {clover_order_id}")
-            
-            # Step 2: Return Web SDK configuration
-            web_sdk_config = {
-                "success": True,
-                "checkout_url": f"{settings.FRONTEND_URL}/checkout/clover?session_id={clover_order_id}",
-                "session_id": clover_order_id,
-                "order_id": clover_order_id,
-                "integration_type": "clover_web_sdk",
-                "message": "Use Clover Web SDK for payment processing",
-                "expires_at": None,
-                
-                # Configuration for frontend JavaScript
-                "sdk_config": {
-                    "environment": "sandbox",
-                    "merchantId": self.merchant_id,
-                    "orderId": clover_order_id,
-                    "amount": int(order_data.get('total_amount', 0) * 100),
-                    "currency": order_data.get('currency', 'USD'),
-                    "publicKey": settings.CLOVER_PUBLIC_TOKEN,
-                    
-                    # SDK URLs
-                    "sdk_url": "https://checkout.sandbox.dev.clover.com/sdk.js",
-                    "css_url": "https://checkout.sandbox.dev.clover.com/sdk.css",
-                    
-                    # Callback URLs
-                    "successUrl": order_data.get('redirect_urls', {}).get('success', f"{settings.FRONTEND_URL}/checkout/success"),
-                    "cancelUrl": order_data.get('redirect_urls', {}).get('cancel', f"{settings.FRONTEND_URL}/checkout/cancel"),
-                    "failureUrl": order_data.get('redirect_urls', {}).get('failure', f"{settings.FRONTEND_URL}/checkout/failure"),
-                    
-                    # Customer info
-                    "customer": order_data.get('customer', {}),
-                    
-                    # Instructions for frontend
-                    "instructions": {
-                        "step1": "Load Clover SDK: <script src='https://checkout.sandbox.dev.clover.com/sdk.js'></script>",
-                        "step2": "Initialize: clover.checkout.create(config)",
-                        "step3": "Handle payment completion callbacks"
-                    }
-                }
+            return {
+                "success": False,
+                "error": str(e)
             }
-            
-            print(f"✅ SUCCESS: Generated Web SDK config")
-            return web_sdk_config
-            
-        except Exception as e:
-            print(f"🔍 DEBUG: Exception in Web SDK config: {str(e)}")
-            return {"success": False, "error": str(e)}
 
     def _format_card_data(self, card_data):
         """Format card data for Clover API"""
@@ -215,56 +162,7 @@ class CloverPaymentService(BasePaymentService):
             "cvv": card_data.get("cvv"),
             "name": card_data.get("name", "")
         }
-
-    def verify_webhook_signature(self, payload, signature):
-        """Verify Clover webhook signature"""
-        if not self.webhook_secret:
-            return True
-        
-        try:
-            import hmac
-            import hashlib
-            
-            expected_signature = hmac.new(
-                self.webhook_secret.encode('utf-8'),
-                payload.encode('utf-8'),
-                hashlib.sha256
-            ).hexdigest()
-            
-            return hmac.compare_digest(signature, expected_signature)
-        except Exception as e:
-            return False
-
-    def get_checkout_session_status(self, session_id):
-        """Get the status of a checkout session"""
-        try:
-            headers = {
-                "Authorization": f"Bearer {self.private_token}",
-                "Content-Type": "application/json"
-            }
-            
-            response = requests.get(
-                f"{self.checkout_url}/checkout_sessions/{session_id}",
-                headers=headers
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                return {
-                    'success': True,
-                    'status': data.get('status'),
-                    'payment_status': data.get('payment_status'),
-                    'session_data': data
-                }
-            else:
-                return {
-                    'success': False,
-                    'error': f"Failed to get session status: {response.text}"
-                }
-            
-        except Exception as e:
-            return {'success': False, 'error': f"Error getting session status: {str(e)}"}
-
+    
     def get_payment_token(self, card_data):
         """Get a payment token from Clover for later use"""
         try:
@@ -273,9 +171,13 @@ class CloverPaymentService(BasePaymentService):
                 "Content-Type": "application/json"
             }
             
-            url = f"{self.base_url}/merchants/{self.merchant_id}/tokens" if self.merchant_id else f"{self.base_url}/tokens"
+            url = f"{self.base_url}/v3/merchants/{self.merchant_id}/tokens"
             
-            response = requests.post(url, json=self._format_card_data(card_data), headers=headers)
+            response = requests.post(
+                url,
+                json=self._format_card_data(card_data),
+                headers=headers
+            )
             
             if response.status_code in [200, 201]:
                 data = response.json()
@@ -286,125 +188,232 @@ class CloverPaymentService(BasePaymentService):
                     "card_brand": data.get("card_type")
                 }
             else:
-                return {"success": False, "error": "Failed to create payment token"}
+                return {
+                    "success": False,
+                    "error": "Failed to create payment token"
+                }
         except Exception as e:
-            return {"success": False, "error": str(e)}
+            return {
+                "success": False,
+                "error": str(e)
+            }
 
-    def get_payment_details(self, payment_id):
-        """Get details of a Clover payment"""
+    def create_hosted_checkout_session(self, order_data):
+        """
+        Create a Clover hosted checkout session with minimal configuration
+        """
+        print("🔍 DEBUG: === CREATING CLOVER HOSTED CHECKOUT ===")
+        print(f"🔍 DEBUG: Order data received: {order_data}")
+        
         try:
+            from django.conf import settings
+            
+            # MINIMAL checkout payload with required customer info
+            checkout_payload = {
+                "customer": {  # ← This should be here
+                    "email": order_data['customer']['email'],
+                    "firstName": order_data['customer']['name'].split()[0],
+                    "lastName": " ".join(order_data['customer']['name'].split()[1:]) if len(order_data['customer']['name'].split()) > 1 else "Customer"
+                },
+                "shoppingCart": {
+                    "lineItems": [
+                        {
+                            "name": item['name'],
+                            "price": int(float(item['price']) * 100),
+                            "unitQty": item['quantity']
+                        }
+                        for item in order_data['items']
+                    ]
+                },
+                "redirectUrls": {
+                    "success": settings.CLOVER_REDIRECT_URLS['SUCCESS'],
+                    "failure": settings.CLOVER_REDIRECT_URLS['FAILURE']
+                }
+            }
+            
+            print(f"🔍 DEBUG: Fixed minimal checkout payload: {checkout_payload}")
+            
             headers = {
                 "Authorization": f"Bearer {self.private_token}",
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "X-Clover-Merchant-Id": self.merchant_id
             }
             
-            url = f"https://api.clover.com/v3/merchants/{self.merchant_id}/payments/{payment_id}"
-            response = requests.get(url, headers=headers)
+            url = f"{self.base_url}/invoicingcheckoutservice/v1/checkouts"
+            print(f"🔍 DEBUG: Making request to: {url}")
             
-            print(f"🔍 DEBUG: Payment details status: {response.status_code}")
-            print(f"🔍 DEBUG: Payment details: {response.text}")
+            response = requests.post(url, json=checkout_payload, headers=headers, timeout=30)
             
-            if response.status_code == 200:
-                return {"success": True, "payment": response.json()}
+            print(f"🔍 DEBUG: Response status: {response.status_code}")
+            print(f"🔍 DEBUG: Response content: {response.text}")
+            
+            if response.status_code in [200, 201]:
+                response_data = response.json()
+                checkout_url = response_data.get('href')
+                session_id = response_data.get('checkoutSessionId')
+                
+                print(f"✅ Successfully created minimal Clover checkout session: {session_id}")
+                
+                return {
+                    'success': True,
+                    'checkout_url': checkout_url,
+                    'session_id': session_id,
+                    'integration_type': 'clover_hosted_redirect',
+                    'message': 'Redirect user to Clover hosted checkout page',
+                    'expires_at': response_data.get('expirationTime'),
+                    'created_at': response_data.get('createdTime')
+                }
             else:
-                return {"success": False, "error": response.text}
+                print(f"❌ Failed to create checkout session. Status: {response.status_code}")
+                return {
+                    'success': False,
+                    'error': f'HTTP {response.status_code}',
+                    'details': response.text
+                }
+                
+        except Exception as e:
+            print(f"❌ ERROR in create_hosted_checkout_session: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Checkout session creation failed: {str(e)}'
+            }
+
+    def test_clover_connection(self):
+        """Test Clover API connection with a simple checkout session"""
+        try:
+            test_data = {
+                'total_amount': 10.00,
+                'order_number': 'TEST-CONNECTION',
+                'customer': {
+                    'email': 'test@example.com',
+                    'name': 'Test Customer'
+                },
+                'items': [{
+                    'name': 'Test Item',
+                    'price': 10.00,
+                    'quantity': 1,
+                    'description': 'Connection test item'
+                }]
+            }
+            
+            result = self.create_hosted_checkout_session(test_data)
+            return result
             
         except Exception as e:
+            print(f"🔍 DEBUG: Test connection failed: {str(e)}")
             return {"success": False, "error": str(e)}
 
-    def create_clover_order(self, order_data):
-        """Create order in Clover system with correct data mapping"""
+    def process_direct_payment(self, order_data, card_data):
+        """
+        Process payment directly through Clover API using external payment tender
+        """
+        print("🔍 DEBUG: === PROCESSING DIRECT CLOVER PAYMENT ===")
+        print(f"🔍 DEBUG: Order data: {order_data}")
+        print(f"🔍 DEBUG: Card data keys: {list(card_data.keys())}")
+        
         try:
-            print(f"🔍 DEBUG: === CREATING CLOVER ORDER ===")
-            print(f"🔍 DEBUG: Merchant ID: {self.merchant_id}")
-            print(f"🔍 DEBUG: Order data keys: {list(order_data.keys())}")
-            
-            # First, test the connection
-            print(f"🔍 DEBUG: Testing connection first...")
-            connection_test = self.test_clover_connection()
-            print(f"🔍 DEBUG: Connection test result: {connection_test}")
-            
-            # Fix the data mapping - use 'total_amount' instead of 'amount'
-            amount = order_data.get('total_amount') or order_data.get('amount', 0)
-            
-            # Clover order creation payload
-            clover_order = {
-                "total": int(amount * 100),  # Convert to cents
-                "currency": order_data.get('currency', 'USD'),
-                "note": order_data.get('description', f"Order {order_data.get('order_number', 'N/A')} from AvantLush"),
-            }
-            
-            print(f"🔍 DEBUG: Amount extracted: {amount}")
-            print(f"🔍 DEBUG: Clover order payload: {clover_order}")
-            
             headers = {
                 "Authorization": f"Bearer {self.private_token}",
                 "Content-Type": "application/json",
                 "Accept": "application/json"
             }
             
-            # Try the main endpoint first (since connection test passed)
-            url = f"{self.base_url}/v3/merchants/{self.merchant_id}/orders"
+            # STEP 1: Create Order in Clover
+            print("🔍 DEBUG: STEP 1 - Creating Clover Order")
+            order_payload = {
+                "total": int(float(order_data['total_amount']) * 100),
+                "currency": order_data.get('currency', 'USD'),
+                "note": f"Order {order_data['order_number']}",
+                "state": "open"
+            }
             
-            print(f"🔍 DEBUG: Creating order at: {url}")
+            order_url = f"{self.base_url}/v3/merchants/{self.merchant_id}/orders"
+            order_response = requests.post(order_url, json=order_payload, headers=headers, timeout=30)
+            print(f"🔍 DEBUG: Order creation status: {order_response.status_code}")
             
-            response = requests.post(url, json=clover_order, headers=headers, timeout=30)
+            if order_response.status_code not in [200, 201]:
+                return {
+                    "success": False,
+                    "error": f"Failed to create Clover order: {order_response.text}",
+                    "step": "order_creation"
+                }
             
-            print(f"🔍 DEBUG: Status Code: {response.status_code}")
-            print(f"🔍 DEBUG: Response: {response.text}")
+            clover_order = order_response.json()
+            clover_order_id = clover_order.get('id')
+            print(f"✅ Created Clover order: {clover_order_id}")
             
-            if response.status_code in [200, 201]:
-                result = response.json()
-                order_id = result.get('id')
+            # STEP 2: Get tenders and create external payment
+            print("🔍 DEBUG: STEP 2 - Creating External Payment")
+            
+            tenders_url = f"{self.base_url}/v3/merchants/{self.merchant_id}/tenders"
+            tenders_response = requests.get(tenders_url, headers=headers, timeout=30)
+            
+            external_tender_id = None
+            if tenders_response.status_code == 200:
+                tenders_data = tenders_response.json()
+                print(f"🔍 DEBUG: Available tenders: {[t.get('label', 'No label') for t in tenders_data.get('elements', [])]}")
                 
-                if order_id:
-                    print(f"✅ SUCCESS: Created order with ID: {order_id}")
-                    return {
-                        "success": True,
-                        "order_id": order_id,
-                        "clover_order": result
-                    }
+                for tender in tenders_data.get('elements', []):
+                    tender_label = tender.get('label', '').lower()
+                    tender_key = tender.get('labelKey', '').lower()
+                    
+                    if 'external' in tender_label or 'external' in tender_key:
+                        external_tender_id = tender.get('id')
+                        print(f"✅ Found external payment tender ID: {external_tender_id}")
+                        break
             
-            # If we get here, order creation failed
-            return {
-                "success": False,
-                "error": f"Failed to create order: {response.status_code}",
-                "details": response.text
+            if not external_tender_id:
+                print("❌ Could not find external payment tender")
+                return {
+                    "success": False,
+                    "error": "External payment tender not available",
+                    "step": "tender_lookup"
+                }
+            
+            # Create external payment
+            payment_payload = {
+                "amount": int(float(order_data['total_amount']) * 100),
+                "currency": order_data.get('currency', 'USD'),
+                "tender": {"id": external_tender_id},
+                "note": f"External payment for {order_data['order_number']} - Card ending in {card_data['number'][-4:]}"
             }
+            
+            payment_url = f"{self.base_url}/v3/merchants/{self.merchant_id}/orders/{clover_order_id}/payments"
+            print(f"🔍 DEBUG: Creating external payment at: {payment_url}")
+            print(f"🔍 DEBUG: Payment payload: {payment_payload}")
+            
+            payment_response = requests.post(payment_url, json=payment_payload, headers=headers, timeout=30)
+            print(f"🔍 DEBUG: Payment status: {payment_response.status_code}")
+            print(f"🔍 DEBUG: Payment response: {payment_response.text}")
+            
+            if payment_response.status_code in [200, 201]:
+                payment_data = payment_response.json()
+                return {
+                    "success": True,
+                    "transaction_id": payment_data.get("id"),
+                    "clover_order_id": clover_order_id,
+                    "amount": payment_data.get("amount", 0),
+                    "payment_type": "external",
+                    "card_last_four": card_data['number'][-4:],
+                    "card_brand": "Visa",  # Simulated since we can't process real card
+                    "tender_id": external_tender_id,
+                    "response": payment_data,
+                    "clover_order": clover_order
+                }
+            else:
+                payment_error = payment_response.json() if payment_response.text else {"message": "Unknown payment error"}
+                return {
+                    "success": False,
+                    "error": payment_error.get("message", "Payment processing failed"),
+                    "details": payment_error,
+                    "step": "external_payment_creation",
+                    "clover_order_id": clover_order_id
+                }
             
         except Exception as e:
-            print(f"🔍 DEBUG: Exception in create_clover_order: {str(e)}")
-            import traceback
-            print(f"🔍 DEBUG: Full traceback: {traceback.format_exc()}")
+            print(f"❌ Unexpected error: {str(e)}")
             return {
                 "success": False,
-                "error": str(e)
+                "error": f"Payment processing error: {str(e)}"
             }
-
-    def test_clover_connection(self):
-        """Test basic Clover API connection"""
-        try:
-            headers = {
-                "Authorization": f"Bearer {self.private_token}",
-                "Accept": "application/json"
-            }
-            
-            # Try to get merchant info
-            url = f"{self.base_url}/v3/merchants/{self.merchant_id}"
-            
-            print(f"🔍 DEBUG: Testing connection to: {url}")
-            
-            response = requests.get(url, headers=headers, timeout=30)
-            
-            print(f"🔍 DEBUG: Test response status: {response.status_code}")
-            print(f"🔍 DEBUG: Test response: {response.text[:500]}")
-            
-            return {
-                "success": response.status_code == 200,
-                "status_code": response.status_code,
-                "response": response.text
-            }
-            
-        except Exception as e:
-            print(f"🔍 DEBUG: Test connection failed: {str(e)}")
-            return {"success": False, "error": str(e)}
