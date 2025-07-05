@@ -38,7 +38,7 @@ ALLOWED_HOSTS = [
     '127.0.0.1',
     '.onrender.com',
     '.ngrok-free.app',
-    'avantlush-backend-13.onrender.com',
+    #'avantlush-backend-13.onrender.com',
     'avantlush-backend-2s6k.onrender.com'  # Fixed
 ]
 

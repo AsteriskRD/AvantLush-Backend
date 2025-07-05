@@ -87,21 +87,21 @@ class PayPalPaymentService(BasePaymentService):
 
 class CloverPaymentService(BasePaymentService):
     def __init__(self):
-        self.public_token = settings.CLOVER_PUBLIC_TOKEN
         self.private_token = settings.CLOVER_PRIVATE_TOKEN
         self.merchant_id = getattr(settings, 'CLOVER_MERCHANT_ID', 'X4SS3ZCHCN4S1')
-        self.environment = getattr(settings, 'CLOVER_ENVIRONMENT', 'SANDBOX')
+        self.environment = getattr(settings, 'CLOVER_ENVIRONMENT', 'sandbox')
         
-        # Set base URL based on environment - FIXED LOGIC
-        if self.environment.upper() == 'SANDBOX':  # ✅ Check for SANDBOX specifically
+        # Use correct Clover API base URL
+        if self.environment.lower() == 'sandbox':
             self.base_url = "https://apisandbox.dev.clover.com"
+            self.checkout_base_url = "https://checkout.sandbox.dev.clover.com"
         else:
             self.base_url = "https://api.clover.com"
+            self.checkout_base_url = "https://checkout.clover.com"
         
         print(f"🔍 DEBUG: Using {self.environment.upper()} environment")
-        print(f"🔍 DEBUG: Merchant ID: {self.merchant_id}")
-        print(f"🔍 DEBUG: Private Token: {self.private_token[:10]}...")
-        print(f"🔍 DEBUG: Base URL: {self.base_url}")
+        print(f"🔍 DEBUG: API Base URL: {self.base_url}")
+        print(f"🔍 DEBUG: Checkout Base URL: {self.checkout_base_url}")
 
     def process_payment(self, order, payment_data):
         try:
@@ -200,84 +200,152 @@ class CloverPaymentService(BasePaymentService):
 
     def create_hosted_checkout_session(self, order_data):
         """
-        Create a Clover hosted checkout session with minimal configuration
+        Create Clover hosted checkout session using official API
         """
-        print("🔍 DEBUG: === CREATING CLOVER HOSTED CHECKOUT ===")
+        print("🔍 DEBUG: === CREATING CLOVER HOSTED CHECKOUT (OFFICIAL API) ===")
         print(f"🔍 DEBUG: Order data received: {order_data}")
         
         try:
-            from django.conf import settings
-            
-            # MINIMAL checkout payload with required customer info
-            checkout_payload = {
-                "customer": {  # ← This should be here
-                    "email": order_data['customer']['email'],
-                    "firstName": order_data['customer']['name'].split()[0],
-                    "lastName": " ".join(order_data['customer']['name'].split()[1:]) if len(order_data['customer']['name'].split()) > 1 else "Customer"
+            # Prepare request data in Clover's required format
+            clover_request = {
+                "customer": {
+                    "email": order_data.get('customer', {}).get('email', 'customer@example.com'),
+                    "firstName": order_data.get('customer', {}).get('firstName', 'Test'),
+                    "lastName": order_data.get('customer', {}).get('lastName', 'Customer'),
+                    "phoneNumber": order_data.get('customer', {}).get('phoneNumber', '555-555-0002')
                 },
                 "shoppingCart": {
                     "lineItems": [
                         {
-                            "name": item['name'],
-                            "price": int(float(item['price']) * 100),
-                            "unitQty": item['quantity']
+                            "name": f"Order {order_data.get('order_number', 'N/A')}",
+                            "price": int(float(order_data['total_amount']) * 100),  # Convert to cents
+                            "unitQty": 1,
+                            "note": f"Order total: ${order_data['total_amount']}"
                         }
-                        for item in order_data['items']
                     ]
-                },
-                "redirectUrls": {
-                    "success": settings.CLOVER_REDIRECT_URLS['SUCCESS'],
-                    "failure": settings.CLOVER_REDIRECT_URLS['FAILURE']
                 }
             }
             
-            print(f"🔍 DEBUG: Fixed minimal checkout payload: {checkout_payload}")
+            # Add redirect URLs if provided
+            redirect_urls = order_data.get('redirect_urls', {})
+            if redirect_urls:
+                clover_request["redirectUrls"] = {
+                    "success": redirect_urls.get('success', f"{settings.FRONTEND_URL}/checkout/success"),
+                    "failure": redirect_urls.get('failure', f"{settings.FRONTEND_URL}/checkout/failure")
+                }
             
+            print(f"🔍 DEBUG: Clover request payload: {clover_request}")
+            
+            # Prepare headers as per Clover documentation
             headers = {
-                "Authorization": f"Bearer {self.private_token}",
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-                "X-Clover-Merchant-Id": self.merchant_id
+                "accept": "application/json",
+                "content-type": "application/json",
+                "X-Clover-Merchant-Id": self.merchant_id,
+                "authorization": f"Bearer {self.private_token}"
             }
             
+            # Use official Clover API endpoint
             url = f"{self.base_url}/invoicingcheckoutservice/v1/checkouts"
             print(f"🔍 DEBUG: Making request to: {url}")
             
-            response = requests.post(url, json=checkout_payload, headers=headers, timeout=30)
-            
+            response = requests.post(url, json=clover_request, headers=headers, timeout=30)
             print(f"🔍 DEBUG: Response status: {response.status_code}")
             print(f"🔍 DEBUG: Response content: {response.text}")
             
             if response.status_code in [200, 201]:
                 response_data = response.json()
+                
+                # Extract the checkout URL from Clover's response
                 checkout_url = response_data.get('href')
                 session_id = response_data.get('checkoutSessionId')
                 
-                print(f"✅ Successfully created minimal Clover checkout session: {session_id}")
-                
-                return {
-                    'success': True,
-                    'checkout_url': checkout_url,
-                    'session_id': session_id,
-                    'integration_type': 'clover_hosted_redirect',
-                    'message': 'Redirect user to Clover hosted checkout page',
-                    'expires_at': response_data.get('expirationTime'),
-                    'created_at': response_data.get('createdTime')
-                }
+                if checkout_url:
+                    print(f"✅ Successfully created Clover hosted checkout session")
+                    print(f"✅ Checkout URL: {checkout_url}")
+                    
+                    return {
+                        'success': True,
+                        'checkout_url': checkout_url,  # This is the official Clover hosted URL
+                        'session_id': session_id,
+                        'order_id': session_id,
+                        'integration_type': 'clover_hosted_official',
+                        'message': 'Redirect user to Clover hosted checkout page',
+                        'expires_at': response_data.get('expirationTime'),
+                        'created_at': response_data.get('createdTime'),
+                        'clover_config': {
+                            'environment': self.environment,
+                            'merchantId': self.merchant_id,
+                            'sessionId': session_id,
+                            'amount': int(float(order_data['total_amount']) * 100),
+                            'currency': order_data.get('currency', 'USD'),
+                            'redirect_urls': redirect_urls,
+                            'customer': clover_request['customer']
+                        }
+                    }
+                else:
+                    return {
+                        'success': False,
+                        'error': 'No checkout URL returned from Clover API'
+                    }
             else:
-                print(f"❌ Failed to create checkout session. Status: {response.status_code}")
+                error_data = response.json() if response.text else {}
                 return {
                     'success': False,
-                    'error': f'HTTP {response.status_code}',
-                    'details': response.text
+                    'error': f'Clover API error: {error_data.get("message", "Unknown error")}',
+                    'details': error_data
                 }
                 
         except Exception as e:
-            print(f"❌ ERROR in create_hosted_checkout_session: {str(e)}")
+            print(f"❌ Exception in create_hosted_checkout_session: {str(e)}")
             return {
                 'success': False,
                 'error': f'Checkout session creation failed: {str(e)}'
             }
+
+    def _create_clover_order(self, order_data):
+        """
+        Create an order in Clover system
+        """
+        try:
+            print(f"🔍 DEBUG: Creating Clover order with data: {order_data}")
+            
+            # Prepare order payload for Clover API
+            order_payload = {
+                "total": int(float(order_data['total_amount']) * 100),  # Convert to cents
+                "currency": order_data.get('currency', 'USD'),
+                "note": f"Order {order_data['order_number']}",
+                "state": "open",
+                "testMode": True  # ✅ FIXED: Always True for sandbox
+            }
+            
+            print(f"🔍 DEBUG: Order payload: {order_payload}")
+            
+            headers = {
+                "Authorization": f"Bearer {self.private_token}",
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+            
+            # Create order endpoint
+            url = f"{self.base_url}/v3/merchants/{self.merchant_id}/orders"
+            print(f"🔍 DEBUG: Making request to: {url}")
+            
+            response = requests.post(url, json=order_payload, headers=headers)
+            print(f"🔍 DEBUG: Response status: {response.status_code}")
+            print(f"🔍 DEBUG: Response content: {response.text}")
+            
+            if response.status_code in [200, 201]:
+                order_response = response.json()
+                order_id = order_response.get('id')
+                print(f"✅ Successfully created Clover order: {order_id}")
+                return order_id
+            else:
+                print(f"❌ Failed to create order. Status: {response.status_code}, Response: {response.text}")
+                return None
+                
+        except Exception as e:
+            print(f"❌ Exception in _create_clover_order: {str(e)}")
+            return None
 
     def test_clover_connection(self):
         """Test Clover API connection with a simple checkout session"""

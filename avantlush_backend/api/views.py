@@ -1121,7 +1121,60 @@ def reset_password(request, uidb64, token):
             'success': False,
             'message': f'Invalid reset link: {str(e)}'
         }, status=status.HTTP_400_BAD_REQUEST)
+
+@csrf_exempt
+def checkout_success(request):
+    """Handle successful payment redirects from Clover"""
+    session_id = request.GET.get('session_id')
+    order_id = request.GET.get('order_id')
     
+    context = {
+        'status': 'success',
+        'message': 'Payment completed successfully!',
+        'session_id': session_id,
+        'order_id': order_id,
+        'redirect_data': dict(request.GET)
+    }
+    
+    # Return JSON for API or render template for web
+    if request.headers.get('Accept') == 'application/json':
+        return JsonResponse(context)
+    
+    return render(request, 'checkout/success.html', context)
+
+@csrf_exempt 
+def checkout_failure(request):
+    """Handle failed payment redirects from Clover"""
+    error_code = request.GET.get('error_code')
+    error_message = request.GET.get('error_message')
+    
+    context = {
+        'status': 'failure',
+        'message': 'Payment failed. Please try again.',
+        'error_code': error_code,
+        'error_message': error_message,
+        'redirect_data': dict(request.GET)
+    }
+    
+    if request.headers.get('Accept') == 'application/json':
+        return JsonResponse(context)
+        
+    return render(request, 'checkout/failure.html', context)
+
+@csrf_exempt
+def checkout_cancel(request):
+    """Handle cancelled payment redirects from Clover"""
+    context = {
+        'status': 'cancelled',
+        'message': 'Payment was cancelled.',
+        'redirect_data': dict(request.GET)
+    }
+    
+    if request.headers.get('Accept') == 'application/json':
+        return JsonResponse(context)
+        
+    return render(request, 'checkout/cancel.html', context)
+
 class TokenValidationView(APIView):
     """
     API endpoint to check if a JWT token is still valid and get its expiry time.
@@ -3113,6 +3166,30 @@ class CheckoutViewSet(viewsets.ViewSet):
                 raise ValidationError(f'Insufficient stock for {item.product.name}')
         return True
 
+            
+    @action(detail=False, methods=['POST'])
+    def shipping_cost(self, request):
+        """Calculate shipping cost based on method and address"""
+        shipping_method_id = request.data.get('shipping_method_id')
+        address_id = request.data.get('address_id')
+        
+        try:
+            shipping_method = ShippingMethod.objects.get(id=shipping_method_id)
+            address = Address.objects.get(id=address_id, user=request.user)
+            
+            # You can implement custom shipping logic based on address
+            shipping_cost = shipping_method.price
+            
+            return Response({
+                'shipping_cost': shipping_cost,
+                'estimated_days': shipping_method.estimated_days
+            })
+        except (ShippingMethod.DoesNotExist, Address.DoesNotExist):
+            return Response({
+                'error': 'Invalid shipping method or address'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
     @action(detail=False, methods=['GET'])
     def get_client_secret(self, request):
         """Get Stripe client secret for frontend payment flow"""
@@ -3170,28 +3247,6 @@ class CheckoutViewSet(viewsets.ViewSet):
                 'status': 'error',
                 'message': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
-    @action(detail=False, methods=['POST'])
-    def shipping_cost(self, request):
-        """Calculate shipping cost based on method and address"""
-        shipping_method_id = request.data.get('shipping_method_id')
-        address_id = request.data.get('address_id')
-        
-        try:
-            shipping_method = ShippingMethod.objects.get(id=shipping_method_id)
-            address = Address.objects.get(id=address_id, user=request.user)
-            
-            # You can implement custom shipping logic based on address
-            shipping_cost = shipping_method.price
-            
-            return Response({
-                'shipping_cost': shipping_cost,
-                'estimated_days': shipping_method.estimated_days
-            })
-        except (ShippingMethod.DoesNotExist, Address.DoesNotExist):
-            return Response({
-                'error': 'Invalid shipping method or address'
-            }, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['GET'])
 def payment_methods(request):
@@ -3271,7 +3326,80 @@ def create_checkout_session(request):
             "is_success": False,
             "data": {"success": False, "error": str(e)}
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
+
+@api_view(['POST'])
+def create_clover_hosted_checkout(request):
+        """
+        Dedicated endpoint for Clover hosted checkout - cleaner and simpler
+        """
+        try:
+            data = request.data
+            print(f"🔍 DEBUG: Creating hosted checkout for: {data}")
+            
+            # Validate required fields
+            if not data.get('total_amount'):
+                return Response({
+                    'is_success': False,
+                    'data': {
+                        'status': 'error',
+                        'message': 'total_amount is required'
+                    }
+                }, status=400)
+            
+            # Prepare order data
+            order_data = {
+                'total_amount': data.get('total_amount'),
+                'currency': data.get('currency', 'USD'),
+                'order_number': f"HOSTED-{timezone.now().strftime('%Y%m%d%H%M%S')}",
+                'customer': data.get('customer', {}),
+                'redirect_urls': {
+                    'success': data.get('success_url', f"{settings.FRONTEND_URL}/checkout/success"),
+                    'failure': data.get('failure_url', f"{settings.FRONTEND_URL}/checkout/failure"),
+                    'cancel': data.get('cancel_url', f"{settings.FRONTEND_URL}/checkout/cancel")
+                }
+            }
+            
+            print(f"🔍 DEBUG: Prepared order data: {order_data}")
+            
+            # Initialize Clover service
+            clover_service = CloverPaymentService()
+            
+            # Create hosted checkout session
+            result = clover_service.create_hosted_checkout_session(order_data)
+            
+            if result['success']:
+                return Response({
+                    'is_success': True,
+                    'data': {
+                        'status': 'success',
+                        'message': 'Hosted checkout session created successfully',
+                        'checkout_url': result['checkout_url'],
+                        'session_id': result['session_id'],
+                        'order_id': result['order_id'],
+                        'integration_type': result['integration_type'],
+                        'instructions': 'Redirect user to checkout_url for payment',
+                        'clover_config': result['clover_config']
+                    }
+                })
+            else:
+                return Response({
+                    'is_success': False,
+                    'data': {
+                        'status': 'error',
+                        'message': result['error']
+                    }
+                }, status=400)
+                
+        except Exception as e:
+            print(f"❌ ERROR in create_clover_hosted_checkout: {str(e)}")
+            return Response({
+                'is_success': False,
+                'data': {
+                    'status': 'error',
+                    'message': f'Hosted checkout creation failed: {str(e)}'
+                }
+            }, status=500)
+
 class ShippingMethodViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = ShippingMethod.objects.filter(is_active=True)
     serializer_class = ShippingMethodSerializer

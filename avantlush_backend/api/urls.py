@@ -48,6 +48,10 @@ from .views import (
     payment_methods,
     create_checkout_session,
     test_complete_checkout,
+    create_clover_hosted_checkout,
+    checkout_success,
+    checkout_failure,
+    checkout_cancel
     
 )
 
@@ -171,6 +175,7 @@ urlpatterns = [
          clover_hosted_payment_status, 
          name='clover-hosted-payment-status'),
     
+    path('api/create-hosted-checkout/', create_clover_hosted_checkout, name='create-hosted-checkout'),
     path('webhooks/clover-hosted/', 
          clover_hosted_webhook, 
          name='clover-hosted-webhook'),
@@ -178,7 +183,11 @@ urlpatterns = [
     path('orders/<int:order_id>/payments/', 
          order_payments_list, 
          name='order-payments-list'),
-
+     
+     # Clover redirect handlers
+    path('checkout/success/', checkout_success, name='checkout-success'),
+    path('checkout/failure/', checkout_failure, name='checkout-failure'), 
+    path('checkout/cancel/', checkout_cancel, name='checkout-cancel'),
     
     # Support & Checkout
     path('support/submit/', SupportTicketViewSet.as_view({'post': 'submit'})),
