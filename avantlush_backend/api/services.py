@@ -226,13 +226,15 @@ class CloverPaymentService(BasePaymentService):
                 }
             }
             
-            # Add redirect URLs if provided
+            # 🔧 FIX: Use correct redirect URLs with /api/ prefix
             redirect_urls = order_data.get('redirect_urls', {})
-            if redirect_urls:
-                clover_request["redirectUrls"] = {
-                    "success": redirect_urls.get('success', f"{settings.FRONTEND_URL}/checkout/success"),
-                    "failure": redirect_urls.get('failure', f"{settings.FRONTEND_URL}/checkout/failure")
-                }
+            backend_base = settings.BACKEND_URL
+            
+            clover_request["redirectUrls"] = {
+                "success": redirect_urls.get('success', f"{backend_base}/api/checkout/success"),
+                "failure": redirect_urls.get('failure', f"{backend_base}/api/checkout/failure"),
+                "cancel": redirect_urls.get('cancel', f"{backend_base}/api/checkout/cancel")  # Add cancel URL
+            }
             
             print(f"🔍 DEBUG: Clover request payload: {clover_request}")
             
@@ -272,13 +274,15 @@ class CloverPaymentService(BasePaymentService):
                         'message': 'Redirect user to Clover hosted checkout page',
                         'expires_at': response_data.get('expirationTime'),
                         'created_at': response_data.get('createdTime'),
+                        # 🔧 FIX: Return the correct redirect URLs
+                        'redirect_urls': clover_request["redirectUrls"],
                         'clover_config': {
                             'environment': self.environment,
                             'merchantId': self.merchant_id,
                             'sessionId': session_id,
                             'amount': int(float(order_data['total_amount']) * 100),
                             'currency': order_data.get('currency', 'USD'),
-                            'redirect_urls': redirect_urls,
+                            'redirect_urls': clover_request["redirectUrls"],
                             'customer': clover_request['customer']
                         }
                     }
@@ -485,3 +489,32 @@ class CloverPaymentService(BasePaymentService):
                 "success": False,
                 "error": f"Payment processing error: {str(e)}"
             }
+
+    def verify_webhook_signature(self, payload, signature):
+        """
+        Verify Clover webhook signature for security
+        """
+        try:
+            import hmac
+            import hashlib
+            
+            # Get webhook secret from settings
+            webhook_secret = getattr(settings, 'CLOVER_WEBHOOK_SECRET', '')
+            
+            if not webhook_secret:
+                print("⚠️ WARNING: No webhook secret configured, skipping signature verification")
+                return True  # Allow in development
+            
+            # Calculate expected signature
+            expected_signature = hmac.new(
+                webhook_secret.encode('utf-8'),
+                payload.encode('utf-8'),
+                hashlib.sha256
+            ).hexdigest()
+            
+            # Compare signatures
+            return hmac.compare_digest(signature, expected_signature)
+            
+        except Exception as e:
+            print(f"❌ Webhook signature verification error: {str(e)}")
+            return False  # Reject on error

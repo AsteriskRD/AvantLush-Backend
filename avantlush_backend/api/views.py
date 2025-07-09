@@ -990,11 +990,11 @@ def test_complete_checkout(request):
         }, status=500)
 
 
-@action(detail=False, methods=['get'])
-def featured(self, request):
-    featured_products = self.get_queryset().filter(is_featured=True)
-    serializer = self.get_serializer(featured_products, many=True)
-    return Response(serializer.data)
+    @action(detail=False, methods=['get'])
+    def featured(self, request):
+        featured_products = self.get_queryset().filter(is_featured=True)
+        serializer = self.get_serializer(featured_products, many=True)
+        return Response(serializer.data)
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
@@ -1122,58 +1122,44 @@ def reset_password(request, uidb64, token):
             'message': f'Invalid reset link: {str(e)}'
         }, status=status.HTTP_400_BAD_REQUEST)
 
+from django.http import JsonResponse
+
 @csrf_exempt
 def checkout_success(request):
-    """Handle successful payment redirects from Clover"""
+    """Handle successful payment redirects from Clover - API only"""
     session_id = request.GET.get('session_id')
     order_id = request.GET.get('order_id')
     
-    context = {
+    return JsonResponse({
         'status': 'success',
         'message': 'Payment completed successfully!',
         'session_id': session_id,
         'order_id': order_id,
         'redirect_data': dict(request.GET)
-    }
-    
-    # Return JSON for API or render template for web
-    if request.headers.get('Accept') == 'application/json':
-        return JsonResponse(context)
-    
-    return render(request, 'checkout/success.html', context)
+    })
 
 @csrf_exempt 
 def checkout_failure(request):
-    """Handle failed payment redirects from Clover"""
+    """Handle failed payment redirects from Clover - API only"""
     error_code = request.GET.get('error_code')
     error_message = request.GET.get('error_message')
     
-    context = {
+    return JsonResponse({
         'status': 'failure',
         'message': 'Payment failed. Please try again.',
         'error_code': error_code,
         'error_message': error_message,
         'redirect_data': dict(request.GET)
-    }
-    
-    if request.headers.get('Accept') == 'application/json':
-        return JsonResponse(context)
-        
-    return render(request, 'checkout/failure.html', context)
+    })
 
 @csrf_exempt
 def checkout_cancel(request):
-    """Handle cancelled payment redirects from Clover"""
-    context = {
+    """Handle cancelled payment redirects from Clover - API only"""
+    return JsonResponse({
         'status': 'cancelled',
         'message': 'Payment was cancelled.',
         'redirect_data': dict(request.GET)
-    }
-    
-    if request.headers.get('Accept') == 'application/json':
-        return JsonResponse(context)
-        
-    return render(request, 'checkout/cancel.html', context)
+    })
 
 class TokenValidationView(APIView):
     """

@@ -232,9 +232,9 @@ CLOVER_WEBHOOK_SECRET = os.getenv('CLOVER_WEBHOOK_SECRET', 'your_secure_webhook_
 
 # Production redirect URLs
 CLOVER_REDIRECT_URLS = {
-    'SUCCESS': "https://example.com/checkout/success",
-    'FAILURE': "https://example.com/checkout/failure", 
-    'CANCEL': "https://example.com/checkout/cancel",
+    'SUCCESS': f"{BACKEND_URL}/api/checkout/success/",
+    'FAILURE': f"{BACKEND_URL}/api/checkout/failure/", 
+    'CANCEL': f"{BACKEND_URL}/api/checkout/cancel/",
 }
 
 CLOVER_WEBHOOK_URL = f"{BACKEND_URL}/api/webhooks/clover-hosted/"

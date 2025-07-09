@@ -175,7 +175,7 @@ urlpatterns = [
          clover_hosted_payment_status, 
          name='clover-hosted-payment-status'),
     
-    path('api/create-hosted-checkout/', create_clover_hosted_checkout, name='create-hosted-checkout'),
+    path('create-hosted-checkout/', create_clover_hosted_checkout, name='create-hosted-checkout'),
     path('webhooks/clover-hosted/', 
          clover_hosted_webhook, 
          name='clover-hosted-webhook'),
