@@ -223,6 +223,8 @@ BACKEND_URL = os.getenv('BACKEND_URL', 'http://localhost:8000')
 # For Render deployment
 if 'RENDER' in os.environ:
     BACKEND_URL = 'https://avantlush-backend-2s6k.onrender.com'
+    # ADD THIS LINE - Set production frontend URL
+    FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5173')
 
 # Production Clover Configuration
 CLOVER_ENVIRONMENT = os.getenv('CLOVER_ENVIRONMENT', 'SANDBOX')
@@ -230,11 +232,14 @@ CLOVER_MERCHANT_ID = os.getenv('CLOVER_MERCHANT_ID', 'X4SS3ZCHCN4S1')
 CLOVER_PRIVATE_TOKEN = os.getenv('CLOVER_PRIVATE_TOKEN', 'ae91c2e6-e81e-c28d-ec2a-c1afb6bd2858')
 CLOVER_WEBHOOK_SECRET = os.getenv('CLOVER_WEBHOOK_SECRET', 'your_secure_webhook_secret_here')
 
-# Production redirect URLs
+# For testing with Clover, use HTTPS backend URL
+#BACKEND_URL = os.getenv('BACKEND_URL', 'https://avantlush-backend-2s6k.onrender.com')
+
+# Update redirect URLs to use HTTPS
 CLOVER_REDIRECT_URLS = {
-    'SUCCESS': f"{BACKEND_URL}/api/checkout/success/",
-    'FAILURE': f"{BACKEND_URL}/api/checkout/failure/", 
-    'CANCEL': f"{BACKEND_URL}/api/checkout/cancel/",
+    'SUCCESS': f"{BACKEND_URL}/checkout/success",
+    'FAILURE': f"{BACKEND_URL}/checkout/failure", 
+    'CANCEL': f"{BACKEND_URL}/checkout/cancel",
 }
 
 CLOVER_WEBHOOK_URL = f"{BACKEND_URL}/api/webhooks/clover-hosted/"

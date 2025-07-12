@@ -51,7 +51,8 @@ from .views import (
     create_clover_hosted_checkout,
     checkout_success,
     checkout_failure,
-    checkout_cancel
+    checkout_cancel,
+    checkout_status_api,
     
 )
 
@@ -85,7 +86,7 @@ urlpatterns = [
     path('register/', register, name='register'),
     #path('login/', login, name='login'),
     path('auth/', include('dj_rest_auth.urls')),  # This includes login, logout, user details, etc.
-    path('auth/registration/', include('dj_rest_auth.registration.urls')), 
+    path('auth/registration/', include('dj_rest_auth.registration.urls')),
     path('auth/google/', GoogleLoginView.as_view(), name='google_login'),
     path('verify-email/<str:token>/<str:uidb64>/', verify_email, name='verify_email'),
     path('resend-verification/', resend_verification_email, name='resend_verification'),
@@ -93,7 +94,10 @@ urlpatterns = [
     path('reset-password/<str:uidb64>/<str:token>/', reset_password, name='reset_password'),
     path('auth/validate-token/', TokenValidationView.as_view(), name='validate-token'),
    
-     path('test-complete-checkout/', test_complete_checkout, name='test-complete-checkout'),
+    path('test-complete-checkout/', test_complete_checkout, name='test-complete-checkout'),
+
+    # 🔧 MOVE THIS TO THE TOP - BEFORE ROUTER URLS
+    path('create-hosted-checkout/', create_clover_hosted_checkout, name='create-hosted-checkout'),
 
     # Product & Wishlist
     path('products/search/', ProductSearchView.as_view(), name='product-search'),
@@ -165,29 +169,23 @@ urlpatterns = [
     path('checkout/clover-hosted/create/', 
          CheckoutViewSet.as_view({'post': 'create_clover_hosted_checkout'}), 
          name='clover-hosted-checkout-create'),
-
     
     path('checkout/clover-hosted/status/<int:order_id>/', 
          clover_hosted_payment_status, 
          name='clover-hosted-payment-status'),
-
-    path('checkout/clover-hosted/status/<int:order_id>/', 
-         clover_hosted_payment_status, 
-         name='clover-hosted-payment-status'),
     
-    path('create-hosted-checkout/', create_clover_hosted_checkout, name='create-hosted-checkout'),
-    path('webhooks/clover-hosted/', 
-         clover_hosted_webhook, 
-         name='clover-hosted-webhook'),
-    
-    path('orders/<int:order_id>/payments/', 
-         order_payments_list, 
-         name='order-payments-list'),
-     
-     # Clover redirect handlers
+    # Clover redirect handlers (these redirect to frontend)
     path('checkout/success/', checkout_success, name='checkout-success'),
     path('checkout/failure/', checkout_failure, name='checkout-failure'), 
     path('checkout/cancel/', checkout_cancel, name='checkout-cancel'),
+    
+    # API endpoint for status checking (returns JSON)
+    path('api/checkout/status/', checkout_status_api, name='checkout-status-api'),
+    
+    # Webhooks
+    path('webhooks/clover-hosted/', 
+         clover_hosted_webhook, 
+         name='clover-hosted-webhook'),
     
     # Support & Checkout
     path('support/submit/', SupportTicketViewSet.as_view({'post': 'submit'})),
@@ -199,7 +197,7 @@ urlpatterns = [
     # External App URLs
     path('api/', include('checkout.urls')),
 
-    # Include router-based URLs
+    # 🔧 IMPORTANT: Include router-based URLs AT THE END
     path('', include(router.urls)),
 ]
 

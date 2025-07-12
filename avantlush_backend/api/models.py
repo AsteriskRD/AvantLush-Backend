@@ -407,12 +407,14 @@ class Customer(models.Model):
 
     def __str__(self):
         return self.name
+    
 class Order(models.Model):
     PAYMENT_TYPE_CHOICES = [
         ('CASH', 'Cash'),
         ('CREDIT', 'Credit Card'),
         ('DEBIT', 'Debit Card'),
         ('TRANSFER', 'Bank Transfer'),
+        ('CLOVER_HOSTED', 'Clover Hosted'),  # Add this for Clover payments
     ]
     
     ORDER_TYPE_CHOICES = [
@@ -430,17 +432,17 @@ class Order(models.Model):
         ('RETURNED', 'Returned'),
         ('DAMAGED', 'Damaged'),
     ]
-
+    
     PAYMENT_STATUS_CHOICES = [
         ('PENDING', 'Pending'),
         ('PAID', 'Paid'),
         ('FAILED', 'Failed'),
         ('REFUNDED', 'Refunded'),
     ]
-
+    
     # Customer Information
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='orders')
-    customer = models.ForeignKey(Customer, on_delete=models.CASCADE, null=True)
+    customer = models.ForeignKey(Customer, on_delete=models.CASCADE, null=True, blank=True)
     
     # Order Details
     order_number = models.CharField(max_length=50, unique=True, editable=False)
@@ -449,10 +451,10 @@ class Order(models.Model):
     order_date = models.DateField(auto_now_add=True)
     order_time = models.TimeField(auto_now_add=True)
     note = models.TextField(blank=True)
-
+    
     # Payment Information
-    payment_type = models.CharField(max_length=20, choices=PAYMENT_TYPE_CHOICES)
-    payment_status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='PENDING')
+    payment_type = models.CharField(max_length=20, choices=PAYMENT_TYPE_CHOICES, blank=True, null=True)
+    payment_status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='PENDING')  # KEEP ONLY ONE!
     billing_address = models.TextField(null=True, blank=True)
     
     # Financial Details
@@ -469,10 +471,13 @@ class Order(models.Model):
     shipping_country = models.CharField(max_length=100)
     shipping_zip = models.CharField(max_length=20)
     
+    # Clover Integration
+    clover_session_id = models.CharField(max_length=255, blank=True, null=True)
+    
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
+    
     def save(self, *args, **kwargs):
         if not self.order_number:
             # Generate order number: ORD-YYYYMMDD-XXXX
@@ -491,15 +496,16 @@ class Order(models.Model):
             self.discount
         )
         super().save(*args, **kwargs)
-
+    
     def __str__(self):
         if self.customer:
             return f"Order {self.order_number} - {self.customer.name}"
         else:
             return f"Order {self.order_number}"
-        
+    
     class Meta:
         ordering = ['-created_at']
+
 
 
 class OrderItem(models.Model):

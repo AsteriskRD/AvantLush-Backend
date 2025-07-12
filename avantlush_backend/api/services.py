@@ -206,14 +206,33 @@ class CloverPaymentService(BasePaymentService):
         print(f"🔍 DEBUG: Order data received: {order_data}")
         
         try:
+            # Prepare customer data - only include fields that are provided
+            customer_data = {}
+            
+            customer_info = order_data.get('customer', {})
+            
+            # Email (required by most payment processors)
+            customer_data['email'] = customer_info.get('email', 'customer@example.com')
+            
+            # Names (optional)
+            if customer_info.get('firstName'):
+                customer_data['firstName'] = customer_info['firstName']
+            else:
+                customer_data['firstName'] = 'Customer'  # Minimal default
+            
+            if customer_info.get('lastName'):
+                customer_data['lastName'] = customer_info['lastName']
+            else:
+                customer_data['lastName'] = ''  # Empty instead of default
+            
+            # Phone number - ONLY include if provided
+            if customer_info.get('phoneNumber'):
+                customer_data['phoneNumber'] = customer_info['phoneNumber']
+            # ✅ Don't include phoneNumber if not provided
+            
             # Prepare request data in Clover's required format
             clover_request = {
-                "customer": {
-                    "email": order_data.get('customer', {}).get('email', 'customer@example.com'),
-                    "firstName": order_data.get('customer', {}).get('firstName', 'Test'),
-                    "lastName": order_data.get('customer', {}).get('lastName', 'Customer'),
-                    "phoneNumber": order_data.get('customer', {}).get('phoneNumber', '555-555-0002')
-                },
+                "customer": customer_data,
                 "shoppingCart": {
                     "lineItems": [
                         {
@@ -226,14 +245,16 @@ class CloverPaymentService(BasePaymentService):
                 }
             }
             
-            # 🔧 FIX: Use correct redirect URLs with /api/ prefix
+            print(f"🔍 DEBUG: Customer data: {customer_data}")
+            
+            # Use BACKEND URLs for Clover redirects (these will proxy to frontend)
             redirect_urls = order_data.get('redirect_urls', {})
             backend_base = settings.BACKEND_URL
             
             clover_request["redirectUrls"] = {
-                "success": redirect_urls.get('success', f"{backend_base}/api/checkout/success"),
-                "failure": redirect_urls.get('failure', f"{backend_base}/api/checkout/failure"),
-                "cancel": redirect_urls.get('cancel', f"{backend_base}/api/checkout/cancel")  # Add cancel URL
+                "success": redirect_urls.get('success', f"{backend_base}/checkout/success"),
+                "failure": redirect_urls.get('failure', f"{backend_base}/checkout/failure"), 
+                "cancel": redirect_urls.get('cancel', f"{backend_base}/checkout/cancel")
             }
             
             print(f"🔍 DEBUG: Clover request payload: {clover_request}")
