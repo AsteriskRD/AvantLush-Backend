@@ -1067,13 +1067,14 @@ def create_clover_hosted_checkout_test(request):
         from django.contrib.auth import get_user_model
         User = get_user_model()
         
+        # 🔧 FIX: Remove email_verified field and use correct fields
         test_user, created = User.objects.get_or_create(
             email='test-checkout@example.com',
             defaults={
                 'first_name': 'Test',
                 'last_name': 'User',
                 'is_active': True,
-                'email_verified': True
+                # Remove email_verified - it doesn't exist in your model
             }
         )
         
@@ -1097,9 +1098,8 @@ def create_clover_hosted_checkout_test(request):
         # STEP 2: Create Order in Database FIRST
         with transaction.atomic():
             # Use the test user's cart
-            cart = Cart.objects.filter(user=test_user).first()
-            if not cart:
-                cart = Cart.objects.create(user=test_user)
+            cart, cart_created = Cart.objects.get_or_create(user=test_user)
+            if cart_created:
                 print(f"✅ Created new cart for test user: {test_user.email}")
             else:
                 print(f"✅ Using existing cart for test user: {test_user.email}")
@@ -1130,15 +1130,15 @@ def create_clover_hosted_checkout_test(request):
             # Create the order for the test user
             shipping_address = data.get('shipping_address', {})
             order = Order.objects.create(
-                user=test_user,  # Use test user
+                user=test_user,
                 shipping_address=shipping_address.get('street_address', '123 Test St'),
                 shipping_city=shipping_address.get('city', 'Test City'),
                 shipping_state=shipping_address.get('state', 'CA'),
                 shipping_country=shipping_address.get('country', 'US'),
                 shipping_zip=shipping_address.get('zip_code', '12345'),
-                shipping_cost=Decimal(data.get('shipping_cost', '4.99')),
+                shipping_cost=Decimal(str(data.get('shipping_cost', '4.99'))),
                 subtotal=Decimal('0.00'),
-                total=Decimal(data['total_amount']),
+                total=Decimal(str(data['total_amount'])),
                 status='PENDING',
                 payment_status='PENDING'
             )
@@ -1154,9 +1154,10 @@ def create_clover_hosted_checkout_test(request):
                 )
                 subtotal += cart_item.product.price * cart_item.quantity
                 
-                # Update stock
-                cart_item.product.stock_quantity -= cart_item.quantity
-                cart_item.product.save()
+                # Update stock (with safety check)
+                if cart_item.product.stock_quantity >= cart_item.quantity:
+                    cart_item.product.stock_quantity -= cart_item.quantity
+                    cart_item.product.save()
             
             # Update order totals
             order.subtotal = subtotal
@@ -1237,6 +1238,7 @@ def create_clover_hosted_checkout_test(request):
                 'message': f'Test order creation failed: {str(e)}'
             }
         }, status=500)
+
 
 
 
