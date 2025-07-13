@@ -1053,7 +1053,6 @@ def refresh_user_orders(request):
         }, status=500)
 
 
-# 🔧 ADD: Test endpoint that allows unauthenticated access for development
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def create_clover_hosted_checkout_test(request):
@@ -1064,31 +1063,173 @@ def create_clover_hosted_checkout_test(request):
         data = request.data
         print(f"🧪 TEST: Creating order + Clover checkout for: {data}")
         
-        # For testing - use first user or create test user
-        if not request.user.is_authenticated:
-            from django.contrib.auth import get_user_model
-            User = get_user_model()
-            test_user = User.objects.filter(email__icontains='test').first()
-            if not test_user:
-                test_user = User.objects.first()
-            
-            if not test_user:
-                return Response({
-                    'is_success': False,
-                    'data': {
-                        'status': 'error',
-                        'message': 'No users found. Create a user first.'
-                    }
-                }, status=400)
-            
-            request.user = test_user
-            print(f"🧪 TEST: Using test user: {test_user.email}")
+        # Get or create a test user
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
         
-        # Call the main function with the test user
-        return create_clover_hosted_checkout(request)
+        test_user, created = User.objects.get_or_create(
+            email='test-checkout@example.com',
+            defaults={
+                'first_name': 'Test',
+                'last_name': 'User',
+                'is_active': True,
+                'email_verified': True
+            }
+        )
         
+        if created:
+            test_user.set_password('TestPassword123!')
+            test_user.save()
+            print(f"🧪 Created new test user: {test_user.email}")
+        
+        print(f"🧪 TEST: Using test user: {test_user.email}")
+        
+        # STEP 1: Validate required fields
+        if not data.get('total_amount'):
+            return Response({
+                'is_success': False,
+                'data': {
+                    'status': 'error',
+                    'message': 'total_amount is required'
+                }
+            }, status=400)
+        
+        # STEP 2: Create Order in Database FIRST
+        with transaction.atomic():
+            # Use the test user's cart
+            cart = Cart.objects.filter(user=test_user).first()
+            if not cart:
+                cart = Cart.objects.create(user=test_user)
+                print(f"✅ Created new cart for test user: {test_user.email}")
+            else:
+                print(f"✅ Using existing cart for test user: {test_user.email}")
+            
+            cart_items = CartItem.objects.filter(cart=cart).select_related('product')
+            
+            # For testing, create a cart item if none exist
+            if not cart_items.exists():
+                from avantlush_backend.api.models import Product
+                product = Product.objects.first()
+                if product:
+                    cart_item = CartItem.objects.create(
+                        cart=cart,
+                        product=product,
+                        quantity=1
+                    )
+                    cart_items = CartItem.objects.filter(cart=cart).select_related('product')
+                    print(f"✅ Created test cart item for user: {test_user.email}")
+                else:
+                    return Response({
+                        'is_success': False,
+                        'data': {
+                            'status': 'error',
+                            'message': 'No products found. Create a product first.'
+                        }
+                    }, status=400)
+            
+            # Create the order for the test user
+            shipping_address = data.get('shipping_address', {})
+            order = Order.objects.create(
+                user=test_user,  # Use test user
+                shipping_address=shipping_address.get('street_address', '123 Test St'),
+                shipping_city=shipping_address.get('city', 'Test City'),
+                shipping_state=shipping_address.get('state', 'CA'),
+                shipping_country=shipping_address.get('country', 'US'),
+                shipping_zip=shipping_address.get('zip_code', '12345'),
+                shipping_cost=Decimal(data.get('shipping_cost', '4.99')),
+                subtotal=Decimal('0.00'),
+                total=Decimal(data['total_amount']),
+                status='PENDING',
+                payment_status='PENDING'
+            )
+            
+            # Create order items from cart
+            subtotal = Decimal('0.00')
+            for cart_item in cart_items:
+                OrderItem.objects.create(
+                    order=order,
+                    product=cart_item.product,
+                    quantity=cart_item.quantity,
+                    price=cart_item.product.price
+                )
+                subtotal += cart_item.product.price * cart_item.quantity
+                
+                # Update stock
+                cart_item.product.stock_quantity -= cart_item.quantity
+                cart_item.product.save()
+            
+            # Update order totals
+            order.subtotal = subtotal
+            order.save()
+            
+            print(f"✅ Created Test Order #{order.id} - {order.order_number} for user: {test_user.email}")
+        
+        # STEP 3: Create Clover Hosted Checkout Session
+        clover_order_data = {
+            'total_amount': float(order.total),
+            'currency': 'USD',
+            'order_number': order.order_number,
+            'order_id': order.id,
+            'customer': {
+                'email': test_user.email,
+                'firstName': test_user.first_name or 'Test',
+                'lastName': test_user.last_name or 'User',
+                'phoneNumber': '555-555-0000'
+            },
+            'redirect_urls': {
+                'success': f"https://httpbin.org/get?status=success&order_id={order.id}&user={test_user.email}",
+                'failure': f"https://httpbin.org/get?status=failure&order_id={order.id}&user={test_user.email}",
+                'cancel': f"https://httpbin.org/get?status=cancel&order_id={order.id}&user={test_user.email}"
+            }
+        }
+        
+        print(f"🔧 DEBUG: Using URLs for test user {test_user.email}: {clover_order_data['redirect_urls']}")
+        
+        clover_service = CloverPaymentService()
+        result = clover_service.create_hosted_checkout_session(clover_order_data)
+        
+        if result['success']:
+            # Store Clover session info in order
+            order.clover_session_id = result.get('session_id')
+            order.save()
+            
+            # Clear cart after successful order creation
+            cart_items.delete()
+            print(f"✅ Cleared cart for test user: {test_user.email}")
+            
+            return Response({
+                'is_success': True,
+                'data': {
+                    'status': 'success',
+                    'message': f'Test order created for {test_user.email}',
+                    'order_id': order.id,
+                    'order_number': order.order_number,
+                    'checkout_url': result['checkout_url'],
+                    'session_id': result['session_id'],
+                    'total_amount': float(order.total),
+                    'user_email': test_user.email,
+                    'instructions': 'Visit checkout_url to complete payment'
+                }
+            })
+        else:
+            # If Clover fails, mark order as failed
+            order.status = 'FAILED'
+            order.save()
+            
+            return Response({
+                'is_success': False,
+                'data': {
+                    'status': 'error',
+                    'message': f'Test checkout session creation failed: {result["error"]}',
+                    'order_id': order.id,
+                    'user_email': test_user.email
+                }
+            }, status=400)
+    
     except Exception as e:
         print(f"❌ TEST ERROR: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return Response({
             'is_success': False,
             'data': {
@@ -1096,7 +1237,6 @@ def create_clover_hosted_checkout_test(request):
                 'message': f'Test order creation failed: {str(e)}'
             }
         }, status=500)
-
 
 
 
