@@ -842,7 +842,7 @@ def clover_hosted_webhook(request):
 
 
 @api_view(['POST'])
-@permission_classes([AllowAny])  # For testing
+@permission_classes([IsAuthenticated])  # 🔧 CHANGE: Require authentication for production
 def create_clover_hosted_checkout(request):
     """
     Create order in database FIRST, then create Clover checkout session
@@ -850,20 +850,18 @@ def create_clover_hosted_checkout(request):
     try:
         data = request.data
         print(f"🔍 DEBUG: Creating order + Clover checkout for: {data}")
+        print(f"🔍 DEBUG: Authenticated user: {request.user.email if request.user.is_authenticated else 'Anonymous'}")
         
-        # For testing without authentication
+        # 🔧 FIX: Proper authentication handling
         if not request.user.is_authenticated:
-            from django.contrib.auth import get_user_model
-            User = get_user_model()
-            request.user = User.objects.first()
-            if not request.user:
-                return Response({
-                    'is_success': False,
-                    'data': {
-                        'status': 'error',
-                        'message': 'No users found. Create a user first.'
-                    }
-                }, status=400)
+            return Response({
+                'is_success': False,
+                'data': {
+                    'status': 'error',
+                    'message': 'Authentication required. Please login first.',
+                    'code': 'AUTH_REQUIRED'
+                }
+            }, status=401)
         
         # STEP 1: Validate required fields
         if not data.get('total_amount'):
@@ -877,13 +875,13 @@ def create_clover_hosted_checkout(request):
         
         # STEP 2: Create Order in Database FIRST
         with transaction.atomic():
-            # 🔧 FIX: Get the first cart or create a new one
+            # 🔧 FIX: Use the authenticated user's cart
             cart = Cart.objects.filter(user=request.user).first()
             if not cart:
                 cart = Cart.objects.create(user=request.user)
-                print(f"✅ Created new cart: {cart.id}")
+                print(f"✅ Created new cart for user: {request.user.email}")
             else:
-                print(f"✅ Using existing cart: {cart.id}")
+                print(f"✅ Using existing cart for user: {request.user.email}")
             
             cart_items = CartItem.objects.filter(cart=cart).select_related('product')
             
@@ -898,7 +896,7 @@ def create_clover_hosted_checkout(request):
                         quantity=1
                     )
                     cart_items = CartItem.objects.filter(cart=cart).select_related('product')
-                    print(f"✅ Created test cart item: {cart_item}")
+                    print(f"✅ Created test cart item for user: {request.user.email}")
                 else:
                     return Response({
                         'is_success': False,
@@ -908,10 +906,10 @@ def create_clover_hosted_checkout(request):
                         }
                     }, status=400)
             
-            # Create the order
+            # Create the order for the authenticated user
             shipping_address = data.get('shipping_address', {})
             order = Order.objects.create(
-                user=request.user,
+                user=request.user,  # 🔧 FIX: Always use authenticated user
                 shipping_address=shipping_address.get('street_address', '123 Test St'),
                 shipping_city=shipping_address.get('city', 'Test City'),
                 shipping_state=shipping_address.get('state', 'CA'),
@@ -943,28 +941,29 @@ def create_clover_hosted_checkout(request):
             order.subtotal = subtotal
             order.save()
             
-            print(f"✅ Created Order #{order.id} - {order.order_number}")
+            print(f"✅ Created Order #{order.id} - {order.order_number} for user: {request.user.email}")
         
-        # STEP 3: Create Clover Hosted Checkout Session with HTTPS URLs
+        # STEP 3: Create Clover Hosted Checkout Session with proper user data
         clover_order_data = {
             'total_amount': float(order.total),
             'currency': 'USD',
             'order_number': order.order_number,
             'order_id': order.id,
             'customer': {
-                'email': request.user.email,
+                'email': request.user.email,  # 🔧 FIX: Use actual authenticated user
                 'firstName': request.user.first_name or 'Customer',
                 'lastName': request.user.last_name or '',
+                'phoneNumber': getattr(request.user, 'phone_number', '555-555-0000')
             },
-            # 🔧 FIX: Use HTTPS test URLs for Clover
+            # 🔧 FIX: Use proper redirect URLs
             'redirect_urls': {
-                'success': f"https://httpbin.org/get?status=success&order_id={order.id}",
-                'failure': f"https://httpbin.org/get?status=failure&order_id={order.id}",
-                'cancel': f"https://httpbin.org/get?status=cancel&order_id={order.id}"
+                'success': f"https://httpbin.org/get?status=success&order_id={order.id}&user={request.user.email}",
+                'failure': f"https://httpbin.org/get?status=failure&order_id={order.id}&user={request.user.email}",
+                'cancel': f"https://httpbin.org/get?status=cancel&order_id={order.id}&user={request.user.email}"
             }
         }
         
-        print(f"🔧 DEBUG: Using HTTPS URLs: {clover_order_data['redirect_urls']}")
+        print(f"🔧 DEBUG: Using URLs for user {request.user.email}: {clover_order_data['redirect_urls']}")
         
         clover_service = CloverPaymentService()
         result = clover_service.create_hosted_checkout_session(clover_order_data)
@@ -976,17 +975,19 @@ def create_clover_hosted_checkout(request):
             
             # Clear cart after successful order creation
             cart_items.delete()
+            print(f"✅ Cleared cart for user: {request.user.email}")
             
             return Response({
                 'is_success': True,
                 'data': {
                     'status': 'success',
-                    'message': 'Order created and checkout session ready',
+                    'message': f'Order created for {request.user.email}',
                     'order_id': order.id,
                     'order_number': order.order_number,
                     'checkout_url': result['checkout_url'],
                     'session_id': result['session_id'],
                     'total_amount': float(order.total),
+                    'user_email': request.user.email,  # 🔧 ADD: Include user info
                     'instructions': 'Visit checkout_url to complete payment'
                 }
             })
@@ -1000,7 +1001,8 @@ def create_clover_hosted_checkout(request):
                 'data': {
                     'status': 'error',
                     'message': f'Checkout session creation failed: {result["error"]}',
-                    'order_id': order.id
+                    'order_id': order.id,
+                    'user_email': request.user.email
                 }
             }, status=400)
     
@@ -1012,9 +1014,89 @@ def create_clover_hosted_checkout(request):
             'is_success': False,
             'data': {
                 'status': 'error',
-                'message': f'Order creation failed: {str(e)}'
+                'message': f'Order creation failed: {str(e)}',
+                'user_email': request.user.email if request.user.is_authenticated else 'Anonymous'
             }
         }, status=500)
+
+
+# 🔧 ADD: Order refresh endpoint for frontend
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def refresh_user_orders(request):
+    """Force refresh user's orders - useful for frontend"""
+    try:
+        orders = Order.objects.filter(user=request.user).order_by('-created_at')
+        
+        # Clear any cache if you're using one
+        from django.core.cache import cache
+        cache_key = f"user_orders_{request.user.id}"
+        cache.delete(cache_key)
+        
+        # Use your existing OrderSerializer
+        from .serializers import OrderSerializer
+        serializer = OrderSerializer(orders, many=True)
+        
+        return Response({
+            'success': True,
+            'count': orders.count(),
+            'orders': serializer.data,
+            'user': request.user.email,
+            'refreshed_at': timezone.now().isoformat()
+        })
+        
+    except Exception as e:
+        return Response({
+            'success': False,
+            'error': str(e),
+            'user': request.user.email
+        }, status=500)
+
+
+# 🔧 ADD: Test endpoint that allows unauthenticated access for development
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def create_clover_hosted_checkout_test(request):
+    """
+    TEST ONLY: Create order without authentication for development
+    """
+    try:
+        data = request.data
+        print(f"🧪 TEST: Creating order + Clover checkout for: {data}")
+        
+        # For testing - use first user or create test user
+        if not request.user.is_authenticated:
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            test_user = User.objects.filter(email__icontains='test').first()
+            if not test_user:
+                test_user = User.objects.first()
+            
+            if not test_user:
+                return Response({
+                    'is_success': False,
+                    'data': {
+                        'status': 'error',
+                        'message': 'No users found. Create a user first.'
+                    }
+                }, status=400)
+            
+            request.user = test_user
+            print(f"🧪 TEST: Using test user: {test_user.email}")
+        
+        # Call the main function with the test user
+        return create_clover_hosted_checkout(request)
+        
+    except Exception as e:
+        print(f"❌ TEST ERROR: {str(e)}")
+        return Response({
+            'is_success': False,
+            'data': {
+                'status': 'error',
+                'message': f'Test order creation failed: {str(e)}'
+            }
+        }, status=500)
+
 
 
 
