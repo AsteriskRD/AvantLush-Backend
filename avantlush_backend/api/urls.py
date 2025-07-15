@@ -20,7 +20,7 @@ from .views import (
     WishlistViewSet,
     WishlistItemViewSet,
     CheckoutViewSet,
-    # SupportTicketViewSet,  # 🚫 COMMENTED OUT: Not implemented yet
+    SupportTicketViewSet,  
     ProfileViewSet,
     AddressViewSet,
     ProductSearchView,
@@ -48,8 +48,8 @@ from .views import (
     create_checkout_session,
     test_complete_checkout,
     create_clover_hosted_checkout,
-    create_clover_hosted_checkout_test,  # 🔧 ADD: Import test function
-    refresh_user_orders,  # 🔧 ADD: Import refresh function
+    create_clover_hosted_checkout_test,
+    refresh_user_orders, 
     checkout_success,
     checkout_failure,
     checkout_cancel,
@@ -68,8 +68,8 @@ router.register(r'addresses', AddressViewSet, basename='address')
 router.register(r'wishlist', WishlistViewSet, basename='wishlist')
 router.register(r'wishlist-items', WishlistItemViewSet, basename='wishlist-item')
 router.register(r'reviews', ReviewViewSet, basename='review')
-# router.register(r'shipping-methods', ShippingMethodViewSet, basename='shipping-method')  # 🚫 COMMENTED OUT: Not implemented yet
-# router.register(r'help', SupportTicketViewSet, basename='help')  # 🚫 COMMENTED OUT: Not implemented yet
+router.register(r'shipping-methods', ShippingMethodViewSet, basename='shipping-method')  # 🚫 COMMENTED OUT: Not implemented yet
+router.register(r'help', SupportTicketViewSet, basename='help')  
 router.register(r'checkout', CheckoutViewSet, basename='checkout')
 router.register(r'dashboard', DashboardViewSet, basename='dashboard')
 router.register(r'product-management', ProductViewSet, basename='product-management')
