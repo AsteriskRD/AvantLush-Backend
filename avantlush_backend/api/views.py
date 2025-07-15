@@ -289,7 +289,10 @@ class GoogleLoginView(APIView):
                     # Update Google ID if not already set
                     if not user.google_id:
                         user.google_id = google_id
-                        user.save()
+                    # --- FIX: Save first and last name from Google ---
+                    user.first_name = first_name or ''
+                    user.last_name = last_name or ''
+                    user.save()
                     
                     # Always update the profile with the name from Google
                     profile, created = Profile.objects.get_or_create(user=user)
@@ -306,6 +309,10 @@ class GoogleLoginView(APIView):
                         location=location,
                         google_id=google_id
                     )
+                    # --- FIX: Save first and last name from Google ---
+                    user.first_name = first_name or ''
+                    user.last_name = last_name or ''
+                    user.save()
                     # Create profile with name from Google
                     profile, created = Profile.objects.get_or_create(user=user)
                     if name:
