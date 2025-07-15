@@ -31,6 +31,9 @@ class CustomUser(AbstractUser):
     location = models.CharField(max_length=100, null=True, blank=True)
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True) 
     google_id = models.CharField(max_length=100, blank=True, null=True)
+    # --- Add these fields for proper name handling ---
+    first_name = models.CharField(max_length=150, blank=True)
+    last_name = models.CharField(max_length=150, blank=True)
     
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = []
