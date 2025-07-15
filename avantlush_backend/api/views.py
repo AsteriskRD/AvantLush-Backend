@@ -932,6 +932,15 @@ def create_clover_hosted_checkout(request):
             # Create order items from cart
             subtotal = Decimal('0.00')
             for cart_item in cart_items:
+                # Check stock before creating order item and subtracting
+                if cart_item.product.stock_quantity < cart_item.quantity:
+                    return Response({
+                        'is_success': False,
+                        'data': {
+                            'status': 'error',
+                            'message': f'Not enough stock for {cart_item.product.name}. Available: {cart_item.product.stock_quantity}, Requested: {cart_item.quantity}'
+                        }
+                    }, status=400)
                 OrderItem.objects.create(
                     order=order,
                     product=cart_item.product,
@@ -939,7 +948,6 @@ def create_clover_hosted_checkout(request):
                     price=cart_item.product.price
                 )
                 subtotal += cart_item.product.price * cart_item.quantity
-                
                 # Update stock
                 cart_item.product.stock_quantity -= cart_item.quantity
                 cart_item.product.save()
