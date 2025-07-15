@@ -1075,8 +1075,23 @@ def create_clover_hosted_checkout_test(request):
     TEST ONLY: Create order without authentication for development
     """
     try:
+        import json
         data = request.data
-        print(f"🧪 TEST: Creating order + Clover checkout for: {data}")
+        print(f"🧪 TEST: Creating order + Clover checkout for: {data} (type: {type(data)})")
+        # Defensive: If data is a string, try to parse as JSON
+        if isinstance(data, str):
+            try:
+                data = json.loads(data)
+                print(f"🧪 TEST: Parsed string data to dict: {data}")
+            except Exception as parse_exc:
+                print(f"❌ TEST ERROR: Could not parse string data as JSON: {parse_exc}")
+                return Response({
+                    'is_success': False,
+                    'data': {
+                        'status': 'error',
+                        'message': f'Invalid JSON payload: {parse_exc}'
+                    }
+                }, status=400)
         
         # Get or create a test user
         from django.contrib.auth import get_user_model
