@@ -322,21 +322,21 @@ class ProductAdmin(admin.ModelAdmin):
 
 # Other Admin Registrations
 class CustomUserAdmin(UserAdmin):
-    list_display = ('email', 'location', 'is_active', 'date_joined', 'is_staff')
-    search_fields = ('email', 'location')
+    list_display = ('email', 'first_name', 'last_name', 'location', 'is_active', 'date_joined', 'is_staff')
+    search_fields = ('email', 'location', 'first_name', 'last_name')
     ordering = ('-date_joined',)
     list_filter = ('is_active', 'is_staff', 'location')
     
     add_fieldsets = (
         (None, {
             'classes': ('wide',),
-            'fields': ('email', 'password1', 'password2', 'location'),
+            'fields': ('email', 'password1', 'password2', 'first_name', 'last_name', 'location'),
         }),
     )
     
     fieldsets = (
         (None, {'fields': ('email', 'password')}),
-        ('Personal info', {'fields': ('location',)}),
+        ('Personal info', {'fields': ('first_name', 'last_name', 'location')}),
         ('Permissions', {'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
         ('Important dates', {'fields': ('last_login', 'date_joined')}),
     )
