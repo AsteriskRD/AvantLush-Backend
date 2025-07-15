@@ -20,8 +20,7 @@ from .views import (
     WishlistViewSet,
     WishlistItemViewSet,
     CheckoutViewSet,
-    # ShippingMethodViewSet,  # 🚫 COMMENTED OUT: Not implemented yet
-    SupportTicketViewSet,
+    # SupportTicketViewSet,  # 🚫 COMMENTED OUT: Not implemented yet
     ProfileViewSet,
     AddressViewSet,
     ProductSearchView,
@@ -70,8 +69,8 @@ router.register(r'wishlist', WishlistViewSet, basename='wishlist')
 router.register(r'wishlist-items', WishlistItemViewSet, basename='wishlist-item')
 router.register(r'reviews', ReviewViewSet, basename='review')
 # router.register(r'shipping-methods', ShippingMethodViewSet, basename='shipping-method')  # 🚫 COMMENTED OUT: Not implemented yet
+# router.register(r'help', SupportTicketViewSet, basename='help')  # 🚫 COMMENTED OUT: Not implemented yet
 router.register(r'checkout', CheckoutViewSet, basename='checkout')
-router.register(r'help', SupportTicketViewSet, basename='help')
 router.register(r'dashboard', DashboardViewSet, basename='dashboard')
 router.register(r'product-management', ProductViewSet, basename='product-management')
 router.register(r'customers', CustomerViewSet, basename='customer')
