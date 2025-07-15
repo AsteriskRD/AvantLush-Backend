@@ -962,11 +962,11 @@ def create_clover_hosted_checkout(request):
                 'lastName': request.user.last_name or '',
                 'phoneNumber': getattr(request.user, 'phone_number', '555-555-0000')
             },
-            # 🔧 FIX: Use proper redirect URLs
+            # 🔧 FIX: Use proper redirect URLs for local frontend
             'redirect_urls': {
-                'success': f"https://httpbin.org/get?status=success&order_id={order.id}&user={request.user.email}",
-                'failure': f"https://httpbin.org/get?status=failure&order_id={order.id}&user={request.user.email}",
-                'cancel': f"https://httpbin.org/get?status=cancel&order_id={order.id}&user={request.user.email}"
+                'success': f"http://localhost:5713/checkout/success?order_id={order.id}&user={request.user.email}",
+                'failure': f"http://localhost:5713/checkout/failure?order_id={order.id}&user={request.user.email}",
+                'cancel': f"http://localhost:5713/checkout/cancel?order_id={order.id}&user={request.user.email}"
             }
         }
         
