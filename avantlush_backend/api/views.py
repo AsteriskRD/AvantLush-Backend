@@ -3582,3 +3582,9 @@ class CheckoutViewSet(viewsets.ViewSet):
                 order.status = 'PROCESSING'
                 order.payment_status = 'PAID'
                 order.save()
+
+        except Exception as e:
+            return Response({
+                'status': 'error',
+                'message': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
