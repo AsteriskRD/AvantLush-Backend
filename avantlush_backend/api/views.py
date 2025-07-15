@@ -3588,3 +3588,10 @@ class CheckoutViewSet(viewsets.ViewSet):
                 'status': 'error',
                 'message': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
+
+class ShippingMethodViewSet(viewsets.ViewSet):
+    """Placeholder ShippingMethodViewSet. Returns an empty list. Replace with real logic when available."""
+    permission_classes = [AllowAny]
+
+    def list(self, request):
+        return Response([])
