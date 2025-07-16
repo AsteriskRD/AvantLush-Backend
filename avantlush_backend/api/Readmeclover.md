@@ -96,6 +96,7 @@ Creates a Clover hosted checkout session for authenticated users. This endpoint 
 
 ## 🧪 2. Create Clover Hosted Checkout Session (Test - No Auth)
 
+
 ### Endpoint
 ```
 POST /api/create-hosted-checkout-test/
