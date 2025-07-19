@@ -988,9 +988,8 @@ def create_clover_hosted_checkout(request):
             order.clover_session_id = result.get('session_id')
             order.save()
             
-            # Clear cart after successful order creation
-            cart_items.delete()
-            print(f"✅ Cleared cart for user: {request.user.email}")
+            # Removed: cart_items.delete() here. Cart will be cleared after payment confirmation.
+            # print(f"✅ Cleared cart for user: {request.user.email}")
             
             return Response({
                 'is_success': True,
@@ -1224,9 +1223,8 @@ def create_clover_hosted_checkout_test(request):
             order.clover_session_id = result.get('session_id')
             order.save()
             
-            # Clear cart after successful order creation
-            cart_items.delete()
-            print(f"✅ Cleared cart for test user: {test_user.email}")
+            # Removed: cart_items.delete() here. Cart will be cleared after payment confirmation.
+            # print(f"✅ Cleared cart for test user: {test_user.email}")
             
             return Response({
                 'is_success': True,
@@ -3515,6 +3513,13 @@ class CheckoutViewSet(viewsets.ViewSet):
                 order.status = 'PROCESSING'  # Changed from 'PAID' to 'PROCESSING'
                 order.payment_status = 'PAID'  # Add this line
                 order.save()
+                
+                # Clear user's cart ONLY after payment is confirmed
+                try:
+                    cart = Cart.objects.get(user=order.user)
+                    cart.items.all().delete()
+                except Cart.DoesNotExist:
+                    pass
                 
                 return Response({
                     'status': 'success',
