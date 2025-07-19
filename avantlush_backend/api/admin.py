@@ -245,6 +245,7 @@ class ProductAdmin(admin.ModelAdmin):
         ('Pricing & Inventory', {
             'fields': (
                 'price',
+                'base_price',  # <-- Added base_price field
                 'discount_type',
                 'discount_value',
                 'stock_quantity',
