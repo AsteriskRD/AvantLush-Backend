@@ -217,14 +217,14 @@ DATABASES = {
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
 
 #FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5173')  # Updated to new port
-FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5173')
+FRONTEND_URL = os.getenv('FRONTEND_URL', 'https://avantlush.com')
 BACKEND_URL = os.getenv('BACKEND_URL', 'http://localhost:8000')
 
 # For Render deployment
 if 'RENDER' in os.environ:
     BACKEND_URL = 'https://avantlush-backend-2s6k.onrender.com'
     # ADD THIS LINE - Set production frontend URL
-    FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5173')
+    FRONTEND_URL = os.getenv('FRONTEND_URL', 'https://avantlush.com')
 
 # Production Clover Configuration
 CLOVER_ENVIRONMENT = os.getenv('CLOVER_ENVIRONMENT', 'SANDBOX')
