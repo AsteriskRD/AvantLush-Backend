@@ -517,14 +517,16 @@ class CartItemSerializer(serializers.ModelSerializer):
         write_only=True,
         required=False
     )
-    
+    quantity_left = serializers.SerializerMethodField(read_only=True)  # New field
+
     class Meta:
         model = CartItem
         fields = [
             'id', 'product', 'quantity', 'product_name', 'product_price',
-            'stock_status', 'product_image', 'size', 'color', 'size_id', 'color_id'
+            'stock_status', 'product_image', 'size', 'color', 'size_id', 'color_id',
+            'quantity_left'  # Add new field here
         ]
-    
+
     def to_representation(self, instance):
         representation = super().to_representation(instance)
         representation['cart_item_id'] = representation.pop('id')
@@ -552,6 +554,10 @@ class CartItemSerializer(serializers.ModelSerializer):
             return obj.product.images[0]  # Return the first image URL
             
         return None  # Return None if no images are available
+
+    def get_quantity_left(self, obj):
+        # Return the current stock left for this product
+        return obj.product.stock_quantity
     
 class CartSerializer(serializers.ModelSerializer):
     items = CartItemSerializer(many=True, read_only=True)
