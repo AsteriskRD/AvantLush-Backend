@@ -5748,3 +5748,10 @@ class CustomerViewSet(viewsets.ModelViewSet):
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=['get'])
+    def tracking_history(self, request, pk=None):
+        """Return tracking history for the order."""
+        order = self.get_object()
+        serializer = OrderTrackingSerializer(order.tracking_history.all(), many=True)
+        return Response(serializer.data)
