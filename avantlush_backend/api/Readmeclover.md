@@ -856,3 +856,120 @@ const trackCheckoutComplete = (orderData) => {
 
 *Last updated: January 2025*
 *For technical support, contact the backend development team.*
+
+---
+
+## 🖼️ Carousel (Banner) API Documentation
+
+### Base URL
+```
+/api/carousel/
+```
+
+### Authentication
+- All endpoints require the user to be an **admin** (IsAdminUser).
+
+### Endpoints
+
+#### 1. List All Banners
+**GET** `/api/carousel/`
+
+**Response:**
+```json
+{
+  "count": 1,
+  "next": null,
+  "previous": null,
+  "results": [
+    {
+      "id": 1,
+      "text": "Transform Your Kitchen with Elegant & Durable Furniture",
+      "image": "image/upload/v1234567890/carousel/abc123.png",
+      "active": true,
+      "order": 0,
+      "created_at": "2025-04-13T00:49:35.335Z",
+      "updated_at": "2025-04-15T22:34:09.166Z"
+    }
+  ]
+}
+```
+
+#### 2. Retrieve a Single Banner
+**GET** `/api/carousel/{id}/`
+
+**Response:**
+Same as a single object in the list above.
+
+#### 3. Create a New Banner
+**POST** `/api/carousel/`
+
+**Content-Type:** `multipart/form-data`
+
+**Payload:**
+| Field   | Type    | Required | Description                        |
+|---------|---------|----------|------------------------------------|
+| text    | string  | Yes      | Banner text/caption                |
+| image   | file    | Yes      | Image file (jpg/png)               |
+| active  | boolean | Yes      | Whether the banner is active       |
+| order   | int     | Yes      | Display order (lower = first)      |
+
+**Example (form-data):**
+```
+text: "New Banner"
+image: [file upload]
+active: true
+order: 1
+```
+
+**Response:**
+Returns the created banner object.
+
+#### 4. Update a Banner
+**PUT/PATCH** `/api/carousel/{id}/`
+
+**Content-Type:** `multipart/form-data` (for image), or `application/json` (for text/active/order only)
+
+**Payload:**
+Any subset of the fields above.
+
+**Example (PATCH):**
+```json
+{
+  "text": "Updated Banner Text",
+  "active": false
+}
+```
+
+#### 5. Delete a Banner
+**DELETE** `/api/carousel/{id}/`
+
+**Response:**
+- `204 No Content` on success.
+
+### Notes for Frontend
+- **Image Upload:** Use `multipart/form-data` for requests with images.
+- **Image URL:** The `image` field in the response is the path to the image on Cloudinary. Prepend your Cloudinary base URL if needed.
+- **Ordering:** Use the `order` field to control the display order of banners.
+- **Active:** Only show banners with `"active": true` on the frontend.
+
+### Example cURL for Create
+```bash
+curl -X POST http://127.0.0.1:8000/api/carousel/ \
+  -H "Authorization: Bearer <your_token>" \
+  -F "text=My Banner" \
+  -F "image=@/path/to/image.png" \
+  -F "active=true" \
+  -F "order=1"
+```
+
+### Summary Table
+| Method | Endpoint              | Description         | Payload Fields                |
+|--------|-----------------------|---------------------|-------------------------------|
+| GET    | /api/carousel/        | List all banners    | -                             |
+| GET    | /api/carousel/{id}/   | Get single banner   | -                             |
+| POST   | /api/carousel/        | Create banner       | text, image, active, order    |
+| PUT    | /api/carousel/{id}/   | Update all fields   | text, image, active, order    |
+| PATCH  | /api/carousel/{id}/   | Update some fields  | text, image, active, order    |
+| DELETE | /api/carousel/{id}/   | Delete banner       | -                             |
+
+---

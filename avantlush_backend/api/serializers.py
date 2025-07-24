@@ -1687,24 +1687,10 @@ class CustomerSimpleSerializer(serializers.ModelSerializer):
         return f"{obj.name} ({obj.email})"
 
 class CarouselItemSerializer(serializers.ModelSerializer):
-    """Serializer for carousel items with all fields for admin use"""
-    image_url = serializers.SerializerMethodField()
-    product_name = serializers.SerializerMethodField(read_only=True)
-    
     class Meta:
         model = CarouselItem
-        fields = [
-            'id', 'title', 'subtitle', 'button_text', 'button_link',
-            'image', 'image_url', 'product', 'product_name', 'order', 'active'
-        ]
-    
-    def get_image_url(self, obj):
-        """Get the Cloudinary URL for the image"""
-        return obj.image.url if obj.image else None
-        
-    def get_product_name(self, obj):
-        """Get the name of the linked product if any"""
-        return obj.product.name if obj.product else None
+        fields = ['id', 'text', 'image', 'active', 'order', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
 
 class CarouselItemPublicSerializer(serializers.ModelSerializer):
     """Lightweight serializer for public carousel display - minimizes payload size"""

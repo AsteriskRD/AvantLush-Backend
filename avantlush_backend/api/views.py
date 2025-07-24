@@ -5755,3 +5755,8 @@ class CustomerViewSet(viewsets.ModelViewSet):
         order = self.get_object()
         serializer = OrderTrackingSerializer(order.tracking_history.all(), many=True)
         return Response(serializer.data)
+
+class CarouselViewSet(viewsets.ModelViewSet):
+    queryset = CarouselItem.objects.all().order_by('order')
+    serializer_class = CarouselItemSerializer
+    permission_classes = [IsAdminUser]
