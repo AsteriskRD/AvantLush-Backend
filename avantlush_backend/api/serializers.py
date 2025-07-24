@@ -1687,11 +1687,16 @@ class CustomerSimpleSerializer(serializers.ModelSerializer):
         return f"{obj.name} ({obj.email})"
 
 class CarouselItemSerializer(serializers.ModelSerializer):
+    image = serializers.SerializerMethodField()
+
     class Meta:
         model = CarouselItem
         fields = ['id', 'text', 'image', 'active', 'order', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
 
+    def get_image(self, obj):
+        return obj.image.url if obj.image else None
+    
 class CarouselItemPublicSerializer(serializers.ModelSerializer):
     """Lightweight serializer for public carousel display - minimizes payload size"""
     url = serializers.SerializerMethodField()  # Renamed from image_url to match frontend needs
