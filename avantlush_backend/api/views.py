@@ -5462,32 +5462,24 @@ class ProductViewSet(viewsets.ModelViewSet):
             return Response({"error": str(e)})
         
 class CarouselViewSet(viewsets.ModelViewSet):
-    """ViewSet for managing carousel items"""
     queryset = CarouselItem.objects.all().order_by('order')
     serializer_class = CarouselItemSerializer
     parser_classes = (MultiPartParser, FormParser)
     authentication_classes = [JWTAuthentication, TokenAuthentication, SessionAuthentication]
-    
+
     def get_permissions(self):
-        """
-        Override permissions:
-        - Admin access required for all operations except public endpoint
-        - Public endpoint accessible to anyone
-        """
         if self.action == 'public':
             return [AllowAny()]
         return [IsAdminUser()]
-    
+
     def get_serializer_class(self):
-        """Use different serializers based on the action"""
         if self.action == 'public':
             return CarouselItemPublicSerializer
         return CarouselItemSerializer
-    
-    @action(detail=False, methods=['get'])
+
+    @action(detail=False, methods=['get'], permission_classes=[AllowAny])
     def public(self, request):
-        """Public endpoint for retrieving active carousel items"""
-        limit = int(request.query_params.get('limit', 5))  # Default to 5 items
+        limit = int(request.query_params.get('limit', 5))
         items = CarouselItem.objects.filter(active=True).order_by('order')[:limit]
         serializer = self.get_serializer(items, many=True)
         return Response(serializer.data)
@@ -5756,7 +5748,27 @@ class CustomerViewSet(viewsets.ModelViewSet):
         serializer = OrderTrackingSerializer(order.tracking_history.all(), many=True)
         return Response(serializer.data)
 
+
+
 class CarouselViewSet(viewsets.ModelViewSet):
     queryset = CarouselItem.objects.all().order_by('order')
     serializer_class = CarouselItemSerializer
-    permission_classes = [IsAdminUser]
+    parser_classes = (MultiPartParser, FormParser)
+    authentication_classes = [JWTAuthentication, TokenAuthentication, SessionAuthentication]
+
+    def get_permissions(self):
+        if self.action == 'public':
+            return [AllowAny()]
+        return [IsAdminUser()]
+
+    def get_serializer_class(self):
+        if self.action == 'public':
+            return CarouselItemPublicSerializer
+        return CarouselItemSerializer
+
+    @action(detail=False, methods=['get'], permission_classes=[AllowAny])
+    def public(self, request):
+        limit = int(request.query_params.get('limit', 5))
+        items = CarouselItem.objects.filter(active=True).order_by('order')[:limit]
+        serializer = self.get_serializer(items, many=True)
+        return Response(serializer.data)
