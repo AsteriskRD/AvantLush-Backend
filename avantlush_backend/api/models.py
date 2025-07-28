@@ -8,6 +8,7 @@ from cloudinary.models import CloudinaryField
 from django.contrib.auth import get_user_model
 import uuid
 
+
 User = settings.AUTH_USER_MODEL
 class CustomUserManager(BaseUserManager):
     def create_user(self, email, password=None, **extra_fields):
@@ -98,6 +99,9 @@ class PasswordResetToken(models.Model):
     @property
     def is_valid(self):
         return not self.is_used and self.expires_at > timezone.now()
+
+
+
 
 class Category(models.Model):
     name = models.CharField(max_length=100)

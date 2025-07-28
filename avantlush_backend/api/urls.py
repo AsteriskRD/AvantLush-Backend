@@ -201,7 +201,7 @@ urlpatterns = [
     path('checkout/create-session/', create_checkout_session, name='checkout-create-session'),
 
     # External App URLs
-    path('api/', include('checkout.urls')),
+    path('', include('checkout.urls')),
 
     # Include router-based URLs AT THE END
     path('', include(router.urls)),

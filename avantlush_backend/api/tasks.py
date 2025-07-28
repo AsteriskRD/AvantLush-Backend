@@ -145,6 +145,8 @@ def cleanup_expired_data():
         expires_at__lt=timezone.now(),
         is_used=False
     ).delete()
+    
+
 
 
 @shared_task

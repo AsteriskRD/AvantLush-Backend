@@ -81,7 +81,7 @@ class OrderFilter(django_filters.FilterSet):
     def filter_product(self, queryset, name, value):
         """Filter by product name"""
         return queryset.filter(
-            Q(orderitem__product__name__icontains=value)
+            Q(items__product__name__icontains=value)
         ).distinct()
     
     def global_search(self, queryset, name, value):
@@ -91,5 +91,5 @@ class OrderFilter(django_filters.FilterSet):
             Q(user__first_name__icontains=value) |
             Q(user__last_name__icontains=value) |
             Q(user__email__icontains=value) |
-            Q(orderitem__product__name__icontains=value)
+            Q(items__product__name__icontains=value)
         ).distinct()
