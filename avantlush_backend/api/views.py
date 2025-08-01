@@ -2489,7 +2489,7 @@ class OrderViewSet(viewsets.ModelViewSet):
     queryset = Order.objects.all().select_related('user', 'customer').prefetch_related('items__product', 'payments')
     filterset_class = OrderFilter
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ['order_number', 'user__email', 'user__first_name', 'user__last_name']
+    search_fields = ['order_number', 'user__email', 'user__first_name', 'user__last_name', 'items__product__name']
     ordering_fields = ['created_at', 'total', 'status']
     ordering = ['-created_at']
 
