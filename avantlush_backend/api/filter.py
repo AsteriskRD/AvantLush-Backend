@@ -85,9 +85,9 @@ class OrderFilter(django_filters.FilterSet):
         ).distinct()
     
     def global_search(self, queryset, name, value):
-        """Global search across order ID, customer, and product"""
+        """Global search across order number, customer, and product"""
         return queryset.filter(
-            Q(id__icontains=value) |
+            Q(order_number__icontains=value) |
             Q(user__first_name__icontains=value) |
             Q(user__last_name__icontains=value) |
             Q(user__email__icontains=value) |

@@ -2492,6 +2492,7 @@ class OrderViewSet(viewsets.ModelViewSet):
     search_fields = ['order_number', 'user__email', 'user__first_name', 'user__last_name', 'items__product__name']
     ordering_fields = ['created_at', 'total', 'status']
     ordering = ['-created_at']
+    permission_classes = [IsAdminUser]  # Only admin users can access orders
 
     def get_serializer_class(self):
         if self.action == 'create':
@@ -2500,9 +2501,23 @@ class OrderViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = super().get_queryset()
+        # Admin users can see all orders, regular users only see their own
         if not self.request.user.is_staff:
             queryset = queryset.filter(user=self.request.user)
         return queryset
+
+    def list(self, request, *args, **kwargs):
+        """Override list to ensure proper filtering and search"""
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        # Apply pagination
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
 
     @action(detail=False, methods=['GET'])
     def customers(self, request):
