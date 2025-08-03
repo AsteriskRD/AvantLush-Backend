@@ -472,11 +472,11 @@ class Order(models.Model):
     total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     
     # Shipping Information
-    shipping_address = models.TextField()
-    shipping_city = models.CharField(max_length=100)
-    shipping_state = models.CharField(max_length=100)
-    shipping_country = models.CharField(max_length=100)
-    shipping_zip = models.CharField(max_length=20)
+    shipping_address = models.TextField(null=True, blank=True)
+    shipping_city = models.CharField(max_length=100, null=True, blank=True)
+    shipping_state = models.CharField(max_length=100, null=True, blank=True)
+    shipping_country = models.CharField(max_length=100, null=True, blank=True)
+    shipping_zip = models.CharField(max_length=20, null=True, blank=True)
     
     # Clover Integration
     clover_session_id = models.CharField(max_length=255, blank=True, null=True)
