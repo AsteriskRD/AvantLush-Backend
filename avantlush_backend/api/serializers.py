@@ -241,7 +241,7 @@ class CustomerDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Customer
         fields = [
-            'id', 'customer_id', 'name', 'email', 'phone', 'status', 'address',
+            'id', 'customer_id', 'name', 'email', 'phone', 'status', 'photo', 'address',
             'orders_count', 'balance', 'total_orders_value', 'abandoned_cart_count',
             'order_status_breakdown', 'last_transaction', 'last_online',
             'created_at', 'recent_orders'
@@ -1918,10 +1918,11 @@ class CustomerUpdateSerializer(serializers.ModelSerializer):
     status = serializers.ChoiceField(choices=Customer.STATUS_CHOICES, required=False)
     email = serializers.EmailField(required=False)  # Add email field for updates
     phone = serializers.CharField(required=False)   # Add phone field for direct updates
+    photo = serializers.ImageField(required=False)  # Add photo field for image uploads
     
     class Meta:
         model = Customer
-        fields = ['name', 'email', 'phone', 'country_code', 'local_phone_number', 'status']
+        fields = ['name', 'email', 'phone', 'country_code', 'local_phone_number', 'status', 'photo']
     
     def validate(self, data):
         # If phone is provided directly, use it
@@ -1974,6 +1975,17 @@ class CustomerUpdateSerializer(serializers.ModelSerializer):
         if 'local_phone_number' in validated_data:
             instance.local_phone_number = validated_data['local_phone_number']
         
+        # Handle photo upload
+        if 'photo' in validated_data:
+            if validated_data['photo']:
+                # If there's an existing photo, delete it from Cloudinary first
+                if instance.photo:
+                    try:
+                        instance.photo.delete()
+                    except:
+                        pass  # Ignore deletion errors
+                instance.photo = validated_data['photo']
+        
         # Handle status update (this affects the linked user account)
         if 'status' in validated_data:
             new_status = validated_data['status']
@@ -1987,7 +1999,7 @@ class CustomerUpdateSerializer(serializers.ModelSerializer):
         # Save customer with update_fields to prevent infinite signal loops
         update_fields = []
         for field in validated_data.keys():
-            if field in ['name', 'email', 'phone', 'country_code', 'local_phone_number', 'status']:
+            if field in ['name', 'email', 'phone', 'country_code', 'local_phone_number', 'status', 'photo']:
                 update_fields.append(field)
         
         if update_fields:

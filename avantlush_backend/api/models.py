@@ -73,7 +73,7 @@ class Profile(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='profile')
     full_name = models.CharField(max_length=255)
     phone_number = models.CharField(max_length=20, blank=True)
-    photo = models.ImageField(upload_to='profile_photos/', null=True, blank=True)
+    photo = CloudinaryField('image', folder='profiles/', null=True, blank=True)  # Profile photo using Cloudinary
     updated_at = models.DateTimeField(auto_now=True)
     country_code = models.CharField(max_length=4, null=True, blank=True)
     def __str__(self):
@@ -399,6 +399,7 @@ class Customer(models.Model):
     local_phone_number = models.CharField(max_length=20, blank=True, null=True) # The number without country code
     phone = models.CharField(max_length=30, blank=True) # Stores the fully formatted number
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')  # ADD THIS
+    photo = CloudinaryField('image', folder='customers/', null=True, blank=True)  # Customer profile photo using Cloudinary
     created_at = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):
