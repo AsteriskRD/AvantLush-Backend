@@ -1886,28 +1886,64 @@ class CustomerSerializer(serializers.ModelSerializer):
             return 'active' if obj.user.is_active else 'blocked'
         return 'active'
 
-class CustomerDetailSerializer(serializers.ModelSerializer):
-    """Detailed customer serializer"""
-    status = serializers.SerializerMethodField()
-    orders_count = serializers.IntegerField(read_only=True)
-    balance = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
-    recent_orders = serializers.SerializerMethodField()
+class CustomerUpdateSerializer(serializers.ModelSerializer):
+    """Serializer specifically for updating customer details"""
+    status = serializers.ChoiceField(choices=Customer.STATUS_CHOICES, required=False)
     
     class Meta:
         model = Customer
-        fields = [
-            'id', 'name', 'email', 'phone', 'status', 'orders_count', 
-            'balance', 'created_at', 'recent_orders'
-        ]
+        fields = ['name', 'phone', 'country_code', 'local_phone_number', 'status']
     
-    def get_status(self, obj):
-        if obj.user:
-            return 'active' if obj.user.is_active else 'blocked'
-        return 'active'
+    def validate(self, data):
+        country_code = data.get('country_code')
+        local_phone_number = data.get('local_phone_number')
+
+        # Only validate if both country_code and local_phone_number are provided
+        if country_code and local_phone_number:
+            from .utils import validate_phone_format
+            is_valid, error_message = validate_phone_format(country_code, local_phone_number)
+            if not is_valid:
+                raise serializers.ValidationError({'phone_number': error_message})
+        elif country_code and not local_phone_number:
+            raise serializers.ValidationError({'local_phone_number': 'Phone number is required when country code is provided.'})
+        elif local_phone_number and not country_code:
+            raise serializers.ValidationError({'country_code': 'Country code is required when phone number is provided.'})
+            
+        return data
     
-    def get_recent_orders(self, obj):
-        recent_orders = Order.objects.filter(customer=obj).order_by('-created_at')[:5]
-        return OrderSerializer(recent_orders, many=True).data
+    def update(self, instance, validated_data):
+        # Update basic fields
+        if 'name' in validated_data:
+            instance.name = validated_data['name']
+        
+        if 'phone' in validated_data:
+            instance.phone = validated_data['phone']
+        
+        if 'country_code' in validated_data:
+            instance.country_code = validated_data['country_code']
+        
+        if 'local_phone_number' in validated_data:
+            instance.local_phone_number = validated_data['local_phone_number']
+        
+        # Handle status update (this affects the linked user account)
+        if 'status' in validated_data:
+            new_status = validated_data['status']
+            if instance.user:
+                # Update user's is_active based on customer status
+                # Use update_fields to prevent infinite signal loops
+                instance.user.is_active = (new_status == 'active')
+                instance.user.save(update_fields=['is_active'])
+        
+        # Save customer with update_fields to prevent infinite signal loops
+        update_fields = []
+        for field in validated_data.keys():
+            if field in ['name', 'phone', 'country_code', 'local_phone_number', 'status']:
+                update_fields.append(field)
+        
+        if update_fields:
+            instance.save(update_fields=update_fields)
+        
+        return instance
 
 class CustomerCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating new customers"""

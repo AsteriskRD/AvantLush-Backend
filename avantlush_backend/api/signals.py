@@ -82,3 +82,98 @@ def ensure_customer_for_user(sender, instance, created, **kwargs):
             if not current_is_email or (current_is_email and not new_is_email):
                 customer.name = preferred_name
                 customer.save(update_fields=["name"])
+
+# --- NEW: Sync from Customer back to CustomUser ---
+@receiver(post_save, sender=Customer)
+def sync_customer_to_user(sender, instance, created, **kwargs):
+    """Sync Customer changes back to the linked CustomUser.
+    
+    This ensures that when you update customer details in your custom dashboard,
+    the changes are reflected in Django Admin as well.
+    """
+    if not instance.user:  # Skip if no linked user
+        return
+    
+    user = instance.user
+    updated = False
+    
+    # Sync name changes
+    if instance.name and instance.name != user.get_full_name():
+        # Parse the customer name into first_name and last_name
+        name_parts = instance.name.strip().split(' ', 1)
+        if len(name_parts) == 1:
+            # Single name - put it in first_name
+            if user.first_name != name_parts[0]:
+                user.first_name = name_parts[0]
+                user.last_name = ''
+                updated = True
+        else:
+            # Multiple names - first part is first_name, rest is last_name
+            first_name, last_name = name_parts
+            if user.first_name != first_name or user.last_name != last_name:
+                user.first_name = first_name
+                user.last_name = last_name
+                updated = True
+    
+    # Sync email changes (if email was changed in customer)
+    if instance.email != user.email:
+        user.email = instance.email
+        updated = True
+    
+    # Sync status changes (affects user.is_active)
+    if instance.status == 'active' and not user.is_active:
+        user.is_active = True
+        updated = True
+    elif instance.status == 'blocked' and user.is_active:
+        user.is_active = False
+        updated = True
+    
+    # Also sync the other way - if user.is_active changed, update customer.status
+    if user.is_active and instance.status != 'active':
+        instance.status = 'active'
+        # Don't save here to avoid infinite loop - just mark as updated
+        updated = True
+    elif not user.is_active and instance.status != 'blocked':
+        instance.status = 'blocked'
+        # Don't save here to avoid infinite loop - just mark as updated
+        updated = True
+    
+            # Save user if any changes were made
+    if updated:
+        user.save(update_fields=['first_name', 'last_name', 'email', 'is_active'])
+        print(f"Synced customer {instance.id} changes to user {user.id}")
+
+# --- NEW: Sync from Profile to Customer ---
+@receiver(post_save, sender=Profile)
+def sync_profile_to_customer(sender, instance, created, **kwargs):
+    """Sync Profile changes to the linked Customer.
+    
+    This ensures that when you update profile details in Django Admin,
+    the changes are reflected in your custom dashboard.
+    """
+    if not instance.user:  # Skip if no linked user
+        return
+    
+    # Find the customer linked to this user
+    try:
+        customer = Customer.objects.get(user=instance.user)
+    except Customer.DoesNotExist:
+        return  # No customer to sync to
+    
+    updated = False
+    
+    # Sync full_name changes (handle case sensitivity)
+    if instance.full_name and instance.full_name.strip() != customer.name.strip():
+        customer.name = instance.full_name.strip()
+        updated = True
+        print(f"Profile sync: Updated customer {customer.id} name from '{customer.name}' to '{instance.full_name.strip()}'")
+    
+    # Sync phone changes (handle empty vs non-empty)
+    if instance.phone_number != customer.phone:
+        customer.phone = instance.phone_number or ''
+        updated = True
+    
+    # Save customer if any changes were made
+    if updated:
+        customer.save(update_fields=['name', 'phone'])
+        print(f"Synced profile {instance.id} changes to customer {customer.id}")

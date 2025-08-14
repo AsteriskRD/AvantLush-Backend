@@ -5814,11 +5814,45 @@ class CustomerViewSet(viewsets.ModelViewSet):
         
         return queryset
 
+    def update(self, request, *args, **kwargs):
+        """Custom update method for customers"""
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        
+        if not serializer.is_valid():
+            return Response({
+                'status': 'error',
+                'success': False,
+                'message': 'Validation error',
+                'errors': serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Perform the update
+        customer = serializer.save()
+        
+        # Return the updated customer details using CustomerDetailSerializer
+        detail_serializer = CustomerDetailSerializer(customer)
+        
+        return Response({
+            'status': 'success',
+            'success': True,
+            'message': 'Customer updated successfully',
+            'data': detail_serializer.data
+        }, status=status.HTTP_200_OK)
+
+    def partial_update(self, request, *args, **kwargs):
+        """Handle PATCH requests for partial updates"""
+        kwargs['partial'] = True
+        return self.update(request, *args, **kwargs)
+
     def get_serializer_class(self):
         if self.action == 'create':
             return CustomerCreateSerializer
         elif self.action == 'list':
             return CustomerSerializer
+        elif self.action in ['update', 'partial_update']:
+            return CustomerUpdateSerializer
         return CustomerDetailSerializer
 
     @action(detail=False, methods=['POST'])
@@ -5949,6 +5983,121 @@ class CustomerViewSet(viewsets.ModelViewSet):
         }
         
         return Response(debug_data)
+
+    @action(detail=True, methods=['POST'])
+    def test_update(self, request, pk=None):
+        """Test endpoint to verify customer update functionality"""
+        try:
+            customer = self.get_object()
+            
+            # Log the current state
+            current_data = {
+                'id': customer.id,
+                'name': customer.name,
+                'email': customer.email,
+                'phone': customer.phone,
+                'status': customer.status,
+                'user_active': customer.user.is_active if customer.user else None,
+            }
+            
+            # Test update with provided data
+            test_data = request.data.copy()
+            serializer = CustomerUpdateSerializer(customer, data=test_data, partial=True)
+            
+            if not serializer.is_valid():
+                return Response({
+                    'status': 'error',
+                    'success': False,
+                    'message': 'Validation error',
+                    'errors': serializer.errors
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Perform update
+            updated_customer = serializer.save()
+            
+            # Get updated data
+            updated_data = {
+                'id': updated_customer.id,
+                'name': updated_customer.name,
+                'email': updated_customer.email,
+                'phone': updated_customer.phone,
+                'status': updated_customer.status,
+                'user_active': updated_customer.user.is_active if updated_customer.user else None,
+            }
+            
+            return Response({
+                'status': 'success',
+                'success': True,
+                'message': 'Test update completed',
+                'before': current_data,
+                'after': updated_data,
+                'changes': test_data
+            })
+            
+        except Exception as e:
+            return Response({
+                'status': 'error',
+                'success': False,
+                'message': f'Update failed: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=True, methods=['GET'])
+    def sync_status(self, request, pk=None):
+        """Debug endpoint to check sync status between CustomUser, Profile, and Customer"""
+        try:
+            customer = self.get_object()
+            user = customer.user if customer.user else None
+            profile = Profile.objects.filter(user=user).first() if user else None
+            
+            sync_data = {
+                'customer': {
+                    'id': customer.id,
+                    'name': customer.name,
+                    'email': customer.email,
+                    'phone': customer.phone,
+                    'status': customer.status,
+                    'user_linked': customer.user is not None,
+                },
+                'user': {
+                    'id': user.id if user else None,
+                    'email': user.email if user else None,
+                    'first_name': user.first_name if user else None,
+                    'last_name': user.last_name if user else None,
+                    'is_active': user.is_active if user else None,
+                } if user else None,
+                'profile': {
+                    'id': profile.id if profile else None,
+                    'full_name': profile.full_name if profile else None,
+                    'phone_number': profile.phone_number if profile else None,
+                } if profile else None,
+                'sync_issues': []
+            }
+            
+            # Check for sync issues
+            if user and profile:
+                if customer.name != profile.full_name:
+                    sync_data['sync_issues'].append(f"Name mismatch: Customer='{customer.name}' vs Profile='{profile.full_name}'")
+                if customer.phone != profile.phone_number:
+                    sync_data['sync_issues'].append(f"Phone mismatch: Customer='{customer.phone}' vs Profile='{profile.phone_number}'")
+                if customer.email != user.email:
+                    sync_data['sync_issues'].append(f"Email mismatch: Customer='{customer.email}' vs User='{user.email}'")
+                if customer.status == 'active' and not user.is_active:
+                    sync_data['sync_issues'].append(f"Status mismatch: Customer='{customer.status}' vs User.is_active={user.is_active}")
+                elif customer.status == 'blocked' and user.is_active:
+                    sync_data['sync_issues'].append(f"Status mismatch: Customer='{customer.status}' vs User.is_active={user.is_active}")
+            
+            return Response({
+                'status': 'success',
+                'success': True,
+                'data': sync_data
+            })
+            
+        except Exception as e:
+            return Response({
+                'status': 'error',
+                'success': False,
+                'message': f'Sync status check failed: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=True, methods=['GET'])
     def statistics(self, request, pk=None):
