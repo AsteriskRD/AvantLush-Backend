@@ -169,6 +169,7 @@ from .serializers import (
     CustomerSerializer,
     CustomerDetailSerializer,
     CustomerCreateSerializer,
+    CustomerUpdateSerializer,
     CarouselItemSerializer,
     UserDetailsUpdateSerializer,
     CarouselItemPublicSerializer,
@@ -5795,8 +5796,8 @@ class CustomerViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         # Get all customers with proper annotations
         queryset = super().get_queryset().select_related('user').annotate(
-            orders_count=Count('order', distinct=True),
-            balance=Coalesce(Sum('order__total'), Value(0, output_field=DecimalField()), output_field=DecimalField())
+            orders_count=Count('orders', distinct=True),
+            balance=Coalesce(Sum('orders__total'), Value(0, output_field=DecimalField()), output_field=DecimalField())
         )
         
         # Apply status filter only if explicitly requested

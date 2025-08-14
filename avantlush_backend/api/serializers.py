@@ -338,7 +338,9 @@ class CustomerDetailSerializer(serializers.ModelSerializer):
         status_counts = {
             'all_orders': 0,
             'pending': 0,
-            'completed': 0,
+            'processing': 0,
+            'shipped': 0,
+            'delivered': 0,
             'cancelled': 0,
             'returned': 0,
             'damaged': 0
@@ -351,8 +353,12 @@ class CustomerDetailSerializer(serializers.ModelSerializer):
             
             if status == 'pending':
                 status_counts['pending'] = count
+            elif status == 'processing':
+                status_counts['processing'] = count
+            elif status == 'shipped':
+                status_counts['shipped'] = count
             elif status == 'delivered':
-                status_counts['completed'] = count
+                status_counts['delivered'] = count
             elif status == 'cancelled':
                 status_counts['cancelled'] = count
             elif status == 'returned':
