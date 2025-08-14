@@ -5793,21 +5793,24 @@ class CustomerViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdminUser]
 
     def get_queryset(self):
+        # Get all customers with proper annotations
         queryset = super().get_queryset().select_related('user').annotate(
             orders_count=Count('order', distinct=True),
             balance=Coalesce(Sum('order__total'), Value(0, output_field=DecimalField()), output_field=DecimalField())
         )
         
+        # Apply status filter only if explicitly requested
         status = self.request.query_params.get('status')
         if status:
             if status.lower() == 'active':
-                # Filter for customers with active user accounts OR no user account
+                # Show customers with active user accounts OR no user account (guest customers)
                 queryset = queryset.filter(
                     Q(user__is_active=True) | Q(user__isnull=True)
                 )
             elif status.lower() == 'blocked':
-                # Filter for customers with inactive user accounts
+                # Show only customers with inactive user accounts
                 queryset = queryset.filter(user__is_active=False, user__isnull=False)
+        # If no status filter, show ALL customers (this is the key fix!)
         
         return queryset
 
@@ -5887,6 +5890,65 @@ class CustomerViewSet(viewsets.ModelViewSet):
             ])
         
         return response
+
+    @action(detail=False, methods=['GET'])
+    def debug_info(self, request):
+        """Debug endpoint to check customer counts and relationships"""
+        from django.db.models import Count
+        
+        # Get raw counts
+        total_customers = Customer.objects.count()
+        total_users = CustomUser.objects.count()
+        
+        # Check customer-user relationships
+        customers_with_users = Customer.objects.filter(user__isnull=False).count()
+        customers_without_users = Customer.objects.filter(user__isnull=True).count()
+        
+        # Check user-customer relationships
+        users_with_customers = CustomUser.objects.filter(customer__isnull=True).count()
+        users_without_customers = CustomUser.objects.filter(customer__isnull=False).count()
+        
+        # Check active/inactive status
+        active_customers = Customer.objects.filter(user__is_active=True).count()
+        blocked_customers = Customer.objects.filter(user__is_active=False).count()
+        
+        # Get sample data
+        sample_customers = Customer.objects.all()[:5]
+        sample_users = CustomUser.objects.all()[:5]
+        
+        debug_data = {
+            'counts': {
+                'total_customers': total_customers,
+                'total_users': total_users,
+                'customers_with_users': customers_with_users,
+                'customers_without_users': customers_without_users,
+                'users_with_customers': users_with_customers,
+                'users_without_customers': users_without_customers,
+                'active_customers': active_customers,
+                'blocked_customers': blocked_customers,
+            },
+            'sample_customers': [
+                {
+                    'id': c.id,
+                    'name': c.name,
+                    'email': c.email,
+                    'has_user': c.user is not None,
+                    'user_active': c.user.is_active if c.user else None,
+                } for c in sample_customers
+            ],
+            'sample_users': [
+                {
+                    'id': u.id,
+                    'email': u.email,
+                    'first_name': u.first_name,
+                    'last_name': u.last_name,
+                    'is_active': u.is_active,
+                    'has_customer': hasattr(u, 'customer'),
+                } for u in sample_users
+            ]
+        }
+        
+        return Response(debug_data)
 
     @action(detail=True, methods=['GET'])
     def statistics(self, request, pk=None):
