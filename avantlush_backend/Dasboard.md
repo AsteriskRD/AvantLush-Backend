@@ -31,7 +31,12 @@ Success (200 OK):
     "orders": {
         "all_orders": {"count": 0, "growth": 0.00},
         "pending": {"count": 0, "growth": 0.00},
-        "completed": {"count": 0, "growth": 0.00} // 'DELIVERED' status
+        "processing": {"count": 0, "growth": 0.00},
+        "shipped": {"count": 0, "growth": 0.00},
+        "delivered": {"count": 0, "growth": 0.00},
+        "cancelled": {"count": 0, "growth": 0.00},
+        "returned": {"count": 0, "growth": 0.00},
+        "damaged": {"count": 0, "growth": 0.00}
     },
     "period": "week"
 }

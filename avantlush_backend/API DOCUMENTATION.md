@@ -2781,9 +2781,29 @@ Provides aggregated data for the summary cards (All Orders, Pending, Completed, 
                 "count": 15,
                 "growth": -5.0 // Percentage change
             },
-            "completed": { // Typically maps to 'DELIVERED' status
+            "processing": {
+                "count": 25,
+                "growth": 10.0 // Percentage change
+            },
+            "shipped": {
+                "count": 30,
+                "growth": 15.0 // Percentage change
+            },
+            "delivered": {
                 "count": 90,
                 "growth": 20.0 // Percentage change
+            },
+            "cancelled": {
+                "count": 5,
+                "growth": -2.0 // Percentage change
+            },
+            "returned": {
+                "count": 3,
+                "growth": 1.0 // Percentage change
+            },
+            "damaged": {
+                "count": 2,
+                "growth": 0.0 // Percentage change
             }
         },
         "period": "week",
@@ -2826,9 +2846,29 @@ Provides a consolidated summary of key metrics, can also be used for summary car
                 "count": 15,
                 "label": "Pending"
             },
-            "completed_orders": { // Maps to 'DELIVERED' or 'COMPLETED' status
+            "processing_orders": {
+                "count": 25,
+                "label": "Processing"
+            },
+            "shipped_orders": {
+                "count": 30,
+                "label": "Shipped"
+            },
+            "delivered_orders": {
                 "count": 90,
-                "label": "Completed"
+                "label": "Delivered"
+            },
+            "cancelled_orders": {
+                "count": 5,
+                "label": "Cancelled"
+            },
+            "returned_orders": {
+                "count": 3,
+                "label": "Returned"
+            },
+            "damaged_orders": {
+                "count": 2,
+                "label": "Damaged"
             },
             "total_revenue": 15250.75
         },
@@ -2842,7 +2882,12 @@ Provides a consolidated summary of key metrics, can also be used for summary car
         "summary": {
             "all_orders": {"count": 0, "label": "All Orders"},
             "pending_orders": {"count": 0, "label": "Pending"},
-            "completed_orders": {"count": 0, "label": "Completed"},
+            "processing_orders": {"count": 0, "label": "Processing"},
+            "shipped_orders": {"count": 0, "label": "Shipped"},
+            "delivered_orders": {"count": 0, "label": "Delivered"},
+            "cancelled_orders": {"count": 0, "label": "Cancelled"},
+            "returned_orders": {"count": 0, "label": "Returned"},
+            "damaged_orders": {"count": 0, "label": "Damaged"},
             "total_revenue": 0
         },
         "period": "week",

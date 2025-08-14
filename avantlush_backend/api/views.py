@@ -4079,20 +4079,47 @@ class DashboardViewSet(viewsets.ViewSet):
             total_customers_growth = ((total_customers - prev_total_customers) / prev_total_customers * 100) if prev_total_customers > 0 else 0
             active_customers_growth = ((active_customers - prev_active_customers) / prev_active_customers * 100) if prev_active_customers > 0 else 0
         
-        # ORDER METRICS BY STATUS
+        # ORDER METRICS BY STATUS - COUNT ALL STATUSES
         if date_threshold is None:  # All-time metrics
             all_orders_count = Order.objects.count()
+            # Count all order statuses
             pending_orders_count = Order.objects.filter(status='PENDING').count()
-            completed_orders_count = Order.objects.filter(status='DELIVERED').count()
+            processing_orders_count = Order.objects.filter(status='PROCESSING').count()
+            shipped_orders_count = Order.objects.filter(status='SHIPPED').count()
+            delivered_orders_count = Order.objects.filter(status='DELIVERED').count()
+            cancelled_orders_count = Order.objects.filter(status='CANCELLED').count()
+            returned_orders_count = Order.objects.filter(status='RETURNED').count()
+            damaged_orders_count = Order.objects.filter(status='DAMAGED').count()
         else:  # Time-filtered metrics
             all_orders_count = Order.objects.filter(created_at__gte=date_threshold).count()
+            # Count all order statuses within time period
             pending_orders_count = Order.objects.filter(
                 created_at__gte=date_threshold,
                 status='PENDING'
             ).count()
-            completed_orders_count = Order.objects.filter(
+            processing_orders_count = Order.objects.filter(
+                created_at__gte=date_threshold,
+                status='PROCESSING'
+            ).count()
+            shipped_orders_count = Order.objects.filter(
+                created_at__gte=date_threshold,
+                status='SHIPPED'
+            ).count()
+            delivered_orders_count = Order.objects.filter(
                 created_at__gte=date_threshold,
                 status='DELIVERED'
+            ).count()
+            cancelled_orders_count = Order.objects.filter(
+                created_at__gte=date_threshold,
+                status='CANCELLED'
+            ).count()
+            returned_orders_count = Order.objects.filter(
+                created_at__gte=date_threshold,
+                status='RETURNED'
+            ).count()
+            damaged_orders_count = Order.objects.filter(
+                created_at__gte=date_threshold,
+                status='DAMAGED'
             ).count()
         
         # Previous period order counts (only for time-filtered periods)
@@ -4106,22 +4133,52 @@ class DashboardViewSet(viewsets.ViewSet):
                 created_at__lt=date_threshold,
                 status='PENDING'
             ).count()
-            prev_completed_orders = Order.objects.filter(
+            prev_processing_orders = Order.objects.filter(
+                created_at__gte=previous_period_threshold,
+                created_at__lt=date_threshold,
+                status='PROCESSING'
+            ).count()
+            prev_shipped_orders = Order.objects.filter(
+                created_at__gte=previous_period_threshold,
+                created_at__lt=date_threshold,
+                status='SHIPPED'
+            ).count()
+            prev_delivered_orders = Order.objects.filter(
                 created_at__gte=previous_period_threshold,
                 created_at__lt=date_threshold,
                 status='DELIVERED'
             ).count()
+            prev_cancelled_orders = Order.objects.filter(
+                created_at__gte=previous_period_threshold,
+                created_at__lt=date_threshold,
+                status='CANCELLED'
+            ).count()
+            prev_returned_orders = Order.objects.filter(
+                created_at__gte=previous_period_threshold,
+                created_at__lt=date_threshold,
+                status='RETURNED'
+            ).count()
+            prev_damaged_orders = Order.objects.filter(
+                created_at__gte=previous_period_threshold,
+                created_at__lt=date_threshold,
+                status='DAMAGED'
+            ).count()
         else:
             # For all-time, set previous to 0 (no comparison)
-            prev_all_orders = prev_pending_orders = prev_completed_orders = 0
+            prev_all_orders = prev_pending_orders = prev_processing_orders = prev_shipped_orders = prev_delivered_orders = prev_cancelled_orders = prev_returned_orders = prev_damaged_orders = 0
         
         # Calculate order growth rates (handle all-time case)
         if date_threshold is None:
-            all_orders_growth = pending_orders_growth = completed_orders_growth = 0
+            all_orders_growth = pending_orders_growth = processing_orders_growth = shipped_orders_growth = delivered_orders_growth = cancelled_orders_growth = returned_orders_growth = damaged_orders_growth = 0
         else:
             all_orders_growth = ((all_orders_count - prev_all_orders) / prev_all_orders * 100) if prev_all_orders > 0 else 0
             pending_orders_growth = ((pending_orders_count - prev_pending_orders) / prev_pending_orders * 100) if prev_pending_orders > 0 else 0
-            completed_orders_growth = ((completed_orders_count - prev_completed_orders) / prev_completed_orders * 100) if prev_completed_orders > 0 else 0
+            processing_orders_growth = ((processing_orders_count - prev_processing_orders) / prev_processing_orders * 100) if prev_processing_orders > 0 else 0
+            shipped_orders_growth = ((shipped_orders_count - prev_shipped_orders) / prev_shipped_orders * 100) if prev_shipped_orders > 0 else 0
+            delivered_orders_growth = ((delivered_orders_count - prev_delivered_orders) / prev_delivered_orders * 100) if prev_delivered_orders > 0 else 0
+            cancelled_orders_growth = ((cancelled_orders_count - prev_cancelled_orders) / prev_cancelled_orders * 100) if prev_cancelled_orders > 0 else 0
+            returned_orders_growth = ((returned_orders_count - prev_returned_orders) / prev_returned_orders * 100) if prev_returned_orders > 0 else 0
+            damaged_orders_growth = ((damaged_orders_count - prev_damaged_orders) / prev_damaged_orders * 100) if prev_damaged_orders > 0 else 0
         
         return Response({
             'abandoned_cart': {
@@ -4149,9 +4206,29 @@ class DashboardViewSet(viewsets.ViewSet):
                     'count': pending_orders_count,
                     'growth': round(pending_orders_growth, 2)
                 },
-                'completed': {
-                    'count': completed_orders_count,
-                    'growth': round(completed_orders_growth, 2)
+                'processing': {
+                    'count': processing_orders_count,
+                    'growth': round(processing_orders_growth, 2)
+                },
+                'shipped': {
+                    'count': shipped_orders_count,
+                    'growth': round(shipped_orders_growth, 2)
+                },
+                'delivered': {
+                    'count': delivered_orders_count,
+                    'growth': round(delivered_orders_growth, 2)
+                },
+                'cancelled': {
+                    'count': cancelled_orders_count,
+                    'growth': round(cancelled_orders_growth, 2)
+                },
+                'returned': {
+                    'count': returned_orders_count,
+                    'growth': round(returned_orders_growth, 2)
+                },
+                'damaged': {
+                    'count': damaged_orders_count,
+                    'growth': round(damaged_orders_growth, 2)
                 }
             },
             'period': time_period
@@ -4701,21 +4778,16 @@ class DashboardViewSet(viewsets.ViewSet):
             time_period = request.query_params.get('period', 'week')
             date_threshold = self._get_date_threshold(time_period)
             
-            # Basic counts (safe queries)
+            # Basic counts (safe queries) - COUNT ALL ORDER STATUSES
             if date_threshold is None:  # All-time metrics
                 total_orders = Order.objects.count()
                 pending_orders = Order.objects.filter(status='PENDING').count()
-                
-                # Handle different status names safely
-                completed_orders_filters = [
-                    {'status': 'DELIVERED'},
-                    {'status': 'COMPLETED'},  # In case you use this
-                    {'status': 'Completed'}   # In case of different casing
-                ]
-                
-                completed_orders = 0
-                for filter_dict in completed_orders_filters:
-                    completed_orders += Order.objects.filter(**filter_dict).count()
+                processing_orders = Order.objects.filter(status='PROCESSING').count()
+                shipped_orders = Order.objects.filter(status='SHIPPED').count()
+                delivered_orders = Order.objects.filter(status='DELIVERED').count()
+                cancelled_orders = Order.objects.filter(status='CANCELLED').count()
+                returned_orders = Order.objects.filter(status='RETURNED').count()
+                damaged_orders = Order.objects.filter(status='DAMAGED').count()
                 
                 # Revenue calculation with error handling
                 revenue_data = Order.objects.aggregate(total_revenue=Sum('total'))
@@ -4725,20 +4797,30 @@ class DashboardViewSet(viewsets.ViewSet):
                     created_at__gte=date_threshold, 
                     status='PENDING'
                 ).count()
-                
-                # Handle different status names safely
-                completed_orders_filters = [
-                    {'status': 'DELIVERED'},
-                    {'status': 'COMPLETED'},  # In case you use this
-                    {'status': 'Completed'}   # In case of different casing
-                ]
-                
-                completed_orders = 0
-                for filter_dict in completed_orders_filters:
-                    completed_orders += Order.objects.filter(
-                        created_at__gte=date_threshold,
-                        **filter_dict
-                    ).count()
+                processing_orders = Order.objects.filter(
+                    created_at__gte=date_threshold, 
+                    status='PROCESSING'
+                ).count()
+                shipped_orders = Order.objects.filter(
+                    created_at__gte=date_threshold, 
+                    status='SHIPPED'
+                ).count()
+                delivered_orders = Order.objects.filter(
+                    created_at__gte=date_threshold, 
+                    status='DELIVERED'
+                ).count()
+                cancelled_orders = Order.objects.filter(
+                    created_at__gte=date_threshold, 
+                    status='CANCELLED'
+                ).count()
+                returned_orders = Order.objects.filter(
+                    created_at__gte=date_threshold, 
+                    status='RETURNED'
+                ).count()
+                damaged_orders = Order.objects.filter(
+                    created_at__gte=date_threshold, 
+                    status='DAMAGED'
+                ).count()
                 
                 # Revenue calculation with error handling
                 revenue_data = Order.objects.filter(
@@ -4757,9 +4839,29 @@ class DashboardViewSet(viewsets.ViewSet):
                         'count': pending_orders,
                         'label': 'Pending'
                     },
-                    'completed_orders': {
-                        'count': completed_orders,
-                        'label': 'Completed'
+                    'processing_orders': {
+                        'count': processing_orders,
+                        'label': 'Processing'
+                    },
+                    'shipped_orders': {
+                        'count': shipped_orders,
+                        'label': 'Shipped'
+                    },
+                    'delivered_orders': {
+                        'count': delivered_orders,
+                        'label': 'Delivered'
+                    },
+                    'cancelled_orders': {
+                        'count': cancelled_orders,
+                        'label': 'Cancelled'
+                    },
+                    'returned_orders': {
+                        'count': returned_orders,
+                        'label': 'Returned'
+                    },
+                    'damaged_orders': {
+                        'count': damaged_orders,
+                        'label': 'Damaged'
                     },
                     'total_revenue': float(total_revenue)
                 },
@@ -4773,7 +4875,12 @@ class DashboardViewSet(viewsets.ViewSet):
                 'summary': {
                     'all_orders': {'count': 0, 'label': 'All Orders'},
                     'pending_orders': {'count': 0, 'label': 'Pending'},
-                    'completed_orders': {'count': 0, 'label': 'Completed'},
+                    'processing_orders': {'count': 0, 'label': 'Processing'},
+                    'shipped_orders': {'count': 0, 'label': 'Shipped'},
+                    'delivered_orders': {'count': 0, 'label': 'Delivered'},
+                    'cancelled_orders': {'count': 0, 'label': 'Cancelled'},
+                    'returned_orders': {'count': 0, 'label': 'Returned'},
+                    'damaged_orders': {'count': 0, 'label': 'Damaged'},
                     'total_revenue': 0
                 },
                 'period': time_period,

@@ -108,6 +108,7 @@ urlpatterns = [
 
     # Product & Wishlist
     path('products/search/', ProductSearchView.as_view(), name='product-search'),
+    path('api/product-search/', ProductSearchView.as_view(), name='api-product-search'),
     path('wishlist-items/<int:product_id>/remove/', WishlistItemViewSet.as_view({'delete': 'remove_by_product_id'})),
 
     # NEW: Product View Recording
@@ -162,7 +163,7 @@ urlpatterns = [
 
     path('api/orders/create/', OrderCreateView.as_view(), name='order-create'),
     path('api/orders/<int:pk>/update/', OrderUpdateView.as_view(), name='order-update'),
-    path('api/orders/choices/', order_choices, name='order-choices'),
+    path('api/order-choices/', order_choices, name='order-choices'),
     path('api/products/<int:pk>/for-order/', ProductDetailForOrderView.as_view(), name='product-for-order'),
     path('api/customers/list/', CustomerListView.as_view(), name='customer-list'),
 
