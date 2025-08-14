@@ -1916,12 +1916,31 @@ class CustomerSerializer(serializers.ModelSerializer):
 class CustomerUpdateSerializer(serializers.ModelSerializer):
     """Serializer specifically for updating customer details"""
     status = serializers.ChoiceField(choices=Customer.STATUS_CHOICES, required=False)
+    email = serializers.EmailField(required=False)  # Add email field for updates
+    phone = serializers.CharField(required=False)   # Add phone field for direct updates
     
     class Meta:
         model = Customer
-        fields = ['name', 'phone', 'country_code', 'local_phone_number', 'status']
+        fields = ['name', 'email', 'phone', 'country_code', 'local_phone_number', 'status']
     
     def validate(self, data):
+        # If phone is provided directly, use it
+        if 'phone' in data and data['phone']:
+            # Extract country code and local number from full phone if possible
+            phone = data['phone']
+            if phone.startswith('+'):
+                # Try to extract country code
+                if phone.startswith('+234'):
+                    data['country_code'] = '+234'
+                    data['local_phone_number'] = phone[4:]  # Remove +234
+                elif phone.startswith('+1'):
+                    data['country_code'] = '+1'
+                    data['local_phone_number'] = phone[2:]  # Remove +1
+                else:
+                    # Default to +234 for Nigerian numbers
+                    data['country_code'] = '+234'
+                    data['local_phone_number'] = phone[1:] if phone.startswith('+') else phone
+        
         country_code = data.get('country_code')
         local_phone_number = data.get('local_phone_number')
 
@@ -1943,6 +1962,9 @@ class CustomerUpdateSerializer(serializers.ModelSerializer):
         if 'name' in validated_data:
             instance.name = validated_data['name']
         
+        if 'email' in validated_data:
+            instance.email = validated_data['email']
+        
         if 'phone' in validated_data:
             instance.phone = validated_data['phone']
         
@@ -1955,6 +1977,7 @@ class CustomerUpdateSerializer(serializers.ModelSerializer):
         # Handle status update (this affects the linked user account)
         if 'status' in validated_data:
             new_status = validated_data['status']
+            instance.status = new_status
             if instance.user:
                 # Update user's is_active based on customer status
                 # Use update_fields to prevent infinite signal loops
@@ -1964,7 +1987,7 @@ class CustomerUpdateSerializer(serializers.ModelSerializer):
         # Save customer with update_fields to prevent infinite signal loops
         update_fields = []
         for field in validated_data.keys():
-            if field in ['name', 'phone', 'country_code', 'local_phone_number', 'status']:
+            if field in ['name', 'email', 'phone', 'country_code', 'local_phone_number', 'status']:
                 update_fields.append(field)
         
         if update_fields:
