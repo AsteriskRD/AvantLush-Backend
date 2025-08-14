@@ -39,7 +39,19 @@ def ensure_customer_for_user(sender, instance, created, **kwargs):
 
     # If still none, create it
     if customer is None:
-        display_name = instance.get_full_name().strip() or instance.email
+        # Try to get a proper name from the user
+        if instance.first_name and instance.last_name:
+            display_name = f"{instance.first_name} {instance.last_name}".strip()
+        elif instance.first_name:
+            display_name = instance.first_name.strip()
+        elif instance.last_name:
+            display_name = instance.last_name.strip()
+        else:
+            # Fallback: use email prefix as name (remove @domain.com)
+            email_prefix = instance.email.split('@')[0]
+            # Capitalize first letter and replace dots/underscores with spaces
+            display_name = email_prefix.replace('.', ' ').replace('_', ' ').title()
+        
         Customer.objects.create(
             user=instance,
             name=display_name,
@@ -48,7 +60,25 @@ def ensure_customer_for_user(sender, instance, created, **kwargs):
         return
 
     # Keep name up to date if the customer has a placeholder name and user now has a better one
-    preferred_name = (instance.get_full_name() or '').strip()
-    if preferred_name and customer.name != preferred_name:
-        customer.name = preferred_name
-        customer.save(update_fields=["name"])
+    if customer:
+        # Try to get a proper name from the user
+        if instance.first_name and instance.last_name:
+            preferred_name = f"{instance.first_name} {instance.last_name}".strip()
+        elif instance.first_name:
+            preferred_name = instance.first_name.strip()
+        elif instance.last_name:
+            preferred_name = instance.last_name.strip()
+        else:
+            # Fallback: use email prefix as name
+            email_prefix = instance.email.split('@')[0]
+            preferred_name = email_prefix.replace('.', ' ').replace('_', ' ').title()
+        
+        # Update if the name is different and better than current
+        if preferred_name and customer.name != preferred_name:
+            # Only update if the new name is more descriptive than the current one
+            current_is_email = '@' in customer.name
+            new_is_email = '@' in preferred_name
+            
+            if not current_is_email or (current_is_email and not new_is_email):
+                customer.name = preferred_name
+                customer.save(update_fields=["name"])

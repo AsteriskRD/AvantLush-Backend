@@ -410,10 +410,6 @@ class Customer(models.Model):
 
     def __str__(self):
         return self.name
-        super().save(*args, **kwargs)
-
-    def __str__(self):
-        return self.name
     
 class Order(models.Model):
     PAYMENT_TYPE_CHOICES = [

@@ -223,24 +223,148 @@ class CustomUserDetailsSerializer(UserDetailsSerializer):
         
         return instance
 class CustomerDetailSerializer(serializers.ModelSerializer):
-    orders_count = serializers.SerializerMethodField()
-    total_balance = serializers.SerializerMethodField()
+    """Detailed customer serializer matching dashboard requirements"""
     status = serializers.SerializerMethodField()
-
+    orders_count = serializers.IntegerField(read_only=True)
+    balance = serializers.SerializerMethodField()
+    recent_orders = serializers.SerializerMethodField()
+    
+    # Additional fields for dashboard
+    customer_id = serializers.SerializerMethodField()
+    address = serializers.SerializerMethodField()
+    last_transaction = serializers.SerializerMethodField()
+    last_online = serializers.SerializerMethodField()
+    total_orders_value = serializers.SerializerMethodField()
+    abandoned_cart_count = serializers.SerializerMethodField()
+    order_status_breakdown = serializers.SerializerMethodField()
+    
     class Meta:
         model = Customer
-        fields = ['id', 'name', 'email', 'phone', 'created_at', 
-                 'orders_count', 'total_balance', 'status']
-
-    def get_orders_count(self, obj):
-        return Order.objects.filter(customer=obj).count()
-
-    def get_total_balance(self, obj):
-        return Order.objects.filter(customer=obj).aggregate(
-            total=Sum('total'))['total'] or 0
-
+        fields = [
+            'id', 'customer_id', 'name', 'email', 'phone', 'status', 'address',
+            'orders_count', 'balance', 'total_orders_value', 'abandoned_cart_count',
+            'order_status_breakdown', 'last_transaction', 'last_online',
+            'created_at', 'recent_orders'
+        ]
+    
     def get_status(self, obj):
-        return 'Active' if obj.user.is_active else 'Blocked'
+        if obj.user:
+            return 'active' if obj.user.is_active else 'blocked'
+        return 'active'
+    
+    def get_customer_id(self, obj):
+        """Generate customer ID like ID-011221"""
+        return f"ID-{str(obj.id).zfill(6)}"
+    
+    def get_balance(self, obj):
+        """Get customer's current balance from orders"""
+        from .models import Order
+        from django.db.models import Sum
+        total_paid = Order.objects.filter(
+            customer=obj, 
+            payment_status='PAID'
+        ).aggregate(total=Sum('total'))['total'] or 0
+        
+        total_orders = Order.objects.filter(
+            customer=obj
+        ).aggregate(total=Sum('total'))['total'] or 0
+        
+        return total_paid - total_orders
+    
+    def get_address(self, obj):
+        """Get customer's address from Address model"""
+        if obj.user:
+            address = obj.user.address_set.filter(is_default=True).first()
+            if address:
+                return f"{address.street_address}, {address.city}, {address.state} {address.zip_code}, {address.country}"
+        return "No address provided"
+    
+    def get_last_transaction(self, obj):
+        """Get last order date"""
+        from .models import Order
+        last_order = Order.objects.filter(customer=obj).order_by('-created_at').first()
+        if last_order:
+            return last_order.created_at.strftime("%d %B %Y")
+        return "No transactions"
+    
+    def get_last_online(self, obj):
+        """Get last login time"""
+        if obj.user and obj.user.last_login:
+            from django.utils import timezone
+            now = timezone.now()
+            diff = now - obj.user.last_login
+            
+            if diff.days == 0:
+                if diff.seconds < 3600:
+                    return f"{diff.seconds // 60} minutes ago"
+                else:
+                    return f"{diff.seconds // 3600} hours ago"
+            elif diff.days == 1:
+                return "1 day ago"
+            else:
+                return f"{diff.days} days ago"
+        return "Never logged in"
+    
+    def get_total_orders_value(self, obj):
+        """Get total value of all orders"""
+        from .models import Order
+        from django.db.models import Sum
+        total = Order.objects.filter(customer=obj).aggregate(total=Sum('total'))['total'] or 0
+        return f"{total:.2f}"
+    
+    def get_abandoned_cart_count(self, obj):
+        """Get count of abandoned carts"""
+        from .models import Cart
+        from django.db.models import F
+        if obj.user:
+            abandoned_carts = Cart.objects.filter(
+                user=obj.user,
+                items__isnull=False
+            ).exclude(
+                user__orders__created_at__gte=F('created_at')
+            ).distinct().count()
+            return abandoned_carts
+        return 0
+    
+    def get_order_status_breakdown(self, obj):
+        """Get breakdown of orders by status"""
+        from .models import Order
+        from django.db.models import Count
+        
+        breakdown = Order.objects.filter(customer=obj).values('status').annotate(
+            count=Count('id')
+        )
+        
+        status_counts = {
+            'all_orders': 0,
+            'pending': 0,
+            'completed': 0,
+            'cancelled': 0,
+            'returned': 0,
+            'damaged': 0
+        }
+        
+        for item in breakdown:
+            status = item['status'].lower()
+            count = item['count']
+            status_counts['all_orders'] += count
+            
+            if status == 'pending':
+                status_counts['pending'] = count
+            elif status == 'delivered':
+                status_counts['completed'] = count
+            elif status == 'cancelled':
+                status_counts['cancelled'] = count
+            elif status == 'returned':
+                status_counts['returned'] = count
+            elif status == 'damaged':
+                status_counts['damaged'] = count
+        
+        return status_counts
+    
+    def get_recent_orders(self, obj):
+        recent_orders = Order.objects.filter(customer=obj).order_by('-created_at')[:5]
+        return OrderSerializer(recent_orders, many=True).data
 
 class CustomRegisterSerializer(RegisterSerializer):
     username = None  # Remove username field
