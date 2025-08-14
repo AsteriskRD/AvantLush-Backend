@@ -260,13 +260,16 @@ class CustomerDetailSerializer(serializers.ModelSerializer):
         """Get customer's current balance from orders"""
         from .models import Order
         from django.db.models import Sum
+        if not obj.user:
+            return 0
+            
         total_paid = Order.objects.filter(
-            customer=obj, 
+            user=obj.user, 
             payment_status='PAID'
         ).aggregate(total=Sum('total'))['total'] or 0
         
         total_orders = Order.objects.filter(
-            customer=obj
+            user=obj.user
         ).aggregate(total=Sum('total'))['total'] or 0
         
         return total_paid - total_orders
@@ -282,7 +285,9 @@ class CustomerDetailSerializer(serializers.ModelSerializer):
     def get_last_transaction(self, obj):
         """Get last order date"""
         from .models import Order
-        last_order = Order.objects.filter(customer=obj).order_by('-created_at').first()
+        if not obj.user:
+            return "No transactions"
+        last_order = Order.objects.filter(user=obj.user).order_by('-created_at').first()
         if last_order:
             return last_order.created_at.strftime("%d %B %Y")
         return "No transactions"
@@ -309,7 +314,9 @@ class CustomerDetailSerializer(serializers.ModelSerializer):
         """Get total value of all orders"""
         from .models import Order
         from django.db.models import Sum
-        total = Order.objects.filter(customer=obj).aggregate(total=Sum('total'))['total'] or 0
+        if not obj.user:
+            return "0.00"
+        total = Order.objects.filter(user=obj.user).aggregate(total=Sum('total'))['total'] or 0
         return f"{total:.2f}"
     
     def get_abandoned_cart_count(self, obj):
@@ -331,7 +338,19 @@ class CustomerDetailSerializer(serializers.ModelSerializer):
         from .models import Order
         from django.db.models import Count
         
-        breakdown = Order.objects.filter(customer=obj).values('status').annotate(
+        if not obj.user:
+            return {
+                'all_orders': 0,
+                'pending': 0,
+                'processing': 0,
+                'shipped': 0,
+                'delivered': 0,
+                'cancelled': 0,
+                'returned': 0,
+                'damaged': 0
+            }
+        
+        breakdown = Order.objects.filter(user=obj.user).values('status').annotate(
             count=Count('id')
         )
         
@@ -369,7 +388,9 @@ class CustomerDetailSerializer(serializers.ModelSerializer):
         return status_counts
     
     def get_recent_orders(self, obj):
-        recent_orders = Order.objects.filter(customer=obj).order_by('-created_at')[:5]
+        if not obj.user:
+            return []
+        recent_orders = Order.objects.filter(user=obj.user).order_by('-created_at')[:5]
         return OrderSerializer(recent_orders, many=True).data
 
 class CustomRegisterSerializer(RegisterSerializer):
