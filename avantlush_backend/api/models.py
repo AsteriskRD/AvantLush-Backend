@@ -399,7 +399,6 @@ class Customer(models.Model):
     local_phone_number = models.CharField(max_length=20, blank=True, null=True) # The number without country code
     phone = models.CharField(max_length=30, blank=True) # Stores the fully formatted number
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')  # ADD THIS
-    photo = CloudinaryField('image', folder='customers/', null=True, blank=True)  # Customer profile photo using Cloudinary
     created_at = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):

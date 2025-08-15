@@ -128,6 +128,18 @@ def sync_customer_to_user(sender, instance, created, **kwargs):
         user.is_active = False
         updated = True
     
+    # Sync photo changes (customer photo becomes profile photo)
+    # REMOVED: Customer model no longer has photo field
+    # if hasattr(instance, 'photo') and instance.photo:
+    #     try:
+    #         profile = user.profile
+    #         if profile.photo != instance.photo:
+    #             profile.photo = instance.photo
+    #             profile.save(update_fields=['photo'])
+    #             print(f"Customer sync: Updated profile {profile.id} photo to match customer photo")
+    #     except Profile.DoesNotExist:
+    #         pass  # Profile doesn't exist yet
+    
     # Also sync the other way - if user.is_active changed, update customer.status
     if user.is_active and instance.status != 'active':
         instance.status = 'active'
@@ -173,7 +185,14 @@ def sync_profile_to_customer(sender, instance, created, **kwargs):
         customer.phone = instance.phone_number or ''
         updated = True
     
+    # Sync photo changes (profile photo becomes customer photo)
+    # REMOVED: Customer model no longer has photo field
+    # if instance.photo != customer.photo:
+    #     customer.photo = instance.photo
+    #     updated = True
+    #     print(f"Profile sync: Updated customer {customer.id} photo to match profile photo")
+    
     # Save customer if any changes were made
     if updated:
         customer.save(update_fields=['name', 'phone'])
-        print(f"Synced profile {instance.id} changes to customer {customer.id}")
+        print(f"Synced profile {instance.id} changes to customer {instance.id}")

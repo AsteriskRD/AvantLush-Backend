@@ -237,6 +237,7 @@ class CustomerDetailSerializer(serializers.ModelSerializer):
     total_orders_value = serializers.SerializerMethodField()
     abandoned_cart_count = serializers.SerializerMethodField()
     order_status_breakdown = serializers.SerializerMethodField()
+    photo = serializers.SerializerMethodField()  # Get photo from user's profile
     
     class Meta:
         model = Customer
@@ -332,6 +333,12 @@ class CustomerDetailSerializer(serializers.ModelSerializer):
             ).distinct().count()
             return abandoned_carts
         return 0
+    
+    def get_photo(self, obj):
+        """Get photo from user's profile instead of customer photo"""
+        if obj.user and hasattr(obj.user, 'profile') and obj.user.profile.photo:
+            return obj.user.profile.photo.url
+        return None
     
     def get_order_status_breakdown(self, obj):
         """Get breakdown of orders by status"""
@@ -1918,11 +1925,10 @@ class CustomerUpdateSerializer(serializers.ModelSerializer):
     status = serializers.ChoiceField(choices=Customer.STATUS_CHOICES, required=False)
     email = serializers.EmailField(required=False)  # Add email field for updates
     phone = serializers.CharField(required=False)   # Add phone field for direct updates
-    photo = serializers.ImageField(required=False)  # Add photo field for image uploads
     
     class Meta:
         model = Customer
-        fields = ['name', 'email', 'phone', 'country_code', 'local_phone_number', 'status', 'photo']
+        fields = ['name', 'email', 'phone', 'country_code', 'local_phone_number', 'status']
     
     def validate(self, data):
         # If phone is provided directly, use it
@@ -1975,17 +1981,6 @@ class CustomerUpdateSerializer(serializers.ModelSerializer):
         if 'local_phone_number' in validated_data:
             instance.local_phone_number = validated_data['local_phone_number']
         
-        # Handle photo upload
-        if 'photo' in validated_data:
-            if validated_data['photo']:
-                # If there's an existing photo, delete it from Cloudinary first
-                if instance.photo:
-                    try:
-                        instance.photo.delete()
-                    except:
-                        pass  # Ignore deletion errors
-                instance.photo = validated_data['photo']
-        
         # Handle status update (this affects the linked user account)
         if 'status' in validated_data:
             new_status = validated_data['status']
@@ -1999,7 +1994,7 @@ class CustomerUpdateSerializer(serializers.ModelSerializer):
         # Save customer with update_fields to prevent infinite signal loops
         update_fields = []
         for field in validated_data.keys():
-            if field in ['name', 'email', 'phone', 'country_code', 'local_phone_number', 'status', 'photo']:
+            if field in ['name', 'email', 'phone', 'country_code', 'local_phone_number', 'status']:
                 update_fields.append(field)
         
         if update_fields:
