@@ -1922,16 +1922,24 @@ class CustomerSerializer(serializers.ModelSerializer):
 
 class CustomerUpdateSerializer(serializers.ModelSerializer):
     """Serializer specifically for updating customer details"""
+    name = serializers.CharField(required=True)  # Make name required
+    email = serializers.EmailField(required=True)  # Make email required
+    phone = serializers.CharField(required=False)   # Keep phone optional
     status = serializers.ChoiceField(choices=Customer.STATUS_CHOICES, required=False)
-    email = serializers.EmailField(required=False)  # Add email field for updates
-    phone = serializers.CharField(required=False)   # Add phone field for direct updates
     
     class Meta:
         model = Customer
         fields = ['name', 'email', 'phone', 'country_code', 'local_phone_number', 'status']
     
     def validate(self, data):
-        # If phone is provided directly, use it
+        # Validate required fields
+        if 'name' not in data or not data['name'].strip():
+            raise serializers.ValidationError({'name': 'Name is required.'})
+        
+        if 'email' not in data or not data['email'].strip():
+            raise serializers.ValidationError({'email': 'Email is required.'})
+        
+        # If phone is provided directly, use it (optional)
         if 'phone' in data and data['phone']:
             # Extract country code and local number from full phone if possible
             phone = data['phone']
@@ -1951,7 +1959,7 @@ class CustomerUpdateSerializer(serializers.ModelSerializer):
         country_code = data.get('country_code')
         local_phone_number = data.get('local_phone_number')
 
-        # Only validate if both country_code and local_phone_number are provided
+        # Only validate phone if both country_code and local_phone_number are provided
         if country_code and local_phone_number:
             from .utils import validate_phone_format
             is_valid, error_message = validate_phone_format(country_code, local_phone_number)
@@ -1965,21 +1973,22 @@ class CustomerUpdateSerializer(serializers.ModelSerializer):
         return data
     
     def update(self, instance, validated_data):
-        # Update basic fields
+        # Update required fields (these should always be present)
         if 'name' in validated_data:
-            instance.name = validated_data['name']
+            instance.name = validated_data['name'].strip()
         
         if 'email' in validated_data:
-            instance.email = validated_data['email']
+            instance.email = validated_data['email'].strip()
         
+        # Update optional fields
         if 'phone' in validated_data:
-            instance.phone = validated_data['phone']
+            instance.phone = validated_data['phone'] or ''
         
         if 'country_code' in validated_data:
-            instance.country_code = validated_data['country_code']
+            instance.country_code = validated_data['country_code'] or ''
         
         if 'local_phone_number' in validated_data:
-            instance.local_phone_number = validated_data['local_phone_number']
+            instance.local_phone_number = validated_data['local_phone_number'] or ''
         
         # Handle status update (this affects the linked user account)
         if 'status' in validated_data:
