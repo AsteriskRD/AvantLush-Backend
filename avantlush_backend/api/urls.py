@@ -41,6 +41,7 @@ from .views import (
     CustomerListView,
     ColorViewSet,
     SizeViewSet,
+    NotificationViewSet,
     clover_hosted_webhook,
     clover_hosted_payment_status,
     order_payments_list,
@@ -74,6 +75,7 @@ router.register(r'checkout', CheckoutViewSet, basename='checkout')
 router.register(r'dashboard', DashboardViewSet, basename='dashboard')
 router.register(r'product-management', ProductViewSet, basename='product-management')
 router.register(r'customers', CustomerViewSet, basename='customer')
+router.register(r'notifications', NotificationViewSet, basename='notification')
 router.register(r'products/(?P<product_id>\d+)/reviews', ProductReviewViewSet, basename='product-reviews')
 router.register(r'carousel', CarouselViewSet, basename='carousel')
 router.register(r'colors', ColorViewSet, basename='color')

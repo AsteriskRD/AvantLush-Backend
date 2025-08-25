@@ -196,3 +196,38 @@ def sync_profile_to_customer(sender, instance, created, **kwargs):
     if updated:
         customer.save(update_fields=['name', 'phone'])
         print(f"Synced profile {instance.id} changes to customer {instance.id}")
+
+# --- Order Notifications for Admins ---
+@receiver(post_save, sender='api.Order')
+def create_order_notification(sender, instance, created, **kwargs):
+    """Create notification when new order is placed"""
+    if created:
+        from .models import OrderNotification
+        
+        # Create new order notification
+        OrderNotification.objects.create(
+            notification_type='NEW_ORDER',
+            title=f'New Order #{instance.order_number}',
+            message=f'New order placed by {instance.user.email if instance.user else "Guest"} for ${instance.total}',
+            order=instance
+        )
+        
+        print(f"🔔 Order notification created for order #{instance.order_number}")
+    
+    # Also notify on status changes (but not on creation)
+    elif not created and 'status' in kwargs.get('update_fields', []):
+        from .models import OrderNotification
+        
+        # Create status change notification
+        OrderNotification.objects.create(
+            notification_type='ORDER_STATUS_CHANGED',
+            title=f'Order #{instance.order_number} Status Updated',
+            message=f'Order status changed to {instance.status}',
+            order=instance
+        )
+        
+        print(f"🔔 Status change notification created for order #{instance.order_number}")
+
+# --- Customer Deletion Synchronization ---
+# REMOVED: This was causing infinite recursion
+# Instead, we handle deletion synchronization in the CustomerViewSet.destroy() method

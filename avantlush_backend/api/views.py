@@ -177,6 +177,7 @@ from .serializers import (
     ColorSerializer,
     FlatOrderItemSerializer,
     SummaryChartResponseSerializer, # Added for dashboard chart
+    OrderNotificationSerializer,
     
 )
 
@@ -4830,6 +4831,10 @@ class DashboardViewSet(viewsets.ViewSet):
             
             total_revenue = revenue_data['total_revenue'] or 0
             
+            # Get unread notification count
+            from .models import OrderNotification
+            unread_notifications = OrderNotification.objects.filter(is_read=False).count()
+            
             return Response({
                 'summary': {
                     'all_orders': {
@@ -4865,6 +4870,9 @@ class DashboardViewSet(viewsets.ViewSet):
                         'label': 'Damaged'
                     },
                     'total_revenue': float(total_revenue)
+                },
+                'notifications': {
+                    'unread_count': unread_notifications
                 },
                 'period': time_period,
                 'last_updated': timezone.now().isoformat()
@@ -5847,6 +5855,48 @@ class CustomerViewSet(viewsets.ModelViewSet):
         kwargs['partial'] = True
         return self.update(request, *args, **kwargs)
 
+    def destroy(self, request, *args, **kwargs):
+        """Custom destroy method to ensure proper synchronization with Django Admin"""
+        instance = self.get_object()
+        
+        # Store user info for logging before deletion
+        user_info = None
+        if instance.user:
+            user_info = {
+                'id': instance.user.id,
+                'email': instance.user.email
+            }
+        
+        try:
+            # If this customer has an associated user, delete the user first
+            # This will cascade to delete the Profile and any other related records
+            if instance.user:
+                user = instance.user
+                print(f"🗑️ Deleting associated user {user.id} ({user.email}) due to customer deletion")
+                # Delete the user (this will cascade to Profile and other related records)
+                user.delete()
+                # The Customer record will be automatically deleted due to CASCADE
+                print(f"✅ Successfully deleted user {user_info['id']} and all related records")
+            else:
+                # If no user was associated, just delete the customer
+                print(f"🗑️ Deleting customer {instance.id} ({instance.email}) - no associated user")
+                instance.delete()
+                print(f"✅ Successfully deleted customer {instance.id}")
+            
+            return Response({
+                'status': 'success',
+                'success': True,
+                'message': 'Customer deleted successfully'
+            }, status=status.HTTP_204_NO_CONTENT)
+            
+        except Exception as e:
+            print(f"❌ Error during customer deletion: {e}")
+            return Response({
+                'status': 'error',
+                'success': False,
+                'message': f'Error deleting customer: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
     def get_serializer_class(self):
         if self.action == 'create':
             return CustomerCreateSerializer
@@ -6208,3 +6258,51 @@ class CustomerViewSet(viewsets.ModelViewSet):
             ])
         
         return response
+
+class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet for admin notifications"""
+    serializer_class = OrderNotificationSerializer
+    permission_classes = [IsAdminUser]
+    
+    def get_queryset(self):
+        """Get notifications, optionally filtered by read status"""
+        queryset = OrderNotification.objects.all()
+        
+        # Filter by read status if provided
+        is_read = self.request.query_params.get('is_read')
+        if is_read is not None:
+            is_read = is_read.lower() == 'true'
+            queryset = queryset.filter(is_read=is_read)
+        
+        return queryset
+    
+    @action(detail=True, methods=['POST'])
+    def mark_as_read(self, request, pk=None):
+        """Mark a notification as read"""
+        notification = self.get_object()
+        notification.is_read = True
+        notification.save()
+        
+        return Response({
+            'status': 'success',
+            'message': 'Notification marked as read'
+        })
+    
+    @action(detail=False, methods=['POST'])
+    def mark_all_as_read(self, request):
+        """Mark all notifications as read"""
+        OrderNotification.objects.filter(is_read=False).update(is_read=True)
+        
+        return Response({
+            'status': 'success',
+            'message': 'All notifications marked as read'
+        })
+    
+    @action(detail=False, methods=['GET'])
+    def unread_count(self, request):
+        """Get count of unread notifications"""
+        count = OrderNotification.objects.filter(is_read=False).count()
+        
+        return Response({
+            'unread_count': count
+        })

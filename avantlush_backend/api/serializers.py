@@ -42,7 +42,8 @@ from .models import (
     ReviewTag,
     ReviewHelpfulVote,
     PromoCode,
-    ShippingMethod
+    ShippingMethod,
+    OrderNotification
 )
 
 User = get_user_model()
@@ -1195,6 +1196,19 @@ class WishlistNotificationSerializer(serializers.ModelSerializer):
         model = WishlistNotification
         fields = ['id', 'notification_type', 'message', 'is_read', 'created_at']
         read_only_fields = ['created_at']
+
+class OrderNotificationSerializer(serializers.ModelSerializer):
+    """Serializer for order notifications"""
+    order_number = serializers.CharField(source='order.order_number', read_only=True)
+    customer_name = serializers.CharField(source='order.user.get_full_name', read_only=True)
+    order_total = serializers.CharField(source='order.total', read_only=True)
+    
+    class Meta:
+        model = OrderNotification
+        fields = [
+            'id', 'notification_type', 'title', 'message', 'order_number',
+            'customer_name', 'order_total', 'is_read', 'created_at'
+        ]
 
 
 from cloudinary.utils import cloudinary_url

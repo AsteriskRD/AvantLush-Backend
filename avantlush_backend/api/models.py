@@ -566,6 +566,31 @@ class WishlistNotification(models.Model):
     class Meta:
         ordering = ['-created_at']
 
+    def __str__(self):
+        return f"{self.notification_type}: {self.message}"
+
+class OrderNotification(models.Model):
+    """Model to store order notifications for admins"""
+    NOTIFICATION_TYPES = [
+        ('NEW_ORDER', 'New Order'),
+        ('PAYMENT_RECEIVED', 'Payment Received'),
+        ('ORDER_STATUS_CHANGED', 'Order Status Changed'),
+        ('LOW_STOCK', 'Low Stock Alert'),
+    ]
+    
+    notification_type = models.CharField(max_length=50, choices=NOTIFICATION_TYPES)
+    title = models.CharField(max_length=200)
+    message = models.TextField()
+    order = models.ForeignKey('Order', on_delete=models.CASCADE, null=True, blank=True)
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.notification_type}: {self.title}"
+
 # ProductRecommendation Model
 class ProductRecommendation(models.Model):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='recommendations')
