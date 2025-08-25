@@ -95,6 +95,11 @@ class ProductAdminForm(forms.ModelForm):
         if 'image_uploads' in self.fields:
             self.fields['image_uploads'].widget = forms.HiddenInput()
         
+        # Make SKU field optional
+        if 'sku' in self.fields:
+            self.fields['sku'].required = False
+            self.fields['sku'].help_text = "Leave empty to auto-generate SKU"
+        
         # If we're editing an existing product, populate the text field
         if self.instance.pk and hasattr(self.instance, 'product_details') and self.instance.product_details:
             self.fields['product_details_text'].initial = '\n'.join(self.instance.product_details)
@@ -233,7 +238,8 @@ class ProductAdmin(admin.ModelAdmin):
                 'slug',
                 'category',
                 'tags'
-            )
+            ),
+            'description': 'SKU will be automatically generated if left empty.'
         }),
         ('Images', {
             'fields': (
@@ -272,6 +278,17 @@ class ProductAdmin(admin.ModelAdmin):
         
         # ✅ Handle multiple additional images
         additional_images = request.FILES.getlist('additional_images')
+        if additional_images:
+            uploaded_urls = []
+            
+            # Keep existing images if editing (so you don't lose old images)
+        
+        # Ensure SKU is generated if not provided
+        if not obj.sku:
+            obj.sku = obj.generate_sku()
+            print(f"✅ Auto-generated SKU: {obj.sku}")
+        
+        # Handle image uploads
         if additional_images:
             uploaded_urls = []
             

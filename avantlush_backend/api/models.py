@@ -191,6 +191,30 @@ class Product(models.Model):
         ).exclude(id=self.id).annotate(
             purchase_count=models.Count('id')
         ).order_by('-purchase_count')[:limit]
+
+    def generate_sku(self):
+        """Generate a unique SKU for this product"""
+        from .utils import generate_sku
+        return generate_sku(self.name, self.category, self.sku)
+
+    def save(self, *args, **kwargs):
+        """Override save to auto-generate SKU if not provided"""
+        if not self.sku:
+            self.sku = self.generate_sku()
+        super().save(*args, **kwargs)
+
+    def clean(self):
+        """Validate the model before saving"""
+        from django.core.exceptions import ValidationError
+        from .utils import is_sku_unique
+        
+        # Check SKU uniqueness
+        if self.sku and not is_sku_unique(self.sku, self.id):
+            raise ValidationError({
+                'sku': f"SKU '{self.sku}' is already in use by another product."
+            })
+        
+        super().clean()
     
     def sync_available_sizes(self):
         """
@@ -293,6 +317,26 @@ class ProductVariation(models.Model):
 
     def __str__(self):
         return f"{self.product.name} - {self.variation_type}: {self.variation}"
+
+    def generate_sku(self):
+        """Generate a unique SKU for this product variation"""
+        from .utils import generate_sku
+        
+        # Create a variation identifier
+        variation_identifier = f"{self.variation_type}-{self.variation}"
+        
+        # Generate SKU based on product name and variation
+        base_sku = generate_sku(f"{self.product.name} {variation_identifier}", self.product.category, self.sku)
+        
+        # Add variation suffix
+        variation_suffix = f"-{variation_identifier[:8].upper()}"
+        return base_sku + variation_suffix
+
+    def save(self, *args, **kwargs):
+        """Override save to auto-generate SKU if not provided"""
+        if not self.sku:
+            self.sku = self.generate_sku()
+        super().save(*args, **kwargs)
 
 class ProductSize(models.Model):
     product = models.ForeignKey(Product, related_name='available_sizes', on_delete=models.CASCADE)

@@ -2,6 +2,7 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model, authenticate
 from django.contrib.auth.password_validation import validate_password
 from django.core import exceptions
+from django.utils.text import slugify
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
 from allauth.socialaccount.providers.apple.views import AppleOAuth2Adapter
@@ -587,9 +588,41 @@ class TagSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'slug']
 
 class CategorySerializer(serializers.ModelSerializer):
+    children_count = serializers.SerializerMethodField()
+    products_count = serializers.SerializerMethodField()
+    parent_name = serializers.CharField(source='parent.name', read_only=True)
+    
     class Meta:
         model = Category
-        fields = ['id', 'name', 'slug']
+        fields = ['id', 'name', 'slug', 'parent', 'parent_name', 'children_count', 'products_count']
+    
+    def get_children_count(self, obj):
+        return obj.children.count()
+    
+    def get_products_count(self, obj):
+        return obj.products.count()
+
+class CategoryCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating categories with auto-slug generation"""
+    
+    class Meta:
+        model = Category
+        fields = ['name', 'parent']
+    
+    def create(self, validated_data):
+        # Auto-generate slug from name
+        name = validated_data['name']
+        slug = slugify(name)
+        
+        # Ensure slug uniqueness
+        counter = 1
+        original_slug = slug
+        while Category.objects.filter(slug=slug).exists():
+            slug = f"{original_slug}-{counter}"
+            counter += 1
+        
+        validated_data['slug'] = slug
+        return super().create(validated_data)
    
 class SizeSerializer(serializers.ModelSerializer):
     class Meta:
@@ -644,10 +677,7 @@ class ProductSerializer(serializers.ModelSerializer):
             'main_image', 'is_liked', 'product_details'  
         ]
 
-class CategorySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Category
-        fields = ['id', 'name', 'slug', 'parent']
+
 
 
 class ArticleSerializer(serializers.ModelSerializer):

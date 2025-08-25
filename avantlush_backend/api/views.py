@@ -5100,7 +5100,6 @@ class ProductViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = Product.objects.prefetch_related(
             'variations',
-            
         )
         
         # If user is authenticated, prefetch wishlist data
@@ -5132,6 +5131,125 @@ class ProductViewSet(viewsets.ModelViewSet):
         # Make sure we include the request in the context
         context['request'] = self.request
         return context
+
+    def perform_create(self, serializer):
+        """Automatically generate SKU when creating a product"""
+        from .utils import generate_sku
+        
+        # Get the product instance before saving
+        product = serializer.save()
+        
+        # Generate SKU if not provided
+        if not product.sku:
+            category = product.category
+            sku = generate_sku(product.name, category, product.sku)
+            product.sku = sku
+            product.save(update_fields=['sku'])
+            print(f"✅ Generated SKU '{sku}' for product '{product.name}'")
+        
+        return product
+
+    @action(detail=False, methods=['POST'])
+    def regenerate_skus(self, request):
+        """Regenerate SKUs for all products that don't have them"""
+        from .utils import generate_sku
+        
+        products_without_sku = Product.objects.filter(sku__isnull=True) | Product.objects.filter(sku='')
+        updated_count = 0
+        
+        for product in products_without_sku:
+            try:
+                old_sku = product.sku
+                product.sku = generate_sku(product.name, product.category, product.sku)
+                product.save(update_fields=['sku'])
+                updated_count += 1
+                print(f"✅ Regenerated SKU for '{product.name}': {old_sku} → {product.sku}")
+            except Exception as e:
+                print(f"❌ Error regenerating SKU for '{product.name}': {e}")
+        
+        return Response({
+            'status': 'success',
+            'message': f'Successfully regenerated SKUs for {updated_count} products',
+            'updated_count': updated_count
+        })
+
+    @action(detail=True, methods=['POST'])
+    def regenerate_sku(self, request, pk=None):
+        """Regenerate SKU for a specific product"""
+        from .utils import generate_sku
+        
+        product = self.get_object()
+        old_sku = product.sku
+        
+        try:
+            product.sku = generate_sku(product.name, product.category, product.sku)
+            product.save(update_fields=['sku'])
+            
+            return Response({
+                'status': 'success',
+                'message': f'Successfully regenerated SKU for {product.name}',
+                'old_sku': old_sku,
+                'new_sku': product.sku
+            })
+        except Exception as e:
+            return Response({
+                'status': 'error',
+                'message': f'Error regenerating SKU: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['GET'])
+    def check_sku_uniqueness(self, request):
+        """Check SKU uniqueness across all products"""
+        from .utils import is_sku_unique
+        
+        sku = request.query_params.get('sku')
+        if not sku:
+            return Response({
+                'status': 'error',
+                'message': 'SKU parameter is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        is_unique = is_sku_unique(sku)
+        
+        return Response({
+            'status': 'success',
+            'sku': sku,
+            'is_unique': is_unique,
+            'message': f"SKU '{sku}' is {'unique' if is_unique else 'already in use'}"
+        })
+
+    @action(detail=True, methods=['POST'])
+    def regenerate_variation_skus(self, request, pk=None):
+        """Regenerate SKUs for all variations of a specific product"""
+        product = self.get_object()
+        variations = product.variations.all()
+        
+        updated_count = 0
+        updated_skus = []
+        
+        for variation in variations:
+            try:
+                old_sku = variation.sku
+                variation.sku = variation.generate_sku()
+                variation.save(update_fields=['sku'])
+                updated_count += 1
+                updated_skus.append({
+                    'variation_id': variation.id,
+                    'old_sku': old_sku,
+                    'new_sku': variation.sku
+                })
+            except Exception as e:
+                return Response({
+                    'status': 'error',
+                    'message': f'Error updating variation {variation.id}: {str(e)}'
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        return Response({
+            'status': 'success',
+            'message': f'Successfully regenerated SKUs for {updated_count} variations of {product.name}',
+            'updated_count': updated_count,
+            'updated_skus': updated_skus
+        })
 
     def list(self, request, *args, **kwargs):
         # Apply filters
@@ -5728,6 +5846,177 @@ class CarouselViewSet(viewsets.ModelViewSet):
                 {"error": f"Failed to reorder items: {str(e)}"},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+class CategoryViewSet(viewsets.ModelViewSet):
+    """ViewSet for managing product categories"""
+    queryset = Category.objects.all()
+    serializer_class = CategorySerializer
+    authentication_classes = [JWTAuthentication, TokenAuthentication, SessionAuthentication]
+    permission_classes = [IsAdminUser]
+    
+    def get_serializer_class(self):
+        """Return appropriate serializer based on action"""
+        if self.action == 'create':
+            return CategoryCreateSerializer
+        return CategorySerializer
+    
+    def get_permissions(self):
+        """Allow public access for read operations"""
+        if self.action in ['list', 'retrieve', 'tree', 'products']:
+            return [AllowAny()]
+        return [IsAdminUser()]
+    
+    def get_queryset(self):
+        """Get categories with optimized queries"""
+        queryset = Category.objects.prefetch_related('children', 'products')
+        
+        # Filter by parent if specified
+        parent_id = self.request.query_params.get('parent')
+        if parent_id:
+            if parent_id == 'null':
+                queryset = queryset.filter(parent__isnull=True)
+            else:
+                queryset = queryset.filter(parent_id=parent_id)
+        
+        # Filter by name if specified
+        name = self.request.query_params.get('name')
+        if name:
+            queryset = queryset.filter(name__icontains=name)
+        
+        return queryset.order_by('name')
+    
+    @action(detail=False, methods=['GET'])
+    def tree(self, request):
+        """Get hierarchical category tree"""
+        def build_tree(categories, parent=None):
+            tree = []
+            for category in categories:
+                if category.parent == parent:
+                    node = {
+                        'id': category.id,
+                        'name': category.name,
+                        'slug': category.slug,
+                        'children_count': category.children.count(),
+                        'products_count': category.products.count(),
+                        'children': build_tree(categories, category)
+                    }
+                    tree.append(node)
+            return tree
+        
+        # Get all categories
+        categories = Category.objects.all()
+        tree = build_tree(categories)
+        
+        return Response({
+            'status': 'success',
+            'data': tree
+        })
+    
+    @action(detail=True, methods=['GET'])
+    def products(self, request, pk=None):
+        """Get all products in a specific category"""
+        category = self.get_object()
+        products = category.products.filter(status='published')
+        
+        # Pagination
+        page = self.paginate_queryset(products)
+        if page is not None:
+            serializer = ProductSerializer(page, many=True, context={'request': request})
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = ProductSerializer(products, many=True, context={'request': request})
+        return Response({
+            'status': 'success',
+            'data': serializer.data
+        })
+    
+    @action(detail=False, methods=['POST'])
+    def bulk_create(self, request):
+        """Create multiple categories at once"""
+        categories_data = request.data.get('categories', [])
+        
+        if not categories_data:
+            return Response({
+                'status': 'error',
+                'message': 'No categories data provided'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        created_categories = []
+        errors = []
+        
+        for cat_data in categories_data:
+            try:
+                serializer = self.get_serializer(data=cat_data)
+                if serializer.is_valid():
+                    category = serializer.save()
+                    created_categories.append(category)
+                else:
+                    errors.append({
+                        'data': cat_data,
+                        'errors': serializer.errors
+                    })
+            except Exception as e:
+                errors.append({
+                    'data': cat_data,
+                    'error': str(e)
+                })
+        
+        return Response({
+            'status': 'success',
+            'message': f'Successfully created {len(created_categories)} categories',
+            'created_count': len(created_categories),
+            'errors': errors
+        })
+    
+    @action(detail=True, methods=['POST'])
+    def move_products(self, request, pk=None):
+        """Move all products from one category to another"""
+        category = self.get_object()
+        target_category_id = request.data.get('target_category_id')
+        
+        if not target_category_id:
+            return Response({
+                'status': 'error',
+                'message': 'Target category ID is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            target_category = Category.objects.get(id=target_category_id)
+            products_count = category.products.count()
+            
+            # Move all products to target category
+            category.products.update(category=target_category)
+            
+            return Response({
+                'status': 'success',
+                'message': f'Successfully moved {products_count} products from {category.name} to {target_category.name}',
+                'moved_count': products_count
+            })
+        except Category.DoesNotExist:
+            return Response({
+                'status': 'error',
+                'message': 'Target category not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+    
+    def perform_create(self, serializer):
+        """Custom create method with validation"""
+        # Check if slug already exists
+        slug = serializer.validated_data.get('slug')
+        if Category.objects.filter(slug=slug).exists():
+            raise serializers.ValidationError(f"Category with slug '{slug}' already exists")
+        
+        serializer.save()
+    
+    def perform_update(self, serializer):
+        """Custom update method with validation"""
+        instance = serializer.instance
+        new_slug = serializer.validated_data.get('slug')
+        
+        # Check if slug already exists (excluding current instance)
+        if Category.objects.filter(slug=new_slug).exclude(id=instance.id).exists():
+            raise serializers.ValidationError(f"Category with slug '{new_slug}' already exists")
+        
+        serializer.save()
             
 class ProductReviewViewSet(viewsets.ModelViewSet):
     serializer_class = ReviewSerializer

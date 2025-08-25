@@ -1,5 +1,10 @@
 # utils.py
 
+import uuid
+import re
+from django.db import models
+from .models import Product, Category
+
 VALID_COUNTRY_CODES = {
     '+1': 'United States/Canada',
     '+44': 'United Kingdom',
@@ -79,3 +84,92 @@ def validate_phone_format(country_code, phone_number):
             return False, f"Phone number must be between {min_length} and {max_length} digits"
     
     return True, None
+
+def generate_sku(product_name, category=None, existing_sku=None):
+    """
+    Generate a unique SKU for a product
+    
+    Args:
+        product_name (str): The name of the product
+        category (Category, optional): The product category
+        existing_sku (str, optional): Existing SKU to check for uniqueness
+    
+    Returns:
+        str: A unique SKU
+    """
+    # Get category prefix
+    if category:
+        # Extract first 3-4 letters from category name
+        category_prefix = re.sub(r'[^A-Za-z]', '', category.name)[:4].upper()
+    else:
+        category_prefix = "PROD"
+    
+    # Clean product name and get first 2-3 meaningful words
+    words = re.sub(r'[^A-Za-z\s]', '', product_name).split()
+    if len(words) >= 2:
+        product_prefix = ''.join(word[:2].upper() for word in words[:2])
+    else:
+        product_prefix = words[0][:4].upper() if words else "ITEM"
+    
+    # Generate unique identifier
+    unique_id = uuid.uuid4().hex[:6].upper()
+    
+    # Create SKU format: CAT-PROD-UNIQUEID
+    sku = f"{category_prefix}-{product_prefix}-{unique_id}"
+    
+    # Ensure uniqueness
+    counter = 1
+    original_sku = sku
+    while Product.objects.filter(sku=sku).exclude(sku=existing_sku).exists():
+        sku = f"{original_sku}-{counter:02d}"
+        counter += 1
+        if counter > 99:  # Prevent infinite loop
+            # Fallback to timestamp-based SKU
+            import time
+            timestamp = int(time.time()) % 1000000
+            sku = f"{category_prefix}-{timestamp:06d}"
+            break
+    
+    return sku
+
+def generate_sku_from_category(category_name, product_name):
+    """
+    Generate SKU based on category name and product name
+    
+    Args:
+        category_name (str): Category name
+        product_name (str): Product name
+    
+    Returns:
+        str: Generated SKU
+    """
+    # Clean category name and get prefix
+    category_prefix = re.sub(r'[^A-Za-z]', '', category_name)[:4].upper()
+    
+    # Clean product name and get meaningful prefix
+    words = re.sub(r'[^A-Za-z\s]', '', product_name).split()
+    if len(words) >= 2:
+        product_prefix = ''.join(word[:2].upper() for word in words[:2])
+    else:
+        product_prefix = words[0][:4].upper() if words else "ITEM"
+    
+    # Generate unique identifier
+    unique_id = uuid.uuid4().hex[:6].upper()
+    
+    return f"{category_prefix}-{product_prefix}-{unique_id}"
+
+def is_sku_unique(sku, exclude_product_id=None):
+    """
+    Check if a SKU is unique
+    
+    Args:
+        sku (str): SKU to check
+        exclude_product_id (int, optional): Product ID to exclude from check
+    
+    Returns:
+        bool: True if SKU is unique, False otherwise
+    """
+    queryset = Product.objects.filter(sku=sku)
+    if exclude_product_id:
+        queryset = queryset.exclude(id=exclude_product_id)
+    return not queryset.exists()

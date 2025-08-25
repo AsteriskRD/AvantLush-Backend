@@ -41,6 +41,7 @@ from .views import (
     CustomerListView,
     ColorViewSet,
     SizeViewSet,
+    CategoryViewSet,
     NotificationViewSet,
     clover_hosted_webhook,
     clover_hosted_payment_status,
@@ -80,6 +81,7 @@ router.register(r'products/(?P<product_id>\d+)/reviews', ProductReviewViewSet, b
 router.register(r'carousel', CarouselViewSet, basename='carousel')
 router.register(r'colors', ColorViewSet, basename='color')
 router.register(r'sizes', SizeViewSet, basename='size')
+router.register(r'categories', CategoryViewSet, basename='category')
 
 # URL patterns
 urlpatterns = [
