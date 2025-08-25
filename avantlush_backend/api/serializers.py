@@ -1908,10 +1908,11 @@ class CustomerSerializer(serializers.ModelSerializer):
     status = serializers.SerializerMethodField()
     orders_count = serializers.IntegerField(read_only=True)
     balance = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    photo = serializers.SerializerMethodField()  # Add photo field
     
     class Meta:
         model = Customer
-        fields = ['id', 'name', 'email', 'phone', 'status', 'orders_count', 'balance', 'created_at']
+        fields = ['id', 'name', 'email', 'phone', 'status', 'orders_count', 'balance', 'created_at', 'photo']
     
     def get_status(self, obj):
         # If you add status field to model, use: return obj.status
@@ -1919,6 +1920,12 @@ class CustomerSerializer(serializers.ModelSerializer):
         if obj.user:
             return 'active' if obj.user.is_active else 'blocked'
         return 'active'
+    
+    def get_photo(self, obj):
+        """Get photo from user's profile instead of customer photo"""
+        if obj.user and hasattr(obj.user, 'profile') and obj.user.profile.photo:
+            return obj.user.profile.photo.url
+        return None
 
 class CustomerUpdateSerializer(serializers.ModelSerializer):
     """Serializer specifically for updating customer details"""
