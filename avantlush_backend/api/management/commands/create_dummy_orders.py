@@ -95,7 +95,7 @@ class Command(BaseCommand):
             
             for product in order_products:
                 quantity = random.randint(1, 3)
-                price = product.base_price  # Use base_price from product
+                price = product.price  # Use price from product
                 
                 # Create order item
                 item = OrderItem.objects.create(

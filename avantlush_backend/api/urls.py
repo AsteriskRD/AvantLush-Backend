@@ -56,6 +56,7 @@ from .views import (
     checkout_failure,
     checkout_cancel,
     checkout_status_api,
+    ProductVariationViewSet,
 )
 
 # Router setup
@@ -82,6 +83,7 @@ router.register(r'carousel', CarouselViewSet, basename='carousel')
 router.register(r'colors', ColorViewSet, basename='color')
 router.register(r'sizes', SizeViewSet, basename='size')
 router.register(r'categories', CategoryViewSet, basename='category')
+router.register(r'product-variations', ProductVariationViewSet, basename='product-variation')
 
 # URL patterns
 urlpatterns = [

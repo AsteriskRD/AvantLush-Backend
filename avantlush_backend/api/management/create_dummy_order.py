@@ -84,7 +84,7 @@ class Command(BaseCommand):
             # Pick a random product
             product = random.choice(products)
             quantity = random.randint(1, 3)
-            unit_price = product.base_price if hasattr(product, 'base_price') else Decimal('99.99')
+            unit_price = product.price if hasattr(product, 'price') else Decimal('99.99')
             total_price = unit_price * quantity
             
             # Create a unique identifier for this item

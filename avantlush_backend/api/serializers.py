@@ -1510,6 +1510,8 @@ class ProductTableSerializer(serializers.ModelSerializer):
 
 class ProductVariationSerializer(serializers.ModelSerializer):
     final_price = serializers.SerializerMethodField()
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    product_sku = serializers.CharField(source='product.sku', read_only=True)
     
     # Keep these for backward compatibility
     size = SizeSerializer(read_only=True)
@@ -1548,21 +1550,21 @@ class ProductVariationSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProductVariation
         fields = [
-            'id', 'variation_type', 'variation', 'price_adjustment',
-            'stock_quantity', 'sku', 'is_default',
-             'final_price', 
+            'id', 'product', 'product_name', 'product_sku', 'variation_type', 'variation', 
+            'price_adjustment', 'stock_quantity', 'sku', 'is_default', 'final_price',
             # Single size/color (backward compatibility)
             'size', 'size_id', 'color', 'color_id',
             # Multiple sizes/colors (new fields)
             'sizes', 'size_ids', 'colors', 'color_ids'
         ]
+        read_only_fields = ['id', 'product_name', 'product_sku', 'final_price']
     
     def get_final_price(self, obj):
-        # Calculate the final price by adding the base price of the product 
+        # Calculate the final price by adding the final price of the product 
         # and the price adjustment of the variant
-        base_price = obj.product.base_price if obj.product else 0
+        product_price = obj.product.get_final_price() if obj.product else 0
         price_adjustment = obj.price_adjustment if obj.price_adjustment else 0
-        return float(base_price) + float(price_adjustment)
+        return float(product_price) + float(price_adjustment)
 
     def create(self, validated_data):
         variant = super().create(validated_data)
@@ -1572,6 +1574,90 @@ class ProductVariationSerializer(serializers.ModelSerializer):
         # Simply call the super method to update the instance
         variant = super().update(instance, validated_data)
         return variant
+
+class ProductVariationManagementSerializer(serializers.ModelSerializer):
+    """Enhanced serializer for admin operations on product variations"""
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    product_sku = serializers.CharField(source='product.sku', read_only=True)
+    final_price = serializers.SerializerMethodField()
+    total_stock = serializers.SerializerMethodField()
+    
+    # Size and Color fields
+    sizes = SizeSerializer(many=True, read_only=True)
+    colors = ColorSerializer(many=True, read_only=True)
+    size_ids = serializers.PrimaryKeyRelatedField(
+        queryset=Size.objects.all(),
+        many=True,
+        write_only=True,
+        required=False,
+        source='sizes'
+    )
+    color_ids = serializers.PrimaryKeyRelatedField(
+        queryset=Color.objects.all(),
+        many=True,
+        write_only=True,
+        required=False,
+        source='colors'
+    )
+    
+    # Backward compatibility
+    size = SizeSerializer(read_only=True)
+    color = ColorSerializer(read_only=True)
+    size_id = serializers.PrimaryKeyRelatedField(
+        queryset=Size.objects.all(),
+        write_only=True,
+        required=False,
+        source='size'
+    )
+    color_id = serializers.PrimaryKeyRelatedField(
+        queryset=Color.objects.all(),
+        write_only=True,
+        required=False,
+        source='color'
+    )
+
+    class Meta:
+        model = ProductVariation
+        fields = [
+            'id', 'product', 'product_name', 'product_sku', 'variation_type', 'variation',
+            'price_adjustment', 'stock_quantity', 'sku', 'is_default', 'final_price',
+            'total_stock', 'created_at', 'updated_at',
+            # Size and Color fields
+            'sizes', 'size_ids', 'colors', 'color_ids',
+            'size', 'size_id', 'color', 'color_id'
+        ]
+        read_only_fields = ['id', 'product_name', 'product_sku', 'final_price', 'total_stock', 'created_at', 'updated_at']
+
+    def get_final_price(self, obj):
+        """Calculate final price including product base price and variation adjustment"""
+        if obj.product:
+            base_price = obj.product.get_final_price()
+            adjustment = obj.price_adjustment or 0
+            return float(base_price) + float(adjustment)
+        return 0
+
+    def get_total_stock(self, obj):
+        """Get total stock including product base stock and variation stock"""
+        if obj.product:
+            base_stock = obj.product.stock_quantity or 0
+            variation_stock = obj.stock_quantity or 0
+            return base_stock + variation_stock
+        return obj.stock_quantity or 0
+
+    def validate(self, data):
+        """Validate variation data"""
+        # Ensure at least one size or color is selected
+        if not data.get('sizes') and not data.get('size') and not data.get('colors') and not data.get('color'):
+            raise serializers.ValidationError("At least one size or color must be selected")
+        
+        # Ensure SKU is unique
+        sku = data.get('sku')
+        if sku:
+            existing = ProductVariation.objects.filter(sku=sku).exclude(id=self.instance.id if self.instance else None)
+            if existing.exists():
+                raise serializers.ValidationError(f"SKU '{sku}' is already in use by another variation")
+        
+        return data
 
 class ProductManagementSerializer(serializers.ModelSerializer):
     # General Information Fields
@@ -1590,11 +1676,10 @@ class ProductManagementSerializer(serializers.ModelSerializer):
     )
 
     # Pricing Fields
-    base_price = serializers.DecimalField(
+    price = serializers.DecimalField(
         max_digits=10, 
         decimal_places=2, 
-        required=False, 
-        source='price'
+        required=False
     )
     discount_type = serializers.ChoiceField(
         choices=['percentage', 'fixed'], 
@@ -1632,7 +1717,7 @@ class ProductManagementSerializer(serializers.ModelSerializer):
             'image_files', 'is_featured', 'is_liked', 'available_sizes', 'available_colors',
             'variations',
             # Pricing
-            'base_price', 'discount_type', 'discount_value', 
+            'price', 'discount_type', 'discount_value', 
             'vat_amount',
             # Inventory
             'sku', 'barcode', 'stock_quantity', 'variations',

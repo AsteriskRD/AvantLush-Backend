@@ -149,7 +149,6 @@ class Product(models.Model):
     tags = models.ManyToManyField('Tag', blank=True)
     
     # Pricing fields
-    base_price = models.DecimalField(max_digits=10, decimal_places=2)
     discount_type = models.CharField(max_length=20, choices=[
         ('percentage', 'Percentage'),
         ('fixed', 'Fixed Amount')
@@ -172,7 +171,28 @@ class Product(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return self.name
+        return f"{self.name} - ${self.get_final_price()}"
+
+    def get_final_price(self):
+        """Calculate the final price after applying discount"""
+        if self.discount_type and self.discount_value:
+            if self.discount_type == 'percentage':
+                # Apply percentage discount
+                discount_amount = self.price * (self.discount_value / 100)
+                return self.price - discount_amount
+            elif self.discount_type == 'fixed':
+                # Apply fixed amount discount
+                return max(0, self.price - self.discount_value)
+        return self.price
+
+    def get_discount_amount(self):
+        """Get the actual discount amount in currency"""
+        if self.discount_type and self.discount_value:
+            if self.discount_type == 'percentage':
+                return self.price * (self.discount_value / 100)
+            elif self.discount_type == 'fixed':
+                return self.discount_value
+        return 0
     
     def get_similar_products(self, limit=4):
         """Get similar products based on category and price range"""

@@ -30,8 +30,6 @@ from .models import (
     CarouselItem,
     Size,
     Color,
-    ProductSize,
-    ProductColor,
 )
 
 # Custom widget for multiple file uploads
@@ -172,20 +170,14 @@ class ProductVariationInline(admin.StackedInline):
 
 
 
-class ProductSizeInline(admin.TabularInline):
-    model = ProductSize
-    extra = 1
 
-class ProductColorInline(admin.TabularInline):
-    model = ProductColor
-    extra = 1
 
 # Admin Classes
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
     form = ProductAdminForm
 
-    inlines = [ProductVariationInline, ProductColorInline, ProductSizeInline]
+    inlines = [ProductVariationInline]
     
     def image_preview(self, obj):
         if obj.main_image:
@@ -211,12 +203,26 @@ class ProductAdmin(admin.ModelAdmin):
         return obj.category.name if obj.category else '-'
     product_category.short_description = 'Category'
     
+    def final_price(self, obj):
+        """Display the final price after discount in list view"""
+        if obj.discount_type and obj.discount_value:
+            final_price = obj.get_final_price()
+            discount_amount = obj.get_discount_amount()
+            if obj.discount_type == 'percentage':
+                return f"${final_price:.2f} (${obj.price:.2f} - {obj.discount_value}% = -${discount_amount:.2f})"
+            else:
+                return f"${final_price:.2f} (${obj.price:.2f} - ${obj.discount_value:.2f})"
+        return f"${obj.price:.2f}"
+    final_price.short_description = 'Final Price'
+    
+
+    
     list_display = (
         'image_preview',
         'additional_images_preview',
         'name',
         'sku',
-        'price',
+        'final_price',
         'product_category',
         'stock_quantity',
         'status',
@@ -251,13 +257,13 @@ class ProductAdmin(admin.ModelAdmin):
         ('Pricing & Inventory', {
             'fields': (
                 'price',
-                'base_price',  # <-- Added base_price field
                 'discount_type',
                 'discount_value',
                 'stock_quantity',
                 'status',
                 'is_featured'
-            )
+            ),
+            'description': 'Set base price and discount. Final price will be calculated automatically.'
         }),
         ('SEO & Metadata', {
             'fields': (

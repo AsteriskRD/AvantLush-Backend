@@ -280,7 +280,7 @@ class Command(BaseCommand):
                 defaults={
                     "description": product_data["description"],
                     "price": product_data["price"],
-                    "base_price": product_data["price"],  # Set base_price same as price
+                    "price": product_data["price"],  # Set price
                     "category": product_data["category"],
                     "images": [],  # Empty images array - no URLs
                     "stock_quantity": product_data["stock_quantity"],

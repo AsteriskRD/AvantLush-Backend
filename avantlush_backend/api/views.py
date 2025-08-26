@@ -128,8 +128,8 @@ from .models import (
     Size,
     Color,
     ProductSize,
-    ProductColor
-    
+    ProductColor,
+    ProductVariation,
 )
 
 # Local imports - Serializers
@@ -178,7 +178,7 @@ from .serializers import (
     FlatOrderItemSerializer,
     SummaryChartResponseSerializer, # Added for dashboard chart
     OrderNotificationSerializer,
-    
+    ProductVariationManagementSerializer,
 )
 
 # Filters impors
@@ -4702,7 +4702,7 @@ class DashboardViewSet(viewsets.ViewSet):
         if not action or not product_ids:
             return Response({
                 'error': 'Action and product_ids are required'
-            }, status=400)
+            }, status=status.HTTP_400_BAD_REQUEST)
         
         products = Product.objects.filter(id__in=product_ids)
         
@@ -5064,14 +5064,118 @@ from rest_framework.permissions import AllowAny
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 class SizeViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing product sizes
+    """
     queryset = Size.objects.all()
     serializer_class = SizeSerializer
-    permission_classes = [IsAdminUser]  # Only admin users can manage sizes
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['name']
+    ordering_fields = ['name']
+    ordering = ['name']
+
+    @action(detail=False, methods=['GET'])
+    def usage_count(self, request):
+        """Get count of products using each size"""
+        sizes = self.get_queryset().annotate(
+            product_count=Count('variations__product', distinct=True)
+        )
+        data = [{'id': size.id, 'name': size.name, 'product_count': size.product_count} for size in sizes]
+        return Response(data)
+
+    @action(detail=False, methods=['POST'])
+    def bulk_create(self, request):
+        """Bulk create multiple sizes"""
+        size_names = request.data.get('names', [])
+        if not size_names:
+            return Response({'error': 'names array is required'}, status=400)
+        
+        created_sizes = []
+        errors = []
+        
+        for name in size_names:
+            try:
+                size, created = Size.objects.get_or_create(name=name.strip())
+                if created:
+                    created_sizes.append({'name': size.name, 'id': size.id})
+                else:
+                    errors.append(f"Size '{name}' already exists")
+            except Exception as e:
+                errors.append(f"Error creating size '{name}': {str(e)}")
+        
+        return Response({
+            'message': f'Successfully created {len(created_sizes)} sizes',
+            'created_sizes': created_sizes,
+            'errors': errors if errors else None
+        })
+
 
 class ColorViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing product colors
+    """
     queryset = Color.objects.all()
     serializer_class = ColorSerializer
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['name', 'hex_code']
+    ordering_fields = ['name']
+    ordering = ['name']
+
+    @action(detail=False, methods=['GET'])
+    def usage_count(self, request):
+        """Get count of products using each color"""
+        colors = self.get_queryset().annotate(
+            product_count=Count('variations__product', distinct=True)
+        )
+        data = [{'id': color.id, 'name': color.name, 'hex_code': color.hex_code, 'product_count': color.product_count} for color in colors]
+        return Response(data)
+
+    @action(detail=False, methods=['POST'])
+    def bulk_create(self, request):
+        """Bulk create multiple colors"""
+        color_data = request.data.get('colors', [])
+        if not color_data:
+            return Response({'error': 'colors array is required'}, status=400)
+        
+        created_colors = []
+        errors = []
+        
+        for color_info in color_data:
+            try:
+                name = color_info.get('name', '').strip()
+                hex_code = color_info.get('hex_code', '').strip()
+                
+                if not name:
+                    errors.append("Color name is required")
+                    continue
+                
+                color, created = Color.objects.get_or_create(
+                    name=name,
+                    defaults={'hex_code': hex_code} if hex_code else {}
+                )
+                
+                if created:
+                    created_colors.append({'name': color.name, 'hex_code': color.hex_code, 'id': color.id})
+                else:
+                    errors.append(f"Color '{name}' already exists")
+                    
+            except Exception as e:
+                errors.append(f"Error creating color '{color_info}': {str(e)}")
+        
+        return Response({
+            'message': f'Successfully created {len(created_colors)} colors',
+            'created_colors': created_colors,
+            'errors': errors if errors else None
+        })
+
+    @action(detail=False, methods=['GET'])
+    def color_palette(self, request):
+        """Get colors organized by hex code for color picker"""
+        colors = self.get_queryset().exclude(hex_code__isnull=True).exclude(hex_code='')
+        data = [{'id': color.id, 'name': color.name, 'hex_code': color.hex_code} for color in colors]
+        return Response(data)
 
 class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.all()
@@ -5436,7 +5540,6 @@ class ProductViewSet(viewsets.ModelViewSet):
                 name=f"{original_product.name} (Copy)",
                 description=original_product.description,
                 price=original_product.price,
-                base_price=original_product.base_price,
                 stock_quantity=0,  # Start with 0 stock
                 category=original_product.category,
                 status='draft',  # Start as draft
@@ -6595,3 +6698,250 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
         return Response({
             'unread_count': count
         })
+
+class ProductVariationViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing product variations with full CRUD operations
+    Supports both single and multiple size/color variations
+    """
+    queryset = ProductVariation.objects.select_related('product', 'size', 'color').prefetch_related('sizes', 'colors')
+    serializer_class = ProductVariationManagementSerializer
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['product', 'variation_type', 'is_default', 'stock_quantity']
+    search_fields = ['sku', 'variation', 'product__name']
+    ordering_fields = ['created_at', 'updated_at', 'price_adjustment', 'stock_quantity']
+    ordering = ['-created_at']
+
+    def get_serializer_class(self):
+        """Use different serializers for different actions"""
+        if self.action in ['list', 'retrieve']:
+            return ProductVariationManagementSerializer
+        return ProductVariationManagementSerializer
+
+    def get_queryset(self):
+        """Enhanced queryset with annotations"""
+        queryset = super().get_queryset()
+        
+        # Add annotations for better performance
+        queryset = queryset.annotate(
+            total_stock=models.F('stock_quantity') + models.Coalesce('product__stock_quantity', 0),
+            final_price=models.F('price_adjustment') + models.Coalesce('product__price', 0)
+        )
+        
+        # Filter by product if specified
+        product_id = self.request.query_params.get('product_id')
+        if product_id:
+            queryset = queryset.filter(product_id=product_id)
+        
+        # Filter by stock status
+        stock_status = self.request.query_params.get('stock_status')
+        if stock_status:
+            if stock_status == 'in_stock':
+                queryset = queryset.filter(stock_quantity__gt=0)
+            elif stock_status == 'out_of_stock':
+                queryset = queryset.filter(stock_quantity=0)
+            elif stock_status == 'low_stock':
+                queryset = queryset.filter(stock_quantity__gt=0, stock_quantity__lte=10)
+        
+        return queryset
+
+    def perform_create(self, serializer):
+        """Custom create logic with SKU generation"""
+        variation = serializer.save()
+        
+        # Auto-generate SKU if not provided
+        if not variation.sku:
+            variation.sku = variation.generate_sku()
+            variation.save()
+        
+        # Sync product variations
+        if variation.product:
+            self.sync_product_variations(variation.product)
+        
+        return variation
+
+    def perform_update(self, serializer):
+        """Custom update logic with sync"""
+        variation = serializer.save()
+        
+        # Sync product variations
+        if variation.product:
+            self.sync_product_variations(variation.product)
+        
+        return variation
+
+    def perform_destroy(self, instance):
+        """Custom delete logic with sync"""
+        product = instance.product
+        instance.delete()
+        
+        # Sync product variations after deletion
+        if product:
+            self.sync_product_variations(product)
+
+    def sync_product_variations(self, product):
+        """Sync product variations to update available sizes and colors"""
+        try:
+            # Sync available sizes
+            product.sync_available_sizes()
+            # Sync available colors
+            product.sync_available_colors()
+        except Exception as e:
+            print(f"Error syncing product variations: {e}")
+
+    @action(detail=False, methods=['GET'])
+    def by_product(self, request):
+        """Get all variations for a specific product"""
+        product_id = request.query_params.get('product_id')
+        if not product_id:
+            return Response({'error': 'product_id is required'}, status=400)
+        
+        variations = self.get_queryset().filter(product_id=product_id)
+        serializer = self.get_serializer(variations, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['GET'])
+    def stock_summary(self, request):
+        """Get stock summary for all variations"""
+        variations = self.get_queryset()
+        
+        summary = {
+            'total_variations': variations.count(),
+            'in_stock': variations.filter(stock_quantity__gt=0).count(),
+            'out_of_stock': variations.filter(stock_quantity=0).count(),
+            'low_stock': variations.filter(stock_quantity__gt=0, stock_quantity__lte=10).count(),
+            'total_stock_value': sum(float(v.stock_quantity or 0) * float(v.get_final_price()) for v in variations)
+        }
+        
+        return Response(summary)
+
+    @action(detail=True, methods=['POST'])
+    def update_stock(self, request, pk=None):
+        """Quick stock update for a variation"""
+        variation = self.get_object()
+        new_stock = request.data.get('stock_quantity')
+        
+        if new_stock is not None:
+            variation.stock_quantity = new_stock
+            variation.save()
+            
+            # Sync product variations
+            if variation.product:
+                self.sync_product_variations(variation.product)
+            
+            return Response({
+                'message': 'Stock updated successfully',
+                'new_stock': variation.stock_quantity
+            })
+        
+        return Response({'error': 'stock_quantity is required'}, status=400)
+
+    @action(detail=True, methods=['POST'])
+    def toggle_default(self, request, pk=None):
+        """Toggle the default status of a variation"""
+        variation = self.get_object()
+        
+        # If this variation is being set as default, unset others
+        if not variation.is_default:
+            # Unset other default variations for this product
+            ProductVariation.objects.filter(
+                product=variation.product,
+                is_default=True
+            ).exclude(id=variation.id).update(is_default=False)
+            
+            variation.is_default = True
+            variation.save()
+            message = 'Variation set as default'
+        else:
+            variation.is_default = False
+            variation.save()
+            message = 'Variation unset as default'
+        
+        return Response({'message': message, 'is_default': variation.is_default})
+
+    @action(detail=False, methods=['POST'])
+    def bulk_update_stock(self, request):
+        """Bulk update stock for multiple variations"""
+        updates = request.data.get('updates', [])
+        if not updates:
+            return Response({'error': 'updates array is required'}, status=400)
+        
+        updated_count = 0
+        errors = []
+        
+        for update in updates:
+            try:
+                variation_id = update.get('variation_id')
+                new_stock = update.get('stock_quantity')
+                
+                if variation_id is None or new_stock is None:
+                    errors.append(f"Missing variation_id or stock_quantity for update: {update}")
+                    continue
+                
+                variation = ProductVariation.objects.get(id=variation_id)
+                variation.stock_quantity = new_stock
+                variation.save()
+                updated_count += 1
+                
+            except ProductVariation.DoesNotExist:
+                errors.append(f"Variation with id {update.get('variation_id')} not found")
+            except Exception as e:
+                errors.append(f"Error updating variation {update.get('variation_id')}: {str(e)}")
+        
+        # Sync all affected products
+        affected_products = set()
+        for update in updates:
+            try:
+                variation = ProductVariation.objects.get(id=update.get('variation_id'))
+                if variation.product:
+                    affected_products.add(variation.product)
+            except:
+                pass
+        
+        for product in affected_products:
+            self.sync_product_variations(product)
+        
+        return Response({
+            'message': f'Successfully updated {updated_count} variations',
+            'updated_count': updated_count,
+            'errors': errors if errors else None
+        })
+
+    @action(detail=False, methods=['GET'])
+    def export_csv(self, request):
+        """Export variations to CSV"""
+        from django.http import HttpResponse
+        import csv
+        
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="product_variations.csv"'
+        
+        writer = csv.writer(response)
+        writer.writerow([
+            'ID', 'Product', 'Product SKU', 'Variation Type', 'Variation',
+            'Price Adjustment', 'Stock Quantity', 'SKU', 'Is Default',
+            'Sizes', 'Colors', 'Created At'
+        ])
+        
+        variations = self.get_queryset()
+        for variation in variations:
+            sizes = ', '.join([size.name for size in variation.sizes.all()])
+            colors = ', '.join([color.name for color in variation.colors.all()])
+            
+            writer.writerow([
+                variation.id,
+                variation.product.name if variation.product else '',
+                variation.product.sku if variation.product else '',
+                variation.variation_type,
+                variation.variation,
+                variation.price_adjustment,
+                variation.stock_quantity,
+                variation.sku,
+                'Yes' if variation.is_default else 'No',
+                sizes,
+                colors,
+                variation.created_at.strftime('%Y-%m-%d %H:%M:%S')
+            ])
+        
+        return response
