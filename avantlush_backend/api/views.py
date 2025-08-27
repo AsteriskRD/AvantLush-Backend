@@ -4745,7 +4745,7 @@ class DashboardViewSet(viewsets.ViewSet):
         from django.http import HttpResponse
         
         response = HttpResponse(content_type='text/csv')
-        response['Content-Disposition'] = 'attachment; filename="products.csv"'
+        response['Content-Disposition'] = f'attachment; filename="products.csv"'
         
         writer = csv.writer(response)
         writer.writerow([
@@ -6945,3 +6945,197 @@ class ProductVariationViewSet(viewsets.ModelViewSet):
             ])
         
         return response
+
+    @action(detail=False, methods=['GET'])
+    def grouped_by_size(self, request):
+        """Get product variations grouped by size for frontend dashboard"""
+        product_id = request.query_params.get('product_id')
+        if not product_id:
+            return Response({'error': 'product_id is required'}, status=400)
+        
+        try:
+            product = Product.objects.get(id=product_id)
+        except Product.DoesNotExist:
+            return Response({'error': 'Product not found'}, status=404)
+        
+        # Get all variations for this product
+        variations = ProductVariation.objects.filter(product=product).prefetch_related('sizes', 'colors')
+        
+        # Group variations by size
+        grouped_variations = {}
+        
+        for variation in variations:
+            for size in variation.sizes.all():
+                size_name = size.name
+                
+                if size_name not in grouped_variations:
+                    grouped_variations[size_name] = {
+                        'size_id': size.id,
+                        'colors': [],
+                        'price': float(variation.price_adjustment + product.price),
+                        'stock_quantity': variation.stock_quantity
+                    }
+                
+                # Add colors for this size
+                for color in variation.colors.all():
+                    color_data = {
+                        'id': color.id,
+                        'name': color.name,
+                        'hex_code': color.hex_code
+                    }
+                    if color_data not in grouped_variations[size_name]['colors']:
+                        grouped_variations[size_name]['colors'].append(color_data)
+        
+        # Convert to the expected format
+        result = {
+            'product_id': product.id,
+            'product_name': product.name,
+            'product_sku': product.sku,
+            'variations': grouped_variations
+        }
+        
+        return Response(result)
+
+    @action(detail=False, methods=['POST'])
+    def add_size_variant(self, request):
+        """Add a new size variant with colors and price for a product"""
+        product_id = request.data.get('product_id')
+        size_name = request.data.get('size')
+        colors = request.data.get('colors', [])
+        price = request.data.get('price')
+        stock_quantity = request.data.get('stock_quantity', 0)
+        
+        if not all([product_id, size_name, colors, price]):
+            return Response({
+                'error': 'product_id, size, colors, and price are required'
+            }, status=400)
+        
+        try:
+            product = Product.objects.get(id=product_id)
+        except Product.DoesNotExist:
+            return Response({'error': 'Product not found'}, status=404)
+        
+        # Get or create the size
+        size, created = Size.objects.get_or_create(name=size_name)
+        
+        # Get or create colors
+        color_objects = []
+        for color_name in colors:
+            color, created = Color.objects.get_or_create(name=color_name)
+            color_objects.append(color)
+        
+        # Calculate price adjustment (price - product base price)
+        price_adjustment = float(price) - float(product.price)
+        
+        # Create variation for this size
+        variation = ProductVariation.objects.create(
+            product=product,
+            variation_type='size',
+            variation=size_name,
+            price_adjustment=price_adjustment,
+            stock_quantity=stock_quantity,
+            is_default=False
+        )
+        
+        # Add size and colors
+        variation.sizes.add(size)
+        variation.colors.set(color_objects)
+        
+        # Generate SKU
+        variation.sku = variation.generate_sku()
+        variation.save()
+        
+        # Return the grouped structure
+        return Response({
+            'message': f'Size variant "{size_name}" added successfully',
+            'variation_id': variation.id,
+            'size': size_name,
+            'colors': colors,
+            'price': price,
+            'stock_quantity': stock_quantity
+        }, status=201)
+
+    @action(detail=False, methods=['PUT'])
+    def update_size_variant(self, request):
+        """Update an existing size variant's colors, price, and stock"""
+        product_id = request.data.get('product_id')
+        size_name = request.data.get('size')
+        colors = request.data.get('colors', [])
+        price = request.data.get('price')
+        stock_quantity = request.data.get('stock_quantity')
+        
+        if not all([product_id, size_name, colors, price]):
+            return Response({
+                'error': 'product_id, size, colors, and price are required'
+            }, status=400)
+        
+        try:
+            product = Product.objects.get(id=product_id)
+            size = Size.objects.get(name=size_name)
+        except (Product.DoesNotExist, Size.DoesNotExist):
+            return Response({'error': 'Product or size not found'}, status=404)
+        
+        # Find existing variation for this size
+        try:
+            variation = ProductVariation.objects.get(
+                product=product,
+                sizes=size
+            )
+        except ProductVariation.DoesNotExist:
+            return Response({'error': f'No variation found for size "{size_name}"'}, status=404)
+        
+        # Update price adjustment
+        price_adjustment = float(price) - float(product.price)
+        variation.price_adjustment = price_adjustment
+        
+        # Update stock quantity if provided
+        if stock_quantity is not None:
+            variation.stock_quantity = stock_quantity
+        
+        # Update colors
+        color_objects = []
+        for color_name in colors:
+            color, created = Color.objects.get_or_create(name=color_name)
+            color_objects.append(color)
+        
+        variation.colors.set(color_objects)
+        variation.save()
+        
+        return Response({
+            'message': f'Size variant "{size_name}" updated successfully',
+            'size': size_name,
+            'colors': colors,
+            'price': price,
+            'stock_quantity': variation.stock_quantity
+        })
+
+    @action(detail=False, methods=['DELETE'])
+    def remove_size_variant(self, request):
+        """Remove an entire size variant from a product"""
+        product_id = request.data.get('product_id')
+        size_name = request.data.get('size')
+        
+        if not all([product_id, size_name]):
+            return Response({
+                'error': 'product_id and size are required'
+            }, status=400)
+        
+        try:
+            product = Product.objects.get(id=product_id)
+            size = Size.objects.get(name=size_name)
+        except (Product.DoesNotExist, Size.DoesNotExist):
+            return Response({'error': 'Product or size not found'}, status=404)
+        
+        # Find and delete variation for this size
+        try:
+            variation = ProductVariation.objects.get(
+                product=product,
+                sizes=size
+            )
+            variation.delete()
+        except ProductVariation.DoesNotExist:
+            return Response({'error': f'No variation found for size "{size_name}"'}, status=404)
+        
+        return Response({
+            'message': f'Size variant "{size_name}" removed successfully'
+        })
