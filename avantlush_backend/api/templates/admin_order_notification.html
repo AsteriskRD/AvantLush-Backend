@@ -1,226 +1,407 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Order Notification - Avantlush</title>
-    <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #f4f4f4;
-        }
-        .email-container {
-            background-color: #ffffff;
-            border-radius: 10px;
-            padding: 30px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }
-        .header {
-            text-align: center;
-            border-bottom: 3px solid #007bff;
-            padding-bottom: 20px;
-            margin-bottom: 30px;
-        }
-        .logo {
-            font-size: 28px;
-            font-weight: bold;
-            color: #007bff;
-            margin-bottom: 10px;
-        }
-        .notification-type {
-            display: inline-block;
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-size: 14px;
-            font-weight: bold;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-        .new-order {
-            background-color: #28a745;
-            color: white;
-        }
-        .status-update {
-            background-color: #ffc107;
-            color: #212529;
-        }
-        .order-details {
-            background-color: #f8f9fa;
-            border-radius: 8px;
-            padding: 20px;
-            margin: 20px 0;
-        }
-        .order-details h3 {
-            margin-top: 0;
-            color: #007bff;
-            border-bottom: 2px solid #dee2e6;
-            padding-bottom: 10px;
-        }
-        .detail-row {
-            display: flex;
-            justify-content: space-between;
-            margin: 10px 0;
-            padding: 8px 0;
-            border-bottom: 1px solid #e9ecef;
-        }
-        .detail-label {
-            font-weight: bold;
-            color: #495057;
-        }
-        .detail-value {
-            color: #6c757d;
-        }
-        .order-items {
-            background-color: #f8f9fa;
-            border-radius: 8px;
-            padding: 20px;
-            margin: 20px 0;
-        }
-        .item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 10px 0;
-            border-bottom: 1px solid #e9ecef;
-        }
-        .item:last-child {
-            border-bottom: none;
-        }
-        .item-name {
-            font-weight: 500;
-            color: #495057;
-        }
-        .item-details {
-            color: #6c757d;
-            font-size: 14px;
-        }
-        .cta-button {
-            display: inline-block;
-            background-color: #007bff;
-            color: white;
-            text-decoration: none;
-            padding: 12px 24px;
-            border-radius: 6px;
-            font-weight: bold;
-            text-align: center;
-            margin: 20px 0;
-            transition: background-color 0.3s;
-        }
-        .cta-button:hover {
-            background-color: #0056b3;
-        }
-        .footer {
-            text-align: center;
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 1px solid #dee2e6;
-            color: #6c757d;
-            font-size: 14px;
-        }
-        .highlight {
-            background-color: #fff3cd;
-            border: 1px solid #ffeaa7;
-            border-radius: 4px;
-            padding: 15px;
-            margin: 20px 0;
-        }
-        .highlight h4 {
-            margin-top: 0;
-            color: #856404;
-        }
-    </style>
-</head>
-<body>
-    <div class="email-container">
-        <div class="header">
-            <div class="logo">Avantlush</div>
-            <div class="notification-type {% if notification_type == 'NEW_ORDER' %}new-order{% else %}status-update{% endif %}">
-                {% if notification_type == 'NEW_ORDER' %}
-                    🆕 New Order
-                {% else %}
-                    🔄 Status Update
-                {% endif %}
-            </div>
-        </div>
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Order Notification - AvantLush</title>
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link
+			href="https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap"
+			rel="stylesheet"
+		/>
+	</head>
+	<body
+		style="
+			margin: 0;
+			padding: 0;
+			background: #f8f8f5;
+			font-family: &quot;Outfit&quot;, &quot;Helvetica Neue&quot;,
+				Helvetica, Arial, sans-serif;
+		"
+	>
+		<table
+			width="100%"
+			cellpadding="0"
+			cellspacing="0"
+			style="background: #f8f8f5"
+		>
+			<tr>
+				<td align="center">
+					<table
+						width="600"
+						cellpadding="0"
+						cellspacing="0"
+						style="background: #fff; margin: 32px 0"
+					>
+						<!-- Header -->
+						<tr>
+							<td style="padding: 32px 32px 0 32px">
+								<table width="100%">
+									<tr>
+										<td align="left">
+											<img
+												src="https://res.cloudinary.com/dvfwa8fzh/image/upload/v1745948142/email_templates/AvantLush_Brand_Secondary_Logo_Green_1_drv23p.png"
+												alt="AvantLush"
+												style="height: 40px"
+											/>
+										</td>
+									</tr>
+								</table>
+							</td>
+						</tr>
+						<!-- Banner -->
+						<tr>
+							<td style="padding: 32px 32px 0 32px">
+								<table
+									width="100%"
+									style="
+										background: #043947;
+										border-radius: 12px;
+									"
+								>
+									<tr>
+										<td
+											align="center"
+											style="padding: 32px 24px 16px 24px"
+										>
+											<h1
+												style="
+													color: #fff;
+													font-size: 30px;
+													margin: 0;
+													font-weight: 600;
+												"
+											>
+												{% if notification_type == 'NEW_ORDER' %}
+													🆕 New Order Received!
+												{% else %}
+													🔄 Order Status Updated
+												{% endif %}
+											</h1>
+											<p
+												style="
+													color: #fff;
+													font-size: 18px;
+													margin: 16px 0 0 0;
+												"
+											>
+												{% if notification_type == 'NEW_ORDER' %}
+													Great news! A new order has been placed on your AvantLush store.<br />
+													Please process this order and update the customer on their status.
+												{% else %}
+													An order status has been updated in your AvantLush store.<br />
+													Please review the changes and take any necessary action.
+												{% endif %}
+											</p>
+										</td>
+									</tr>
+								</table>
+							</td>
+						</tr>
+						<!-- Main Content -->
+						<tr>
+							<td style="padding: 32px">
+								<!-- Order Information -->
+								<table
+									width="100%"
+									style="
+										border: 2px solid #f3c97a;
+										border-radius: 12px;
+										margin: 0 0 32px 0;
+									"
+								>
+									<tr>
+										<td
+											align="center"
+											style="padding: 20px"
+										>
+											<h3
+												style="
+													font-size: 20px;
+													color: #043947;
+													margin: 0 0 16px 0;
+													font-weight: 600;
+												"
+											>
+												Order Information
+											</h3>
+											<table width="100%" cellpadding="8">
+												<tr>
+													<td style="text-align: left; color: #043947; font-weight: 600;">Order Number:</td>
+													<td style="text-align: right; color: #007c8a;">{{ order.order_number }}</td>
+												</tr>
+												<tr>
+													<td style="text-align: left; color: #043947; font-weight: 600;">Customer:</td>
+													<td style="text-align: right; color: #007c8a;">{{ order.user.email|default:"Guest User" }}</td>
+												</tr>
+												<tr>
+													<td style="text-align: left; color: #043947; font-weight: 600;">Total Amount:</td>
+													<td style="text-align: right; color: #007c8a; font-weight: 600;">${{ order.total }}</td>
+												</tr>
+												<tr>
+													<td style="text-align: left; color: #043947; font-weight: 600;">Order Date:</td>
+													<td style="text-align: right; color: #007c8a;">{{ order.created_at|date:"F d, Y at g:i A" }}</td>
+												</tr>
+												{% if notification_type == 'ORDER_STATUS_CHANGED' %}
+												<tr>
+													<td style="text-align: left; color: #043947; font-weight: 600;">Updated Date:</td>
+													<td style="text-align: right; color: #007c8a;">{{ order.updated_at|date:"F d, Y at g:i A" }}</td>
+												</tr>
+												{% endif %}
+												<tr>
+													<td style="text-align: left; color: #043947; font-weight: 600;">Status:</td>
+													<td style="text-align: right; color: #007c8a; font-weight: 600;">{{ order.status }}</td>
+												</tr>
+											</table>
+										</td>
+									</tr>
+								</table>
 
-        {% if notification_type == 'NEW_ORDER' %}
-            <h2>New Order Received!</h2>
-            <p>Great news! A new order has been placed on your Avantlush store.</p>
-            
-            <div class="highlight">
-                <h4>🚀 Action Required</h4>
-                <p>Please log into your dashboard to process this order and update the customer on their order status.</p>
-            </div>
-        {% else %}
-            <h2>Order Status Updated</h2>
-            <p>An order status has been updated in your Avantlush store.</p>
-        {% endif %}
+								<!-- Order Items -->
+								{% if order.items.all %}
+								<table
+									width="100%"
+									style="
+										border: 2px solid #f3c97a;
+										border-radius: 12px;
+										margin: 0 0 32px 0;
+									"
+								>
+									<tr>
+										<td
+											align="center"
+											style="padding: 20px"
+										>
+											<h3
+												style="
+													font-size: 20px;
+													color: #043947;
+													margin: 0 0 16px 0;
+													font-weight: 600;
+												"
+											>
+												Order Items
+											</h3>
+											{% for item in order.items.all %}
+											<div style="
+												display: flex;
+												justify-content: space-between;
+												align-items: center;
+												padding: 12px 0;
+												border-bottom: 1px solid #f3c97a;
+												{% if forloop.last %}border-bottom: none;{% endif %}
+											">
+												<div style="text-align: left;">
+													<div style="color: #043947; font-weight: 600; font-size: 16px;">{{ item.product.name }}</div>
+													<div style="color: #007c8a; font-size: 14px;">Quantity: {{ item.quantity }}</div>
+												</div>
+												<div style="color: #007c8a; font-weight: 600; font-size: 16px;">${{ item.price }}</div>
+											</div>
+											{% endfor %}
+										</td>
+									</tr>
+								</table>
+								{% endif %}
 
-        <div class="order-details">
-            <h3>Order Information</h3>
-            <div class="detail-row">
-                <span class="detail-label">Order Number:</span>
-                <span class="detail-value">{{ order.order_number }}</span>
-            </div>
-            <div class="detail-row">
-                <span class="detail-label">Customer:</span>
-                <span class="detail-value">{{ order.user.email|default:"Guest User" }}</span>
-            </div>
-            <div class="detail-row">
-                <span class="detail-label">Total Amount:</span>
-                <span class="detail-value">${{ order.total }}</span>
-            </div>
-            <div class="detail-row">
-                <span class="detail-label">Order Date:</span>
-                <span class="detail-value">{{ order.created_at|date:"F d, Y at g:i A" }}</span>
-            </div>
-            {% if notification_type == 'ORDER_STATUS_CHANGED' %}
-            <div class="detail-row">
-                <span class="detail-label">Updated Date:</span>
-                <span class="detail-value">{{ order.updated_at|date:"F d, Y at g:i A" }}</span>
-            </div>
-            {% endif %}
-            <div class="detail-row">
-                <span class="detail-label">Status:</span>
-                <span class="detail-value">{{ order.status }}</span>
-            </div>
-        </div>
+								<!-- Action Required Highlight -->
+								{% if notification_type == 'NEW_ORDER' %}
+								<table
+									width="100%"
+									style="
+										background: #fff3cd;
+										border: 2px solid #f3c97a;
+										border-radius: 12px;
+										margin: 0 0 32px 0;
+									"
+								>
+									<tr>
+										<td
+											align="center"
+											style="padding: 20px"
+										>
+											<h4
+												style="
+													font-size: 18px;
+													color: #856404;
+													margin: 0 0 8px 0;
+													font-weight: 600;
+												"
+											>
+												🚀 Action Required
+											</h4>
+											<p
+												style="
+													color: #856404;
+													font-size: 16px;
+													margin: 0;
+													line-height: 1.5;
+												"
+											>
+												Please log into your dashboard to process this order and update the customer on their order status.
+											</p>
+										</td>
+									</tr>
+								</table>
+								{% endif %}
 
-        {% if order.items.all %}
-        <div class="order-items">
-            <h3>Order Items</h3>
-            {% for item in order.items.all %}
-            <div class="item">
-                <div>
-                    <div class="item-name">{{ item.product.name }}</div>
-                    <div class="item-details">Quantity: {{ item.quantity }}</div>
-                </div>
-                <div class="item-details">${{ item.price }}</div>
-            </div>
-            {% endfor %}
-        </div>
-        {% endif %}
+								<!-- Action Buttons -->
+								<div style="text-align: center; margin: 32px 0">
+									<a
+										href="{{ dashboard_url }}"
+										style="
+											background: #043947;
+											color: #fff;
+											padding: 14px 36px;
+											text-decoration: none;
+											border-radius: 8px;
+											font-weight: 600;
+											font-size: 18px;
+											display: inline-block;
+											margin-bottom: 10px;
+											min-width: 200px;
+										"
+									>
+										{% if notification_type == 'NEW_ORDER' %}
+											Process Order in Dashboard
+										{% else %}
+											View Order in Dashboard
+										{% endif %}
+									</a>
+								</div>
 
-        <div style="text-align: center;">
-            <a href="{{ dashboard_url }}" class="cta-button">
-                {% if notification_type == 'NEW_ORDER' %}
-                    Process Order in Dashboard
-                {% else %}
-                    View Order in Dashboard
-                {% endif %}
-            </a>
-        </div>
-
-        <div class="footer">
-            <p>This is an automated notification from your Avantlush Dashboard.</p>
-            <p>If you have any questions, please contact your system administrator.</p>
-            <p>&copy; 2024 Avantlush. All rights reserved.</p>
-        </div>
-    </div>
-</body>
+								<!-- Additional Info -->
+								<p
+									style="
+										color: #666;
+										font-size: 16px;
+										line-height: 1.6;
+										margin-bottom: 20px;
+									"
+								>
+									This is an automated notification from your AvantLush Dashboard.<br />
+									If you have any questions, please contact your system administrator.
+								</p>
+							</td>
+						</tr>
+						<!-- Footer -->
+						<tr>
+							<td
+								style="
+									background: #043947;
+									padding: 48px 40px;
+									color: #fff;
+								"
+							>
+								<table width="100%">
+									<tr>
+										<td
+											width="50%"
+											valign="top"
+											style="padding-right: 24px"
+										>
+											<h3
+												style="
+													margin: 0 0 16px 0;
+													font-size: 16px;
+													color: #fff;
+													font-family: &quot;Outfit&quot;,
+														Arial, sans-serif;
+												"
+											>
+												Contact Us
+											</h3>
+											<p
+												style="
+													margin: 0;
+													font-size: 14px;
+													color: #8f9fa3;
+													font-family: &quot;Outfit&quot;,
+														Arial, sans-serif;
+												"
+											>
+												+1 (999) 888-77-66<br />
+												hello@logoipsum.com
+											</p>
+											<h3
+												style="
+													margin: 32px 0 16px 0;
+													font-size: 16px;
+													font-weight: 600;
+													color: #fff;
+													font-family: &quot;Outfit&quot;,
+														Arial, sans-serif;
+												"
+											>
+												Location
+											</h3>
+											<p
+												style="
+													margin: 0;
+													font-size: 14px;
+													color: #8f9fa3;
+													font-family: &quot;Outfit&quot;,
+														Arial, sans-serif;
+												"
+											>
+												483920, Moscow,<br />
+												Myasnitskaya 22/2/5, Office 4
+											</p>
+										</td>
+										<td width="50%" valign="top">
+											<h3
+												style="
+													margin: 0 0 16px 0;
+													font-size: 16px;
+													color: #fff;
+													font-family: &quot;Outfit&quot;,
+														Arial, sans-serif;
+												"
+											>
+												Privacy
+											</h3>
+											<p
+												style="
+													margin: 0 0 24px 0;
+													font-size: 14px;
+													color: #8f9fa3;
+													font-family: &quot;Outfit&quot;,
+														Arial, sans-serif;
+												"
+											>
+												We value your privacy and
+												promise not to spam your inbox
+											</p>
+											<p
+												style="
+													margin: 0 0 8px 0;
+													font-size: 14px;
+													color: #8f9fa3;
+													font-family: &quot;Outfit&quot;,
+														Arial, sans-serif;
+												"
+											>
+												Don't want to hear from us?<br />
+												<a
+													href="#"
+													style="
+														color: #8f9fa3;
+														text-decoration: underline;
+														font-size: 14px;
+														font-family: &quot;Outfit&quot;,
+															Arial, sans-serif;
+													"
+													>Unsubscribe</a
+												>
+											</p>
+										</td>
+									</tr>
+								</table>
+							</td>
+						</tr>
+					</table>
+				</td>
+			</tr>
+		</table>
+	</body>
 </html>
