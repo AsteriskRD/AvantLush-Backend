@@ -4,12 +4,26 @@
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 		<title>Order Notification - AvantLush</title>
+		<!-- Preload fonts for better email client compatibility -->
 		<link rel="preconnect" href="https://fonts.googleapis.com" />
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 		<link
 			href="https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap"
 			rel="stylesheet"
 		/>
+		<!-- Email client compatibility meta tags -->
+		<meta name="x-apple-disable-message-formatting" />
+		<meta name="format-detection" content="telephone=no, date=no, address=no, email=no" />
+		<!-- Force Outlook to use the default font -->
+		<!--[if mso]>
+		<noscript>
+			<xml>
+				<o:OfficeDocumentSettings>
+					<o:PixelsPerInch>96</o:PixelsPerInch>
+				</o:OfficeDocumentSettings>
+			</xml>
+		</noscript>
+		<![endif]-->
 	</head>
 	<body
 		style="
