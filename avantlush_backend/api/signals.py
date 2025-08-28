@@ -213,6 +213,9 @@ def create_order_notification(sender, instance, created, **kwargs):
         )
         
         print(f"🔔 Order notification created for order #{instance.order_number}")
+        
+        # Send email notification to all admin users
+        send_admin_order_email(instance, 'NEW_ORDER')
     
     # Also notify on status changes (but not on creation)
     elif not created and 'status' in kwargs.get('update_fields', []):
@@ -227,7 +230,83 @@ def create_order_notification(sender, instance, created, **kwargs):
         )
         
         print(f"🔔 Status change notification created for order #{instance.order_number}")
+        
+        # Send email notification to all admin users
+        send_admin_order_email(instance, 'ORDER_STATUS_CHANGED')
 
 # --- Customer Deletion Synchronization ---
 # REMOVED: This was causing infinite recursion
 # Instead, we handle deletion synchronization in the CustomerViewSet.destroy() method
+
+def send_admin_order_email(order, notification_type):
+    """Send email notification to all admin users"""
+    from django.core.mail import send_mail
+    from django.conf import settings
+    from django.contrib.auth import get_user_model
+    from django.template.loader import render_to_string
+    from django.utils.html import strip_tags
+    
+    User = get_user_model()
+    
+    # Check if admin email notifications are enabled
+    if not getattr(settings, 'ADMIN_EMAIL_NOTIFICATIONS', True):
+        print("📧 Admin email notifications are disabled")
+        return
+    
+    # Get all admin users
+    admin_users = User.objects.filter(is_staff=True, is_active=True)
+    
+    if not admin_users.exists():
+        print("⚠️ No admin users found to send email notifications")
+        return
+    
+    # Prepare email context
+    dashboard_url = f"{settings.BACKEND_URL}/admin/api/order/{order.id}/change/"
+    
+    context = {
+        'order': order,
+        'notification_type': notification_type,
+        'dashboard_url': dashboard_url
+    }
+    
+    # Render HTML email template
+    html_message = render_to_string('admin_order_notification.html', context)
+    plain_message = strip_tags(html_message)
+    
+    # Prepare email content based on notification type
+    if notification_type == 'NEW_ORDER':
+        subject = f'🆕 New Order #{order.order_number} - Avantlush Dashboard'
+    else:  # ORDER_STATUS_CHANGED
+        subject = f'🔄 Order #{order.order_number} Status Updated - Avantlush Dashboard'
+    
+    # Send email to each admin user
+    for admin_user in admin_users:
+        try:
+            send_mail(
+                subject,
+                plain_message,
+                settings.DEFAULT_FROM_EMAIL,
+                [admin_user.email],
+                html_message=html_message,
+                fail_silently=False,
+            )
+            print(f"📧 Email notification sent to admin: {admin_user.email}")
+        except Exception as e:
+            print(f"❌ Failed to send email to admin {admin_user.email}: {str(e)}")
+    
+    # Also send to additional admin emails if configured
+    additional_emails = getattr(settings, 'ADMIN_NOTIFICATION_EMAILS', [])
+    for email in additional_emails:
+        if email not in [user.email for user in admin_users]:  # Avoid duplicate emails
+            try:
+                send_mail(
+                    subject,
+                    plain_message,
+                    settings.DEFAULT_FROM_EMAIL,
+                    [email],
+                    html_message=html_message,
+                    fail_silently=False,
+                )
+                print(f"📧 Email notification sent to additional admin: {email}")
+            except Exception as e:
+                print(f"❌ Failed to send email to additional admin {email}: {str(e)}")

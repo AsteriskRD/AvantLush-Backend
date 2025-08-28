@@ -439,6 +439,12 @@ DEFAULT_FROM_EMAIL = 'Avantlush <avalusht@gmail.com>'
 EMAIL_TIMEOUT = 20
 SERVER_EMAIL = 'avalusht@gmail.com'
 
+# Admin notification settings
+ADMIN_EMAIL_NOTIFICATIONS = True  # Enable/disable admin email notifications
+ADMIN_NOTIFICATION_EMAILS = [
+    'avalusht@gmail.com',  # Add additional admin emails here
+]
+
 #CACHES = {
 #    'default': {
 #        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
