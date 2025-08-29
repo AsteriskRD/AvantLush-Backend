@@ -163,6 +163,7 @@ from .serializers import (
     ProductManagementSerializer,
     TagSerializer,
     CategorySerializer,
+    CategoryCreateSerializer,
     ReviewSummarySerializer,
     OrderCreateSerializer,
     OrderItemSerializer,
