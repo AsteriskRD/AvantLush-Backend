@@ -1704,8 +1704,6 @@ class ProductManagementSerializer(serializers.ModelSerializer):
     main_image = serializers.SerializerMethodField()
     
     is_liked = serializers.SerializerMethodField()
-    available_sizes = ProductSizeSerializer(many=True, required=False)
-    available_colors = ProductColorSerializer(many=True, required=False)
     all_images = serializers.SerializerMethodField()
     
     class Meta:
@@ -1714,13 +1712,13 @@ class ProductManagementSerializer(serializers.ModelSerializer):
             # General Information
             'id', 'name', 'description', 'product_details', 'category', 'category_name', 
             'tags', 'status', 'status_display', 'main_image', 'images',
-            'image_files', 'is_featured', 'is_liked', 'available_sizes', 'available_colors',
+            'image_files', 'is_featured', 'is_liked',
             'variations',
             # Pricing
             'price', 'discount_type', 'discount_value', 
             'vat_amount',
             # Inventory
-            'sku', 'barcode', 'stock_quantity', 'variations',
+            'sku', 'barcode', 'stock_quantity',
             # Shipping
             'is_physical_product', 'weight', 'height', 
             'length', 'width',
@@ -1829,26 +1827,38 @@ class ProductManagementSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(f"Failed to upload image: {str(e)}")
 
     def create(self, validated_data):
-        # Handle variations, sizes, colors, and image files
+        # Handle variations and image files
         variations_data = validated_data.pop('variations', [])
-        available_sizes_data = validated_data.pop('available_sizes', [])
-        available_colors_data = validated_data.pop('available_colors', [])
         image_files = validated_data.pop('image_files', None)
         
-        # Create product
+        # Create product first
         product = Product.objects.create(**validated_data)
         
-        # Create available sizes
-        for size_data in available_sizes_data:
-            ProductSize.objects.create(product=product, **size_data)
-        
-        # Create available colors
-        for color_data in available_colors_data:
-            ProductColor.objects.create(product=product, **color_data)
-        
-        # Create variations
+        # Create variations with the new grouped structure
         for variation_data in variations_data:
-            ProductVariation.objects.create(product=product, **variation_data)
+            # Extract size and color IDs from the variation data
+            size_ids = variation_data.pop('size_ids', [])
+            color_ids = variation_data.pop('color_ids', [])
+            
+            # Create the variation
+            variation = ProductVariation.objects.create(
+                product=product,
+                **variation_data
+            )
+            
+            # Add sizes and colors to the variation
+            if size_ids:
+                variation.sizes.set(size_ids)
+            if color_ids:
+                variation.colors.set(color_ids)
+            
+            # Set the primary size and color for backward compatibility
+            if size_ids:
+                variation.size_id = size_ids[0]
+            if color_ids:
+                variation.color_id = color_ids[0]
+            
+            variation.save()
 
         # Handle image uploads if any
         if image_files:
@@ -1864,33 +1874,42 @@ class ProductManagementSerializer(serializers.ModelSerializer):
         return product
     
     def update(self, instance, validated_data):
-        # Handle variations, sizes, colors, and image files
+        # Handle variations and image files
         variations_data = validated_data.pop('variations', [])
-        available_sizes_data = validated_data.pop('available_sizes', [])
-        available_colors_data = validated_data.pop('available_colors', [])
         image_files = validated_data.pop('image_files', None)
         
         # Update product fields
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         
-        # Handle sizes (optional: clear and recreate)
-        if available_sizes_data:
-            instance.available_sizes.all().delete()
-            for size_data in available_sizes_data:
-                ProductSize.objects.create(product=instance, **size_data)
-        
-        # Handle colors (optional: clear and recreate)
-        if available_colors_data:
-            instance.available_colors.all().delete()
-            for color_data in available_colors_data:
-                ProductColor.objects.create(product=instance, **color_data)
-        
-        # Handle variations
-        if variations_data:
+        # Handle variations - clear existing and recreate
+        if variations_data is not None:  # Allow empty list to clear all variations
             instance.variations.all().delete()
+            
             for variation_data in variations_data:
-                ProductVariation.objects.create(product=instance, **variation_data)
+                # Extract size and color IDs from the variation data
+                size_ids = variation_data.pop('size_ids', [])
+                color_ids = variation_data.pop('color_ids', [])
+                
+                # Create the variation
+                variation = ProductVariation.objects.create(
+                    product=instance,
+                    **variation_data
+                )
+                
+                # Add sizes and colors to the variation
+                if size_ids:
+                    variation.sizes.set(size_ids)
+                if color_ids:
+                    variation.colors.set(color_ids)
+                
+                # Set the primary size and color for backward compatibility
+                if size_ids:
+                    variation.size_id = size_ids[0]
+                if color_ids:
+                    variation.color_id = color_ids[0]
+                
+                variation.save()
 
         # Handle image uploads if any
         if image_files:
