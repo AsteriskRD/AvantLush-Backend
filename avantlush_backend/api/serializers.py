@@ -1662,10 +1662,11 @@ class ProductVariationManagementSerializer(serializers.ModelSerializer):
 class ProductManagementSerializer(serializers.ModelSerializer):
     # General Information Fields
     category_name = serializers.CharField(source='category.name', read_only=True)
-    # Updated tags field to handle both names and IDs
+    # Updated tags field to handle both names and IDs (optional)
     tags = serializers.ListField(
         child=serializers.CharField(),
         required=False,
+        allow_empty=True,
         write_only=True
     )
     
@@ -1836,7 +1837,7 @@ class ProductManagementSerializer(serializers.ModelSerializer):
 
     def process_tags(self, tags_data):
         """Process tags data - handle both tag names and IDs"""
-        if not tags_data:
+        if not tags_data or tags_data is None:
             return []
         
         tag_objects = []
@@ -1868,7 +1869,7 @@ class ProductManagementSerializer(serializers.ModelSerializer):
         product = Product.objects.create(**validated_data)
         
         # Process and assign tags
-        if tags_data:
+        if tags_data is not None:
             tag_objects = self.process_tags(tags_data)
             product.tags.set(tag_objects)
         
