@@ -1662,11 +1662,15 @@ class ProductVariationManagementSerializer(serializers.ModelSerializer):
 class ProductManagementSerializer(serializers.ModelSerializer):
     # General Information Fields
     category_name = serializers.CharField(source='category.name', read_only=True)
-    tags = serializers.PrimaryKeyRelatedField(
-        queryset=Tag.objects.all(), 
-        many=True, 
-        required=False
+    # Updated tags field to handle both names and IDs
+    tags = serializers.ListField(
+        child=serializers.CharField(),
+        required=False,
+        write_only=True
     )
+    
+    # Read-only tags field for responses
+    tags_display = serializers.SerializerMethodField()
 
     # Add this new field to handle multiple image uploads
     image_files = serializers.ListField(
@@ -1711,7 +1715,7 @@ class ProductManagementSerializer(serializers.ModelSerializer):
         fields = [
             # General Information
             'id', 'name', 'description', 'product_details', 'category', 'category_name', 
-            'tags', 'status', 'status_display', 'main_image', 'images',
+            'tags', 'tags_display', 'status', 'status_display', 'main_image', 'images',
             'image_files', 'is_featured', 'is_liked',
             'variations',
             # Pricing
@@ -1795,6 +1799,10 @@ class ProductManagementSerializer(serializers.ModelSerializer):
 
     def get_variants_count(self, obj):
         return obj.variations.count() if hasattr(obj, 'variations') else 0
+    
+    def get_tags_display(self, obj):
+        """Get tags for display in responses"""
+        return [{'id': tag.id, 'name': tag.name} for tag in obj.tags.all()]
 
     def get_status_display(self, obj):
         # Using the model's get_status_display method is preferred if it exists and is accurate.
@@ -1826,13 +1834,43 @@ class ProductManagementSerializer(serializers.ModelSerializer):
         except Exception as e:
             raise serializers.ValidationError(f"Failed to upload image: {str(e)}")
 
+    def process_tags(self, tags_data):
+        """Process tags data - handle both tag names and IDs"""
+        if not tags_data:
+            return []
+        
+        tag_objects = []
+        for tag_item in tags_data:
+            if isinstance(tag_item, int) or str(tag_item).isdigit():
+                # It's a tag ID
+                try:
+                    tag = Tag.objects.get(id=int(tag_item))
+                    tag_objects.append(tag)
+                except Tag.DoesNotExist:
+                    # Skip invalid tag IDs
+                    continue
+            else:
+                # It's a tag name - create or get existing
+                tag_name = str(tag_item).strip()
+                if tag_name:  # Only process non-empty tag names
+                    tag, created = Tag.objects.get_or_create(name=tag_name)
+                    tag_objects.append(tag)
+        
+        return tag_objects
+
     def create(self, validated_data):
-        # Handle variations and image files
+        # Handle variations, tags, and image files
         variations_data = validated_data.pop('variations', [])
+        tags_data = validated_data.pop('tags', [])
         image_files = validated_data.pop('image_files', None)
         
         # Create product first
         product = Product.objects.create(**validated_data)
+        
+        # Process and assign tags
+        if tags_data:
+            tag_objects = self.process_tags(tags_data)
+            product.tags.set(tag_objects)
         
         # Create variations with the new grouped structure
         for variation_data in variations_data:
@@ -1874,13 +1912,19 @@ class ProductManagementSerializer(serializers.ModelSerializer):
         return product
     
     def update(self, instance, validated_data):
-        # Handle variations and image files
+        # Handle variations, tags, and image files
         variations_data = validated_data.pop('variations', [])
+        tags_data = validated_data.pop('tags', [])
         image_files = validated_data.pop('image_files', None)
         
         # Update product fields
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
+        
+        # Process and update tags
+        if tags_data is not None:  # Allow empty list to clear all tags
+            tag_objects = self.process_tags(tags_data)
+            instance.tags.set(tag_objects)
         
         # Handle variations - clear existing and recreate
         if variations_data is not None:  # Allow empty list to clear all variations
