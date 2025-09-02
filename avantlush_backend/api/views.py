@@ -40,7 +40,8 @@ from django.http import HttpResponse
 from django.contrib.auth import get_user_model
 
 
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from cloudinary.uploader import upload as cloudinary_upload
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 
@@ -5186,7 +5187,7 @@ class ProductViewSet(viewsets.ModelViewSet):
     authentication_classes = [JWTAuthentication, TokenAuthentication, SessionAuthentication]  # Add authentication
     #permission_classes = [AllowAny]  # Allow anyone to view products but the auth context will be used for wishlist
     search_fields = ['name', 'description', 'category__name']
-    parser_classes = (MultiPartParser, FormParser)
+    parser_classes = (MultiPartParser, FormParser, JSONParser)
 
     def get_permissions(self):
         """
@@ -5486,23 +5487,208 @@ class ProductViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(product)
         return Response(serializer.data)
     def create(self, request, *args, **kwargs):
-        # Handle variations during product creation
-        variations_data = request.data.pop('variations', [])
-        
-        # Create product
-        serializer = self.get_serializer(data=request.data)
+        """Create a product.
+
+        Supports two variation input formats without breaking existing behavior:
+        1) Existing array format handled by ProductManagementSerializer (unchanged)
+        2) New grouped-by-size map, e.g.
+           {
+             "variations": {
+               "Small": {"size_id": 1, "colors": ["Red","Blue"], "price": 40.0, "stock_quantity": 100},
+               ...
+             }
+           }
+
+        When the grouped format is provided, we parse and create variations after
+        creating the product, leaving the serializer's native array handling intact
+        for the legacy format.
+        """
+
+        import json
+
+        # Extract raw variations payload for detection/parsing
+        raw_variations = request.data.get('variations', None)
+
+        # Determine if client sent the new grouped-by-size format
+        is_grouped_map = False
+        grouped_variations_map = None
+
+        if isinstance(raw_variations, dict):
+            is_grouped_map = True
+            grouped_variations_map = raw_variations
+        elif isinstance(raw_variations, str):
+            # Attempt to parse JSON string maps
+            try:
+                parsed = json.loads(raw_variations)
+                if isinstance(parsed, dict):
+                    is_grouped_map = True
+                    grouped_variations_map = parsed
+            except Exception:
+                pass
+
+        # Prepare data for serializer (remove grouped map and normalize fields)
+        data_for_serializer = request.data.copy()
+        if is_grouped_map:
+            data_for_serializer.pop('variations', None)
+        # Normalize blank SKU to omission so auto-generation can occur safely
+        try:
+            if 'sku' in data_for_serializer and str(data_for_serializer.get('sku', '')).strip() == '':
+                data_for_serializer.pop('sku', None)
+        except Exception:
+            pass
+
+        # Create product using existing serializer behavior
+        serializer = self.get_serializer(data=data_for_serializer)
         serializer.is_valid(raise_exception=True)
         product = serializer.save()
-        
-        # Create variations
-        for variation_data in variations_data:
-            ProductVariation.objects.create(
-                product=product,
-                variation_type=variation_data.get('variation_type'),
-                variation_value=variation_data.get('variation_value')
-            )
-        
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+        # Handle initial images from multipart form-data (optional)
+        try:
+            main_image_file = None
+            if hasattr(self.request, 'FILES'):
+                # main image
+                main_image_file = self.request.FILES.get('main_image_file')
+                if main_image_file:
+                    product.main_image = main_image_file
+                    product.save(update_fields=['main_image'])
+
+                # additional gallery images
+                additional_files = []
+                try:
+                    additional_files = self.request.FILES.getlist('image_files') or []
+                except Exception:
+                    additional_files = []
+                if additional_files:
+                    # Upload to Cloudinary and append URLs to images JSON field
+                    try:
+                        from cloudinary.uploader import upload as cloudinary_upload
+                        current_images = product.images or []
+                        for file_obj in additional_files:
+                            try:
+                                result = cloudinary_upload(
+                                    file_obj,
+                                    folder=f'products/{product.id}/',
+                                    resource_type='image'
+                                )
+                                url = result.get('secure_url') or result.get('url')
+                                if url:
+                                    current_images.append(url)
+                            except Exception:
+                                # Skip individual failed uploads without breaking creation
+                                continue
+                        product.images = current_images
+                        product.save(update_fields=['images'])
+                    except Exception:
+                        # If cloudinary isn't available or any unexpected issue, keep proceeding
+                        pass
+        except Exception:
+            # Never fail product creation due to image handling
+            pass
+
+        # If grouped format is provided, create variations accordingly
+        if is_grouped_map and grouped_variations_map:
+            # Lazily import models used below
+            from .models import ProductVariation, Size, Color
+            base_price = float(product.price) if product.price is not None else 0.0
+
+            for size_name, payload in grouped_variations_map.items():
+                if not isinstance(payload, dict):
+                    continue
+
+                size_id = payload.get('size_id')
+                colors_input = payload.get('colors', [])
+                price_value = payload.get('price', base_price)
+                stock_quantity = payload.get('stock_quantity', 0)
+
+                # Resolve Size: prefer explicit size_id; else try by name
+                size_obj = None
+                if size_id:
+                    try:
+                        size_obj = Size.objects.get(id=size_id)
+                    except Size.DoesNotExist:
+                        size_obj = None
+                if size_obj is None and size_name:
+                    size_obj, _ = Size.objects.get_or_create(name=size_name)
+
+                # Resolve Colors: accept list of names or ids; create by name if needed
+                color_objs = []
+                for c in colors_input:
+                    if isinstance(c, int):
+                        try:
+                            color_objs.append(Color.objects.get(id=c))
+                        except Color.DoesNotExist:
+                            pass
+                    else:
+                        # Treat as name/string
+                        name = str(c).strip()
+                        if name:
+                            color_obj, _ = Color.objects.get_or_create(name=name)
+                            color_objs.append(color_obj)
+
+                # Compute price adjustment vs base product price
+                try:
+                    price_adj = float(price_value) - base_price
+                except Exception:
+                    price_adj = 0.0
+
+                # Create the variation row
+                variation = ProductVariation.objects.create(
+                    product=product,
+                    variation_type='size',
+                    variation=size_name or '',
+                    price_adjustment=price_adj,
+                    stock_quantity=stock_quantity,
+                    is_default=False,
+                )
+
+                # Link size and colors via M2M and legacy FK for compatibility
+                if size_obj is not None:
+                    variation.sizes.add(size_obj)
+                    variation.size = size_obj  # legacy FK field
+                if color_objs:
+                    variation.colors.set(color_objs)
+                    # For legacy FK, set the first color if not already set
+                    if variation.color_id is None:
+                        variation.color = color_objs[0]
+
+                # Auto-generate SKU if absent
+                if not variation.sku:
+                    variation.sku = variation.generate_sku()
+                variation.save()
+
+        # Build response: keep serializer output and include grouped variations map
+        response_data = serializer.data
+
+        # Always include grouped variations in the response for frontend alignment
+        try:
+            # Construct grouped map with color names (as per attached expected structure)
+            grouped = {}
+            qs = product.variations.prefetch_related('sizes', 'colors')
+            base_price_resp = float(product.price) if product.price is not None else 0.0
+            for var in qs:
+                for s in var.sizes.all():
+                    size_key = s.name
+                    if size_key not in grouped:
+                        grouped[size_key] = {
+                            'size_id': s.id,
+                            'colors': [],
+                            'price': float(base_price_resp + (var.price_adjustment or 0)),
+                            'stock_quantity': var.stock_quantity,
+                        }
+                    # Append color names
+                    for col in var.colors.all():
+                        if col.name not in grouped[size_key]['colors']:
+                            grouped[size_key]['colors'].append(col.name)
+
+            response_data = {
+                **response_data,
+                'variations': grouped,
+            }
+        except Exception:
+            # On any unexpected issue, still return the base serializer data
+            pass
+
+        return Response(response_data, status=status.HTTP_201_CREATED)
 
     def update(self, request, *args, **kwargs):
         # Similar to create, but for updating
@@ -5633,6 +5819,11 @@ class ProductViewSet(viewsets.ModelViewSet):
         product.save()
         return Response({'message': 'Image uploaded successfully'})
 
+    # Compatibility route to avoid hyphen/underscore mapping issues in some setups
+    @action(detail=True, methods=['POST'], url_path='upload_image')
+    def upload_image_underscore(self, request, pk=None):
+        return self.upload_image(request, pk)
+
     @action(detail=True, methods=['DELETE'], url_path='remove-image/(?P<image_id>[^/.]+)')
     def remove_image(self, request, pk=None, image_id=None):
         """Handle image removal for products"""
@@ -5704,7 +5895,7 @@ class ProductViewSet(viewsets.ModelViewSet):
         for image in request.FILES.getlist('images'):
             try:
                 # Upload to Cloudinary
-                upload_result = upload(
+                upload_result = cloudinary_upload(
                     image,
                     folder=f'products/{product.id}/',
                     resource_type="image"
@@ -5734,6 +5925,11 @@ class ProductViewSet(viewsets.ModelViewSet):
             response_data['errors'] = errors
             
         return Response(response_data)
+
+    # Compatibility route for underscore variant
+    @action(detail=True, methods=['POST'], url_path='upload_images')
+    def upload_images_underscore(self, request, pk=None):
+        return self.upload_images(request, pk)
     @action(detail=True, methods=['DELETE'], url_path='remove-images')
     def remove_images(self, request, pk=None):
         """Handle removal of multiple images"""
@@ -5900,7 +6096,7 @@ class ProductViewSet(viewsets.ModelViewSet):
 class CarouselViewSet(viewsets.ModelViewSet):
     queryset = CarouselItem.objects.all().order_by('order')
     serializer_class = CarouselItemSerializer
-    parser_classes = (MultiPartParser, FormParser)
+    parser_classes = (MultiPartParser, FormParser, JSONParser)
     authentication_classes = [JWTAuthentication, TokenAuthentication, SessionAuthentication]
 
     def get_permissions(self):

@@ -1734,7 +1734,9 @@ class ProductManagementSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['created_at', 'id', 'added_date_formatted']
         extra_kwargs = {
-            'status': {'required': False, 'default': 'draft'}
+            'status': {'required': False, 'default': 'draft'},
+            # Allow auto-generation: make SKU optional and allow blanks in input
+            'sku': {'required': False, 'allow_blank': True},
         }
 
     def get_all_images(self, obj):
@@ -1854,13 +1856,34 @@ class ProductManagementSerializer(serializers.ModelSerializer):
                 # It's a tag name - create or get existing
                 tag_name = str(tag_item).strip()
                 if tag_name:  # Only process non-empty tag names
-                    tag, created = Tag.objects.get_or_create(name=tag_name)
+                    # Ensure unique slug when creating
+                    base_slug = slugify(tag_name) or "tag"
+                    unique_slug = base_slug
+                    counter = 1
+                    while Tag.objects.filter(slug=unique_slug).exists():
+                        unique_slug = f"{base_slug}-{counter}"
+                        counter += 1
+                    tag, created = Tag.objects.get_or_create(
+                        name=tag_name,
+                        defaults={"slug": unique_slug}
+                    )
                     tag_objects.append(tag)
         
         return tag_objects
 
     def create(self, validated_data):
         # Handle variations, tags, and image files
+        # Ensure slug exists and is unique
+        name_value = validated_data.get('name')
+        if not validated_data.get('slug') and name_value:
+            base_slug = slugify(name_value) or "product"
+            unique_slug = base_slug
+            counter = 1
+            from .models import Product
+            while Product.objects.filter(slug=unique_slug).exists():
+                unique_slug = f"{base_slug}-{counter}"
+                counter += 1
+            validated_data['slug'] = unique_slug
         variations_data = validated_data.pop('variations', [])
         tags_data = validated_data.pop('tags', [])
         image_files = validated_data.pop('image_files', None)
@@ -1914,6 +1937,17 @@ class ProductManagementSerializer(serializers.ModelSerializer):
     
     def update(self, instance, validated_data):
         # Handle variations, tags, and image files
+        # If slug not provided but name changes, generate a unique slug
+        new_name = validated_data.get('name')
+        if new_name and not validated_data.get('slug'):
+            base_slug = slugify(new_name) or "product"
+            unique_slug = base_slug
+            counter = 1
+            from .models import Product
+            while Product.objects.filter(slug=unique_slug).exclude(id=instance.id).exists():
+                unique_slug = f"{base_slug}-{counter}"
+                counter += 1
+            validated_data['slug'] = unique_slug
         variations_data = validated_data.pop('variations', [])
         tags_data = validated_data.pop('tags', [])
         image_files = validated_data.pop('image_files', None)

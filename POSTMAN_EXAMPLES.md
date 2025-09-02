@@ -1,3 +1,135 @@
+# 🧪 Postman Examples for Product API (Add Product + Variations)
+
+## 🚀 Add Product (Grouped-by-Size)
+
+Use this when your admin UI collects size blocks with per-size price and stock. Colors can be names or IDs; `size_id` is optional (size name will be created if missing).
+
+**Endpoint:** `POST {{base_url}}/api/products/`
+
+**Headers:**
+- Authorization: Bearer {{jwt_token}}
+- Content-Type: application/json
+
+**Body (raw JSON):**
+```json
+{
+  "name": "Classic Tee",
+  "description": "Soft cotton tee",
+  "category": 3,
+  "price": 25.00,
+  "status": "draft",
+  "stock_quantity": 100,
+  "tags": ["summer", "tops"],
+  "product_details": ["100% cotton", "Regular fit"],
+  "variations": {
+    "Small": {
+      "size_id": 1,
+      "colors": ["Red", "Blue", "Green"],
+      "price": 40.00,
+      "stock_quantity": 100
+    },
+    "Medium": {
+      "size_id": 2,
+      "colors": ["Red", "Black", "White"],
+      "price": 45.00,
+      "stock_quantity": 150
+    },
+    "Large": {
+      "size_id": 3,
+      "colors": ["Blue", "Black", "White"],
+      "price": 50.00,
+      "stock_quantity": 120
+    }
+  }
+}
+```
+
+**Expected Response (201):**
+```json
+{
+  "id": 42,
+  "name": "Classic Tee",
+  "sku": "CLAS-TE-ABC123",
+  "price": 25.0,
+  "status": "draft",
+  "category": 3,
+  "stock_quantity": 100,
+  "images": [],
+  "is_featured": false,
+  "product_details": ["100% cotton", "Regular fit"],
+  "variations": {
+    "Small": {
+      "size_id": 1,
+      "colors": ["Red", "Blue", "Green"],
+      "price": 40.0,
+      "stock_quantity": 100
+    },
+    "Medium": {
+      "size_id": 2,
+      "colors": ["Red", "Black", "White"],
+      "price": 45.0,
+      "stock_quantity": 150
+    },
+    "Large": {
+      "size_id": 3,
+      "colors": ["Blue", "Black", "White"],
+      "price": 50.0,
+      "stock_quantity": 120
+    }
+  }
+}
+```
+
+Notes:
+- Per-size `price_adjustment` is computed internally as `variation.price - product.price`.
+- Sizes/colors are created by name if they don’t exist.
+- SKU auto-generates if omitted.
+
+---
+
+## ➕ Add Product (Array-Based Variations)
+
+Use this if you prefer explicit size/color relations.
+
+**Endpoint:** `POST {{base_url}}/api/products/`
+
+**Headers:** same as above
+
+**Body (raw JSON):**
+```json
+{
+  "name": "Classic Tee",
+  "description": "Soft cotton tee",
+  "category": 3,
+  "price": 25.00,
+  "status": "draft",
+  "stock_quantity": 100,
+  "tags": ["summer", "tops"],
+  "product_details": ["100% cotton", "Regular fit"],
+  "variations": [
+    {
+      "variation_type": "size",
+      "variation": "Small",
+      "price_adjustment": 15.00,
+      "stock_quantity": 100,
+      "size_ids": [1],
+      "color_ids": [5, 8, 9],
+      "is_default": false
+    },
+    {
+      "variation_type": "size",
+      "variation": "Medium",
+      "price_adjustment": 20.00,
+      "stock_quantity": 150,
+      "size_ids": [2],
+      "color_ids": [5, 10, 11]
+    }
+  ]
+}
+```
+
+---
+
 # 🧪 Postman Examples for Product Variations API
 
 ## 🔑 Authentication Setup
@@ -92,7 +224,27 @@ Content-Type: application/json
 
 **Expected Response:**
 ```json
-{
+{"variations": {
+    "Small": {
+      "size_id": 1,
+      "colors": ["Red", "Blue", "Green"],
+      "price": 40.00,
+      "stock_quantity": 100
+    },
+    "Medium": {
+      "size_id": 2,
+      "colors": ["Red", "Black", "White"],
+      "price": 45.00,
+      "stock_quantity": 150
+    },
+    "Large": {
+      "size_id": 3,
+      "colors": ["Blue", "Black", "White"],
+      "price": 50.00,
+      "stock_quantity": 120
+    }
+  }
+
   "message": "Size variant \"Small\" updated successfully",
   "size": "Small",
   "colors": ["Red", "Blue", "Green", "Yellow"],
@@ -145,6 +297,17 @@ jwt_token: YOUR_ACTUAL_JWT_TOKEN
 ---
 
 ## 📱 Complete Workflow Test
+
+### Endpoints reference (Products)
+- POST `/api/products/` (create) — supports grouped or array variations
+- GET `/api/products/` (list), GET `/api/products/{id}/` (detail)
+- POST `/api/products/{id}/upload-image` (multipart: image, type=main|additional)
+- POST `/api/products/{id}/upload-images` (multipart: images[])
+- DELETE `/api/products/{id}/remove-image/{image_id}` (main or index)
+- DELETE `/api/products/{id}/remove-images` (JSON: { "image_urls": [] })
+- GET `/api/products/categories`, GET `/api/products/tags`, GET `/api/products/sizes`, GET `/api/products/colors`
+- GET `/api/products/check_sku_uniqueness?sku=XYZ`
+- POST `/api/products/regenerate_skus`, POST `/api/products/{id}/regenerate_sku`, POST `/api/products/{id}/regenerate_variation_skus`
 
 ### **Step 1: Check Current Variations**
 ```
