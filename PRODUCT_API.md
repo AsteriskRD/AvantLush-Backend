@@ -16,27 +16,28 @@
 - Canonical payload uses grouped-by-size variations. Colors can be names or IDs. `size_id` optional; size name will be created if missing.
 
 Request (JSON)
+- Legend: [required], [optional], [auto]
 ```json
 {
-  "name": "Classic Tee",
-  "category": 3,
-  "price": 25.00,
-  "status": "draft",
-  "stock_quantity": 100,
-  "is_featured": false,
-  "is_physical_product": true,
-  "weight": 0.35,
-  "height": 2.0,
-  "length": 30.0,
-  "width": 25.0,
-  "discount_type": "percentage",
-  "discount_value": 10.00,
-  "vat_amount": 0.00,
-  "barcode": "1234567890123",
-  "sku": "",
-  "tags": ["summer", "tops"],
-  "product_details": ["100% cotton", "Regular fit"],
-  "variations": {
+  "name": "Classic Tee",                 // [required]
+  "category": 3,                          // [required] category ID
+  "price": 25.00,                         // [optional]
+  "status": "draft",                      // [optional] default: draft
+  "stock_quantity": 100,                  // [optional]
+  "is_featured": false,                   // [optional]
+  "is_physical_product": true,            // [optional]
+  "weight": 0.35,                          // [optional]
+  "height": 2.0,                           // [optional]
+  "length": 30.0,                          // [optional]
+  "width": 25.0,                           // [optional]
+  "discount_type": "percentage",          // [optional] percentage|fixed
+  "discount_value": 10.00,                // [optional]
+  "vat_amount": 0.00,                     // [optional]
+  "barcode": "1234567890123",            // [optional]
+  "sku": "",                               // [auto] leave empty or omit to auto-generate
+  "tags": ["summer", "tops"],            // [optional] array of names or IDs
+  "product_details": ["100% cotton", "Regular fit"], // [optional]
+  "variations": {                          // [recommended] grouped-by-size map
     "Small":   { "size_id": 1, "colors": ["Red","Blue"], "price": 40.00, "stock_quantity": 100 },
     "Medium":  { "size_id": 2, "colors": ["Black","White"], "price": 45.00, "stock_quantity": 150 },
     "Large":   { "size_id": 3, "colors": ["Blue","Black"], "price": 50.00, "stock_quantity": 120 }
