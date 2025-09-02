@@ -19,24 +19,34 @@ Request (JSON)
 ```json
 {
   "name": "Classic Tee",
-  "description": "Soft cotton tee",
   "category": 3,
   "price": 25.00,
   "status": "draft",
   "stock_quantity": 100,
+  "is_featured": false,
+  "is_physical_product": true,
+  "weight": 0.35,
+  "height": 2.0,
+  "length": 30.0,
+  "width": 25.0,
+  "discount_type": "percentage",
+  "discount_value": 10.00,
+  "vat_amount": 0.00,
+  "barcode": "1234567890123",
+  "sku": "",
   "tags": ["summer", "tops"],
   "product_details": ["100% cotton", "Regular fit"],
   "variations": {
-    "Small":   { "size_id": 1, "colors": ["Red","Blue","Green"], "price": 40.00, "stock_quantity": 100 },
-    "Medium":  { "size_id": 2, "colors": ["Red","Black","White"], "price": 45.00, "stock_quantity": 150 },
-    "Large":   { "size_id": 3, "colors": ["Blue","Black","White"], "price": 50.00, "stock_quantity": 120 }
+    "Small":   { "size_id": 1, "colors": ["Red","Blue"], "price": 40.00, "stock_quantity": 100 },
+    "Medium":  { "size_id": 2, "colors": ["Black","White"], "price": 45.00, "stock_quantity": 150 },
+    "Large":   { "size_id": 3, "colors": ["Blue","Black"], "price": 50.00, "stock_quantity": 120 }
   }
 }
 ```
 
 Request (multipart form-data)
 - Use when sending initial images inline.
-- Fields (text): `name`, `description`, `category`, `price`, `status`, `stock_quantity`, `tags` (JSON text), `product_details` (JSON text), `variations` (JSON text as above)
+- Fields (text): same as JSON above, but `tags`, `product_details`, and `variations` must be JSON-encoded strings
 - Files:
   - `main_image_file` (single file) — optional; sets primary image
   - `image_files` (multiple) — optional; additional gallery images
@@ -47,14 +57,18 @@ curl -X POST "{{base_url}}/api/products/" \
   -H "Authorization: Bearer {{jwt_token}}" \
   -H "Content-Type: multipart/form-data" \
   -F "name=Classic Tee" \
-  -F "description=Soft cotton tee" \
   -F "category=3" \
   -F "price=25.00" \
   -F "status=draft" \
   -F "stock_quantity=100" \
+  -F "is_featured=false" \
+  -F "is_physical_product=true" \
+  -F "weight=0.35" -F "height=2.0" -F "length=30.0" -F "width=25.0" \
+  -F "discount_type=percentage" -F "discount_value=10.00" -F "vat_amount=0.00" \
+  -F "barcode=1234567890123" -F "sku=" \
   -F "tags=[\"summer\",\"tops\"]" \
   -F "product_details=[\"100% cotton\",\"Regular fit\"]" \
-  -F "variations={\"Small\":{\"size_id\":1,\"colors\":[\"Red\",\"Blue\"],\"price\":40.0,\"stock_quantity\":100},\"Medium\":{\"size_id\":2,\"colors\":[\"Black\"],\"price\":45.0,\"stock_quantity\":150}}" \
+  -F "variations={\"Small\":{\"size_id\":1,\"colors\":[\"Red\",\"Blue\"],\"price\":40.0,\"stock_quantity\":100},\"Medium\":{\"size_id\":2,\"colors\":[\"Black\",\"White\"],\"price\":45.0,\"stock_quantity\":150},\"Large\":{\"size_id\":3,\"colors\":[\"Blue\",\"Black\"],\"price\":50.0,\"stock_quantity\":120}}" \
   -F "main_image_file=@/path/to/main.jpg" \
   -F "image_files=@/path/to/1.jpg" \
   -F "image_files=@/path/to/2.jpg"
@@ -65,29 +79,47 @@ Response (201)
 {
   "id": 42,
   "name": "Classic Tee",
-  "sku": "CLAS-TE-ABC123",
-  "price": 25.0,
-  "status": "draft",
-  "category": 3,
-  "stock_quantity": 100,
-  "images": [],
-  "main_image": null,
-  "all_images": { "main_image": null, "gallery": [] },
-  "is_featured": false,
+  "description": "Soft cotton tee",
   "product_details": ["100% cotton", "Regular fit"],
+  "category": 3,
+  "category_name": "Tops",
+  "tags_display": ["summer", "tops"],
+  "status": "draft",
+  "status_display": "Draft",
+  "main_image": "https://.../main.jpg",
+  "images": ["https://.../1.jpg", "https://.../2.jpg"],
+  "all_images": { "main_image": "https://.../main.jpg", "gallery": ["https://.../1.jpg","https://.../2.jpg"] },
+  "is_featured": false,
+  "is_liked": false,
   "variations": {
-    "Small":  { "size_id": 1, "colors": ["Red","Blue","Green"], "price": 40.0, "stock_quantity": 100 },
-    "Medium": { "size_id": 2, "colors": ["Red","Black","White"], "price": 45.0, "stock_quantity": 150 },
-    "Large":  { "size_id": 3, "colors": ["Blue","Black","White"], "price": 50.0, "stock_quantity": 120 }
-  }
+    "Small":  { "size_id": 1, "colors": ["Red","Blue"], "price": 40.0, "stock_quantity": 100 },
+    "Medium": { "size_id": 2, "colors": ["Black","White"], "price": 45.0, "stock_quantity": 150 },
+    "Large":  { "size_id": 3, "colors": ["Blue","Black"], "price": 50.0, "stock_quantity": 120 }
+  },
+  "price": 25.0,
+  "discount_type": "percentage",
+  "discount_value": 10.0,
+  "vat_amount": 0.0,
+  "sku": "AUTO-CLAS-00123",
+  "barcode": "1234567890123",
+  "stock_quantity": 100,
+  "is_physical_product": true,
+  "weight": 0.35,
+  "height": 2.0,
+  "length": 30.0,
+  "width": 25.0,
+  "created_at": "2025-09-02T13:45:21Z",
+  "added_date_formatted": "Sep 2, 2025",
+  "variants_count": 3
 }
 ```
 
 Notes
 - `price_adjustment` is computed internally as `variation.price - product.price`.
 - Sizes and colors are created by name if not found.
-- SKU auto-generates if omitted.
-- `image_files` (multipart) appends to gallery. Set main image via `upload-image`.
+- SKU auto-generates if omitted or left blank.
+- Slug auto-generates server-side.
+- `image_files` (multipart) appends to gallery. Set main image via `main_image_file` in creation or `upload-image` endpoint later.
 - Response image fields:
   - `main_image`: URL or null
   - `images`: array of gallery URLs
