@@ -41,6 +41,25 @@ Request (multipart form-data)
   - `main_image_file` (single file) — optional; sets primary image
   - `image_files` (multiple) — optional; additional gallery images
 
+One-call create with images (multipart example)
+```bash
+curl -X POST "{{base_url}}/api/products/" \
+  -H "Authorization: Bearer {{jwt_token}}" \
+  -H "Content-Type: multipart/form-data" \
+  -F "name=Classic Tee" \
+  -F "description=Soft cotton tee" \
+  -F "category=3" \
+  -F "price=25.00" \
+  -F "status=draft" \
+  -F "stock_quantity=100" \
+  -F "tags=[\"summer\",\"tops\"]" \
+  -F "product_details=[\"100% cotton\",\"Regular fit\"]" \
+  -F "variations={\"Small\":{\"size_id\":1,\"colors\":[\"Red\",\"Blue\"],\"price\":40.0,\"stock_quantity\":100},\"Medium\":{\"size_id\":2,\"colors\":[\"Black\"],\"price\":45.0,\"stock_quantity\":150}}" \
+  -F "main_image_file=@/path/to/main.jpg" \
+  -F "image_files=@/path/to/1.jpg" \
+  -F "image_files=@/path/to/2.jpg"
+```
+
 Response (201)
 ```json
 {
