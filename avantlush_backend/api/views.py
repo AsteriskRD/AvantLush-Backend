@@ -5536,6 +5536,12 @@ class ProductViewSet(viewsets.ModelViewSet):
                 data_for_serializer.pop('sku', None)
         except Exception:
             pass
+        # Normalize blank slug to omission so auto-generation can occur safely
+        try:
+            if 'slug' in data_for_serializer and str(data_for_serializer.get('slug', '')).strip() == '':
+                data_for_serializer.pop('slug', None)
+        except Exception:
+            pass
 
         # Create product using existing serializer behavior
         serializer = self.get_serializer(data=data_for_serializer)

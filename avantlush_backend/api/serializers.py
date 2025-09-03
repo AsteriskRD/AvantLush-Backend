@@ -1737,6 +1737,8 @@ class ProductManagementSerializer(serializers.ModelSerializer):
             'status': {'required': False, 'default': 'draft'},
             # Allow auto-generation: make SKU optional and allow blanks in input
             'sku': {'required': False, 'allow_blank': True},
+            # Allow auto-generation: slug optional and blanks allowed (will be generated)
+            'slug': {'required': False, 'allow_blank': True},
         }
 
     def get_all_images(self, obj):
