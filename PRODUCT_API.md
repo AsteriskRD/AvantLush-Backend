@@ -80,6 +80,7 @@ Response (201)
 {
   "id": 42,
   "name": "Classic Tee",
+  "slug": "classic-tee",
   "description": "Soft cotton tee",
   "product_details": ["100% cotton", "Regular fit"],
   "category": 3,
@@ -119,7 +120,7 @@ Notes
 - `price_adjustment` is computed internally as `variation.price - product.price`.
 - Sizes and colors are created by name if not found.
 - SKU auto-generates if omitted or left blank.
-- Slug auto-generates server-side.
+- Slug auto-generates server-side and is included in the response; the frontend can link using `/products/{slug}` or keep the `id`.
 - `image_files` (multipart) appends to gallery. Set main image via `main_image_file` in creation or `upload-image` endpoint later.
 - Response image fields:
   - `main_image`: URL or null
