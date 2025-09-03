@@ -20,6 +20,7 @@ Request (JSON)
 ```json
 {
   "name": "Classic Tee",                 // [required]
+  "description": "Soft cotton tee",       // [optional]
   "category": 3,                          // [required] category ID
   "price": 25.00,                         // [optional]
   "status": "draft",                      // [optional] default: draft
@@ -58,6 +59,7 @@ curl -X POST "{{base_url}}/api/products/" \
   -H "Authorization: Bearer {{jwt_token}}" \
   -H "Content-Type: multipart/form-data" \
   -F "name=Classic Tee" \
+  -F "description=Soft cotton tee" \
   -F "category=3" \
   -F "price=25.00" \
   -F "status=draft" \
