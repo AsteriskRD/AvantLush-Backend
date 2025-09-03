@@ -6,6 +6,10 @@ All API endpoints are prefixed with `/api/`.
 
 ## Endpoints
 
+See detailed API docs:
+- [Category API](./CATEGORY_API.md)
+- [Product API](./PRODUCT_API.md)
+
 ### GET /api/
 - **Description:** Returns the status of the API and available endpoints.
 - **Response Codes:**
