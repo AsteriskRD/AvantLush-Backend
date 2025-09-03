@@ -1739,6 +1739,8 @@ class ProductManagementSerializer(serializers.ModelSerializer):
             'sku': {'required': False, 'allow_blank': True},
             # Allow auto-generation: slug optional and blanks allowed (will be generated)
             'slug': {'required': False, 'allow_blank': True},
+            # product_details must be provided
+            'product_details': {'required': True},
         }
 
     def get_all_images(self, obj):
@@ -1830,12 +1832,13 @@ class ProductManagementSerializer(serializers.ModelSerializer):
 
     def handle_image_upload(self, image):
         try:
-            result = upload(
+            from cloudinary.uploader import upload as cloudinary_upload
+            result = cloudinary_upload(
                 image,
                 folder='products/',
-                resource_type='auto'
+                resource_type='image'
             )
-            return result['secure_url']
+            return result.get('secure_url') or result.get('url')
         except Exception as e:
             raise serializers.ValidationError(f"Failed to upload image: {str(e)}")
 
@@ -2335,3 +2338,18 @@ class SummaryChartResponseSerializer(serializers.Serializer):
     period_label = serializers.CharField()
     # You could add total_value_for_period here if needed
     # total_value_for_period = serializers.DecimalField(max_digits=15, decimal_places=2)
+
+    def validate_product_details(self, value):
+        """Ensure product_details is a non-empty list; parse JSON strings if needed."""
+        import json
+        if value is None or value == "":
+            raise serializers.ValidationError("This field is required.")
+        # Accept JSON string in multipart
+        if isinstance(value, str):
+            try:
+                value = json.loads(value)
+            except Exception:
+                raise serializers.ValidationError("Must be a JSON array of strings.")
+        if not isinstance(value, list) or len(value) == 0:
+            raise serializers.ValidationError("Provide at least one detail.")
+        return value

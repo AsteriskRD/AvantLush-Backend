@@ -37,7 +37,7 @@ Request (JSON)
   "barcode": "1234567890123",            // [optional]
   "sku": "",                               // [auto] leave empty or omit to auto-generate
   "tags": ["summer", "tops"],            // [optional] array of names or IDs
-  "product_details": ["100% cotton", "Regular fit"], // [optional]
+  "product_details": ["100% cotton", "Regular fit"], // [required] at least one detail
   "variations": {                          // [recommended] grouped-by-size map
     "Small":   { "size_id": 1, "colors": ["Red","Blue"], "price": 40.00, "stock_quantity": 100 },
     "Medium":  { "size_id": 2, "colors": ["Black","White"], "price": 45.00, "stock_quantity": 150 },
@@ -48,7 +48,7 @@ Request (JSON)
 
 Request (multipart form-data)
 - Use when sending initial images inline.
-- Fields (text): same as JSON above, but `tags`, `product_details`, and `variations` must be JSON-encoded strings
+- Fields (text): same as JSON above, but `tags`, `product_details`, and `variations` must be JSON-encoded strings (product_details is [required])
 - Files:
   - `main_image_file` (single file) — optional; sets primary image
   - `image_files` (multiple) — optional; additional gallery images
