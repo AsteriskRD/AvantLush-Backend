@@ -1927,13 +1927,12 @@ class ProductManagementSerializer(serializers.ModelSerializer):
             
             variation.save()
 
-        # Handle image uploads if any
-        if image_files:
+        # Handle image uploads if any, only if the view hasn't handled them
+        if image_files and not self.context.get('handled_image_files'):
             uploaded_urls = []
             for image_file in image_files:
                 url = self.handle_image_upload(image_file)
                 uploaded_urls.append(url)
-            
             # Update the images JSON field
             product.images = uploaded_urls
             product.save()
@@ -1966,47 +1965,29 @@ class ProductManagementSerializer(serializers.ModelSerializer):
             tag_objects = self.process_tags(tags_data)
             instance.tags.set(tag_objects)
         
-        # Handle variations - clear existing and recreate
-        if variations_data is not None:  # Allow empty list to clear all variations
-            instance.variations.all().delete()
-            
-            for variation_data in variations_data:
-                # Extract size and color IDs from the variation data
-                size_ids = variation_data.pop('size_ids', [])
-                color_ids = variation_data.pop('color_ids', [])
-                
-                # Create the variation
-                variation = ProductVariation.objects.create(
-                    product=instance,
-                    **variation_data
-                )
-                
-                # Add sizes and colors to the variation
-                if size_ids:
-                    variation.sizes.set(size_ids)
-                if color_ids:
-                    variation.colors.set(color_ids)
-                
-                # Set the primary size and color for backward compatibility
-                if size_ids:
-                    variation.size_id = size_ids[0]
-                if color_ids:
-                    variation.color_id = color_ids[0]
-                
-                variation.save()
-
-        # Handle image uploads if any
-        if image_files:
+        # Update variations
+        instance.variations.all().delete()
+        for variation_data in variations_data:
+            size_ids = variation_data.pop('size_ids', [])
+            color_ids = variation_data.pop('color_ids', [])
+            variation = ProductVariation.objects.create(product=instance, **variation_data)
+            if size_ids:
+                variation.sizes.set(size_ids)
+                variation.size_id = size_ids[0]
+            if color_ids:
+                variation.colors.set(color_ids)
+                variation.color_id = color_ids[0]
+            variation.save()
+        
+        # Handle image uploads if any, only if the view hasn't handled them
+        if image_files and not self.context.get('handled_image_files'):
             uploaded_urls = []
             for image_file in image_files:
                 url = self.handle_image_upload(image_file)
                 uploaded_urls.append(url)
-            
-            # Update the images JSON field
-            current_images = instance.images or []
-            instance.images = current_images + uploaded_urls
-            
-        instance.save()
+            instance.images = uploaded_urls
+            instance.save()
+        
         return instance
     
 

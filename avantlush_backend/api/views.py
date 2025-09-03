@@ -5544,7 +5544,10 @@ class ProductViewSet(viewsets.ModelViewSet):
             pass
 
         # Create product using existing serializer behavior
-        serializer = self.get_serializer(data=data_for_serializer)
+        serializer = self.get_serializer(
+            data=data_for_serializer,
+            context={**self.get_serializer_context(), 'handled_image_files': True}
+        )
         serializer.is_valid(raise_exception=True)
         product = serializer.save()
 
