@@ -21,7 +21,7 @@ Request (JSON)
 {
   "name": "Classic Tee",                 // [required]
   "description": "Soft cotton tee",       // [optional]
-  "category": 3,                          // [required] category ID
+  "category": 3,                          // [required] category (ID or name)
   "price": 25.00,                         // [optional]
   "status": "draft",                      // [optional] default: draft
   "stock_quantity": 100,                  // [optional]
@@ -60,7 +60,7 @@ curl -X POST "{{base_url}}/api/products/" \
   -H "Content-Type: multipart/form-data" \
   -F "name=Classic Tee" \
   -F "description=Soft cotton tee" \
-  -F "category=3" \
+  -F "category=Kitchen" \
   -F "price=25.00" \
   -F "status=draft" \
   -F "stock_quantity=100" \
@@ -233,7 +233,7 @@ curl -X POST "{{base_url}}/api/products/" \
   -d '{
     "name": "Classic Tee",
     "description": "Soft cotton tee",
-    "category": 3,
+    "category": "Kitchen",
     "price": 25.00,
     "status": "draft",
     "stock_quantity": 100,

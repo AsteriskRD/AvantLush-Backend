@@ -5543,6 +5543,43 @@ class ProductViewSet(viewsets.ModelViewSet):
         except Exception:
             pass
 
+        # Resolve category if provided by name (accept either ID or name). Auto-create if admin.
+        try:
+            if 'category' in data_for_serializer:
+                from .models import Category
+                raw_cat = data_for_serializer.get('category')
+                if isinstance(raw_cat, str) and raw_cat.strip() != '':
+                    # Numeric string treated as id
+                    if raw_cat.isdigit():
+                        data_for_serializer['category'] = int(raw_cat)
+                    else:
+                        # Treat as name; try resolve by name (case-insensitive)
+                        name_query = raw_cat.strip()
+                        cat_obj = Category.objects.filter(name__iexact=name_query).first()
+                        if not cat_obj:
+                            # If admin, auto-create with generated slug
+                            user = getattr(request, 'user', None)
+                            if user and user.is_staff:
+                                from django.utils.text import slugify
+                                base_slug = slugify(name_query) or 'category'
+                                unique_slug = base_slug
+                                counter = 1
+                                while Category.objects.filter(slug=unique_slug).exists():
+                                    unique_slug = f"{base_slug}-{counter}"
+                                    counter += 1
+                                cat_obj = Category.objects.create(name=name_query, slug=unique_slug)
+                            else:
+                                # Non-admin cannot auto-create by name; leave as-is so serializer errors clearly
+                                pass
+                        if cat_obj:
+                            data_for_serializer['category'] = cat_obj.id
+                elif isinstance(raw_cat, int):
+                    # already an id
+                    pass
+        except Exception:
+            # Do not block creation due to category resolution errors; serializer will validate
+            pass
+
         # Create product using existing serializer behavior
         serializer = self.get_serializer(
             data=data_for_serializer,
@@ -6167,6 +6204,14 @@ class CategoryViewSet(viewsets.ModelViewSet):
         """Return appropriate serializer based on action"""
         if self.action == 'create':
             return CategoryCreateSerializer
+        # Allow simple public format via ?format=simple for list/retrieve
+        try:
+            request = getattr(self, 'request', None)
+            if request and request.query_params.get('format') == 'simple' and self.action in ['list', 'retrieve']:
+                from .serializers import CategorySimpleSerializer
+                return CategorySimpleSerializer
+        except Exception:
+            pass
         return CategorySerializer
     
     def get_permissions(self):

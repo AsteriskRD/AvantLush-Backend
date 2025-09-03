@@ -624,6 +624,19 @@ class CategoryCreateSerializer(serializers.ModelSerializer):
         validated_data['slug'] = slug
         return super().create(validated_data)
    
+class CategorySimpleSerializer(serializers.ModelSerializer):
+    """Simplified public serializer: Category name, Parent name, products_count"""
+    Category = serializers.CharField(source='name', read_only=True)
+    Parent = serializers.CharField(source='parent.name', allow_null=True, read_only=True)
+    products_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Category
+        fields = ['Category', 'Parent', 'products_count']
+
+    def get_products_count(self, obj):
+        return obj.products.count()
+   
 class SizeSerializer(serializers.ModelSerializer):
     class Meta:
         model = Size
