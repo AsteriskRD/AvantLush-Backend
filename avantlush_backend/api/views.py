@@ -2496,7 +2496,17 @@ class OrderViewSet(viewsets.ModelViewSet):
     search_fields = ['order_number', 'user__email', 'user__first_name', 'user__last_name', 'items__product__name']
     ordering_fields = ['created_at', 'total', 'status']
     ordering = ['-created_at']
-    permission_classes = [IsAdminUser]  # Only admin users can access orders
+    permission_classes = [IsAdminUser]  # Default: Only admin users can access orders
+
+    def get_permissions(self):
+        """
+        Override permissions:
+        - Admin access required for management operations
+        - Authenticated users can access their own orders for read-only operations
+        """
+        if self.action in ['list', 'retrieve', 'flat_orders', 'tracking_history']:
+            return [IsAuthenticated()]
+        return [IsAdminUser()]
 
     def get_serializer_class(self):
         if self.action == 'create':
