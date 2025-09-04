@@ -659,36 +659,6 @@ class ProductSizeSerializer(serializers.ModelSerializer):
         model = ProductSize
         fields = ['id', 'size', 'size_id']
         
-class ProductSerializer(serializers.ModelSerializer):
-    category_name = serializers.CharField(source='category.name', read_only=True)
-    main_image = serializers.SerializerMethodField()
-    is_featured = serializers.BooleanField()  
-    is_physical_product = serializers.BooleanField()
-    is_liked = serializers.SerializerMethodField()
-
-    def get_main_image(self, obj):
-        if obj.main_image:
-            return obj.main_image.url
-        return None
-
-    def get_is_liked(self, obj):
-        request = self.context.get('request')
-        if request and request.user.is_authenticated:
-            return WishlistItem.objects.filter(
-                wishlist__user=request.user,
-                product_id=obj.id
-            ).exists()
-        return False
-    
-    class Meta:
-        model = Product
-        fields = [
-            'id', 'name', 'slug', 'description', 'price', 
-            'category', 'category_name', 'images', 'stock_quantity',
-            'is_featured', 'is_physical_product', 'sku', 'status', 
-            'created_at', 'updated_at', 'rating', 'num_ratings', 
-            'main_image', 'is_liked', 'product_details'  
-        ]
 
 
 
@@ -1671,6 +1641,41 @@ class ProductVariationManagementSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(f"SKU '{sku}' is already in use by another variation")
         
         return data
+
+class ProductSerializer(serializers.ModelSerializer):
+    category_name = serializers.CharField(source='category.name', read_only=True)
+    main_image = serializers.SerializerMethodField()
+    is_featured = serializers.BooleanField()  
+    is_physical_product = serializers.BooleanField()
+    is_liked = serializers.SerializerMethodField()
+    variations = ProductVariationSerializer(many=True, read_only=True)
+
+    def get_main_image(self, obj):
+        if obj.main_image:
+            return obj.main_image.url
+        # Fallback to first image in images array if main_image is null
+        elif obj.images and len(obj.images) > 0:
+            return obj.images[0]
+        return None
+
+    def get_is_liked(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            return WishlistItem.objects.filter(
+                wishlist__user=request.user,
+                product_id=obj.id
+            ).exists()
+        return False
+    
+    class Meta:
+        model = Product
+        fields = [
+            'id', 'name', 'slug', 'description', 'price', 
+            'category', 'category_name', 'images', 'stock_quantity',
+            'is_featured', 'is_physical_product', 'sku', 'status', 
+            'created_at', 'updated_at', 'rating', 'num_ratings', 
+            'main_image', 'is_liked', 'product_details', 'variations'
+        ]
 
 class ProductManagementSerializer(serializers.ModelSerializer):
     # General Information Fields
