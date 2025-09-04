@@ -1768,6 +1768,10 @@ class ProductManagementSerializer(serializers.ModelSerializer):
             result['main_image'] = obj.main_image.url
             # Also add it to the gallery as the first item
             result['gallery'] = [obj.main_image.url]
+        elif obj.images and len(obj.images) > 0:
+            # Fallback: use first image as main image if main_image is null
+            result['main_image'] = obj.images[0]
+            result['gallery'] = [obj.images[0]]
         
         # Add additional gallery images from JSONField
         if obj.images:
@@ -1815,6 +1819,9 @@ class ProductManagementSerializer(serializers.ModelSerializer):
     def get_main_image(self, obj):
         if obj.main_image:
             return obj.main_image.url
+        # Fallback to first image in images array if main_image is null
+        elif obj.images and len(obj.images) > 0:
+            return obj.images[0]
         return None
 
     def get_variants_count(self, obj):
@@ -1948,6 +1955,14 @@ class ProductManagementSerializer(serializers.ModelSerializer):
                 uploaded_urls.append(url)
             # Update the images JSON field
             product.images = uploaded_urls
+            
+            # Auto-set first image as main_image if main_image is not already set
+            if not product.main_image and uploaded_urls:
+                # Upload the first image to main_image field
+                first_file = image_files[0]
+                first_file.seek(0)  # Reset file pointer
+                product.main_image = first_file
+            
             product.save()
         
         return product

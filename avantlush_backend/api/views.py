@@ -5623,7 +5623,15 @@ class ProductViewSet(viewsets.ModelViewSet):
                                 # Skip individual failed uploads without breaking creation
                                 continue
                         product.images = current_images
-                        product.save(update_fields=['images'])
+                        
+                        # Auto-set first image as main_image if main_image is not already set
+                        if not product.main_image and current_images:
+                            # Upload the first image to main_image field
+                            first_file = additional_files[0]
+                            first_file.seek(0)  # Reset file pointer
+                            product.main_image = first_file
+                        
+                        product.save(update_fields=['images', 'main_image'])
                     except Exception:
                         # If cloudinary isn't available or any unexpected issue, keep proceeding
                         pass
