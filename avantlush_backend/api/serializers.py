@@ -1956,7 +1956,8 @@ class ProductManagementSerializer(serializers.ModelSerializer):
             # Update the images JSON field
             product.images = uploaded_urls
             
-            # Auto-set first image as main_image if main_image is not already set
+            # Auto-set first image as main_image ONLY if no main_image was explicitly set
+            # This happens when only image_files are provided (no main_image_file)
             if not product.main_image and uploaded_urls:
                 # Upload the first image to main_image field
                 first_file = image_files[0]

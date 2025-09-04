@@ -5581,9 +5581,14 @@ class ProductViewSet(viewsets.ModelViewSet):
             pass
 
         # Create product using existing serializer behavior
+        # Only mark as handled if we actually have files to handle
+        has_files = hasattr(self.request, 'FILES') and (
+            self.request.FILES.get('main_image_file') or 
+            self.request.FILES.getlist('image_files')
+        )
         serializer = self.get_serializer(
             data=data_for_serializer,
-            context={**self.get_serializer_context(), 'handled_image_files': True}
+            context={**self.get_serializer_context(), 'handled_image_files': has_files}
         )
         serializer.is_valid(raise_exception=True)
         product = serializer.save()
@@ -5624,8 +5629,8 @@ class ProductViewSet(viewsets.ModelViewSet):
                                 continue
                         product.images = current_images
                         
-                        # Auto-set first image as main_image if main_image is not already set
-                        if not product.main_image and current_images:
+                        # Auto-set first image as main_image ONLY if no main_image_file was provided
+                        if not main_image_file and not product.main_image and current_images:
                             # Upload the first image to main_image field
                             first_file = additional_files[0]
                             first_file.seek(0)  # Reset file pointer
