@@ -1755,7 +1755,7 @@ class ProductManagementSerializer(serializers.ModelSerializer):
         required=False
     )
     
-    variations = ProductVariationSerializer(many=True, required=False)
+    variations = serializers.SerializerMethodField()
     variants_count = serializers.SerializerMethodField()
     status_display = serializers.SerializerMethodField()
     added_date_formatted = serializers.SerializerMethodField() # For "Added" column
@@ -1866,6 +1866,43 @@ class ProductManagementSerializer(serializers.ModelSerializer):
 
     def get_variants_count(self, obj):
         return obj.variations.count() if hasattr(obj, 'variations') else 0
+    
+    def get_variations(self, obj):
+        """Group variations by size and return simplified structure"""
+        variations = obj.variations.all()
+        if not variations.exists():
+            return {}
+        
+        grouped_variations = {}
+        
+        for variation in variations:
+            # Get the primary size (first size in the sizes array)
+            primary_size = variation.sizes.first()
+            if not primary_size:
+                continue
+                
+            size_name = primary_size.name
+            
+            # Get the primary color (first color in the colors array)
+            primary_color = variation.colors.first()
+            if not primary_color:
+                continue
+            
+            # Calculate final price (base price + price adjustment)
+            base_price = float(obj.price)
+            price_adjustment = float(variation.price_adjustment)
+            final_price = base_price + price_adjustment
+            
+            grouped_variations[size_name] = {
+                "color": {
+                    "id": primary_color.id,
+                    "name": primary_color.name
+                },
+                "price": final_price,
+                "quantity": variation.stock_quantity
+            }
+        
+        return grouped_variations
     
     def get_tags_display(self, obj):
         """Get tags for display in responses"""
