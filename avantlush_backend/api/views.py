@@ -5610,8 +5610,20 @@ class ProductViewSet(viewsets.ModelViewSet):
                 # main image
                 main_image_file = self.request.FILES.get('main_image_file')
                 if main_image_file:
-                    product.main_image = main_image_file
-                    product.save(update_fields=['main_image'])
+                    try:
+                        from cloudinary.uploader import upload as cloudinary_upload
+                        result = cloudinary_upload(
+                            main_image_file,
+                            folder='products/',
+                            resource_type='image'
+                        )
+                        url = result.get('secure_url') or result.get('url')
+                        if url:
+                            product.main_image = url
+                            product.save(update_fields=['main_image'])
+                    except Exception:
+                        # If cloudinary upload fails, skip main image
+                        pass
 
                 # additional gallery images
                 additional_files = []
@@ -5641,10 +5653,8 @@ class ProductViewSet(viewsets.ModelViewSet):
                         
                         # Auto-set first image as main_image ONLY if no main_image_file was provided
                         if not main_image_file and not product.main_image and current_images:
-                            # Upload the first image to main_image field
-                            first_file = additional_files[0]
-                            first_file.seek(0)  # Reset file pointer
-                            product.main_image = first_file
+                            # Use the first uploaded image URL as main_image
+                            product.main_image = current_images[0]
                         
                         product.save(update_fields=['images', 'main_image'])
                     except Exception:
