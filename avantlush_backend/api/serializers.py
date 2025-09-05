@@ -1497,9 +1497,7 @@ class ProductVariationSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source='product.name', read_only=True)
     product_sku = serializers.CharField(source='product.sku', read_only=True)
     
-    # Keep these for backward compatibility
-    size = SizeSerializer(read_only=True)
-    color = ColorSerializer(read_only=True)
+    # Keep these for backward compatibility (write-only)
     size_id = serializers.PrimaryKeyRelatedField(
         queryset=Size.objects.all(), 
         source='size',
@@ -1536,9 +1534,9 @@ class ProductVariationSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'product', 'product_name', 'product_sku', 'variation_type', 'variation', 
             'price_adjustment', 'stock_quantity', 'sku', 'is_default', 'final_price',
-            # Single size/color (backward compatibility)
-            'size', 'size_id', 'color', 'color_id',
-            # Multiple sizes/colors (new fields)
+            # Write-only fields for backward compatibility
+            'size_id', 'color_id',
+            # Multiple sizes/colors (read-only)
             'sizes', 'size_ids', 'colors', 'color_ids'
         ]
         read_only_fields = ['id', 'product_name', 'product_sku', 'final_price']
@@ -1584,9 +1582,7 @@ class ProductVariationManagementSerializer(serializers.ModelSerializer):
         source='colors'
     )
     
-    # Backward compatibility
-    size = SizeSerializer(read_only=True)
-    color = ColorSerializer(read_only=True)
+    # Backward compatibility (write-only)
     size_id = serializers.PrimaryKeyRelatedField(
         queryset=Size.objects.all(),
         write_only=True,
@@ -1608,7 +1604,8 @@ class ProductVariationManagementSerializer(serializers.ModelSerializer):
             'total_stock', 'created_at', 'updated_at',
             # Size and Color fields
             'sizes', 'size_ids', 'colors', 'color_ids',
-            'size', 'size_id', 'color', 'color_id'
+            # Write-only fields for backward compatibility
+            'size_id', 'color_id'
         ]
         read_only_fields = ['id', 'product_name', 'product_sku', 'final_price', 'total_stock', 'created_at', 'updated_at']
 
@@ -1649,7 +1646,7 @@ class ProductSerializer(serializers.ModelSerializer):
     is_featured = serializers.BooleanField()  
     is_physical_product = serializers.BooleanField()
     is_liked = serializers.SerializerMethodField()
-    variations = ProductVariationSerializer(many=True, read_only=True)
+    variations = serializers.SerializerMethodField()
 
     def get_main_image(self, obj):
         if obj.main_image:
@@ -1667,6 +1664,43 @@ class ProductSerializer(serializers.ModelSerializer):
                 product_id=obj.id
             ).exists()
         return False
+    
+    def get_variations(self, obj):
+        """Group variations by size and return simplified structure"""
+        variations = obj.variations.all()
+        if not variations.exists():
+            return {}
+        
+        grouped_variations = {}
+        
+        for variation in variations:
+            # Get the primary size (first size in the sizes array)
+            primary_size = variation.sizes.first()
+            if not primary_size:
+                continue
+                
+            size_name = primary_size.name
+            
+            # Get the primary color (first color in the colors array)
+            primary_color = variation.colors.first()
+            if not primary_color:
+                continue
+            
+            # Calculate final price (base price + price adjustment)
+            base_price = float(obj.price)
+            price_adjustment = float(variation.price_adjustment)
+            final_price = base_price + price_adjustment
+            
+            grouped_variations[size_name] = {
+                "color": {
+                    "id": primary_color.id,
+                    "name": primary_color.name
+                },
+                "price": final_price,
+                "quantity": variation.stock_quantity
+            }
+        
+        return grouped_variations
     
     class Meta:
         model = Product
