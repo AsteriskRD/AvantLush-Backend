@@ -13,7 +13,7 @@
 - Method: POST
 - URL: `/api/products/`
 - Content-Type: `application/json` or `multipart/form-data`
-- Canonical payload uses grouped-by-size variations. Colors can be names or IDs. `size_id` optional; size name will be created if missing.
+- Canonical payload uses grouped-by-size variations. Colors can be names or IDs. `size_id` is auto-generated; sizes are created by name if missing.
 
 Request (JSON)
 - Legend: [required], [optional], [auto]
@@ -39,9 +39,9 @@ Request (JSON)
   "tags": ["summer", "tops"],            // [optional] array of names or IDs
   "product_details": ["100% cotton", "Regular fit"], // [required] at least one detail
   "variations": {                          // [recommended] grouped-by-size map
-    "Small":   { "size_id": 1, "colors": ["Red","Blue"], "price": 40.00, "stock_quantity": 100 },
-    "Medium":  { "size_id": 2, "colors": ["Black","White"], "price": 45.00, "stock_quantity": 150 },
-    "Large":   { "size_id": 3, "colors": ["Blue","Black"], "price": 50.00, "stock_quantity": 120 }
+    "Small":   { "colors": ["Red","Blue"], "price": 40.00, "stock_quantity": 100 },
+    "Medium":  { "colors": ["Black","White"], "price": 45.00, "stock_quantity": 150 },
+    "Large":   { "colors": ["Blue","Black"], "price": 50.00, "stock_quantity": 120 }
   }
 }
 ```
@@ -71,7 +71,7 @@ curl -X POST "{{base_url}}/api/products/" \
   -F "barcode=1234567890123" -F "sku=" \
   -F "tags=[\"summer\",\"tops\"]" \
   -F "product_details=[\"100% cotton\",\"Regular fit\"]" \
-  -F "variations={\"Small\":{\"size_id\":1,\"colors\":[\"Red\",\"Blue\"],\"price\":40.0,\"stock_quantity\":100},\"Medium\":{\"size_id\":2,\"colors\":[\"Black\",\"White\"],\"price\":45.0,\"stock_quantity\":150},\"Large\":{\"size_id\":3,\"colors\":[\"Blue\",\"Black\"],\"price\":50.0,\"stock_quantity\":120}}" \
+  -F "variations={\"Small\":{\"colors\":[\"Red\",\"Blue\"],\"price\":40.0,\"stock_quantity\":100},\"Medium\":{\"colors\":[\"Black\",\"White\"],\"price\":45.0,\"stock_quantity\":150},\"Large\":{\"colors\":[\"Blue\",\"Black\"],\"price\":50.0,\"stock_quantity\":120}}" \
   -F "main_image_file=@/path/to/main.jpg" \
   -F "image_files=@/path/to/1.jpg" \
   -F "image_files=@/path/to/2.jpg"
@@ -240,8 +240,8 @@ curl -X POST "{{base_url}}/api/products/" \
     "tags": ["summer","tops"],
     "product_details": ["100% cotton","Regular fit"],
     "variations": {
-      "Small":  {"size_id":1, "colors":["Red","Blue","Green"], "price":40.00, "stock_quantity":100},
-      "Medium": {"size_id":2, "colors":["Red","Black","White"], "price":45.00, "stock_quantity":150}
+      "Small":  {"colors":["Red","Blue","Green"], "price":40.00, "stock_quantity":100},
+      "Medium": {"colors":["Red","Black","White"], "price":45.00, "stock_quantity":150}
     }
   }'
 ```
