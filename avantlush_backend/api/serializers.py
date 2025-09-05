@@ -1681,9 +1681,9 @@ class ProductSerializer(serializers.ModelSerializer):
                 
             size_name = primary_size.name
             
-            # Get the primary color (first color in the colors array)
-            primary_color = variation.colors.first()
-            if not primary_color:
+            # Get all colors for this variation
+            color_names = [color.name for color in variation.colors.all()]
+            if not color_names:
                 continue
             
             # Calculate final price (base price + price adjustment)
@@ -1692,12 +1692,10 @@ class ProductSerializer(serializers.ModelSerializer):
             final_price = base_price + price_adjustment
             
             grouped_variations[size_name] = {
-                "color": {
-                    "id": primary_color.id,
-                    "name": primary_color.name
-                },
+                "size_id": primary_size.id,
+                "colors": color_names,
                 "price": final_price,
-                "quantity": variation.stock_quantity
+                "stock_quantity": variation.stock_quantity
             }
         
         return grouped_variations
@@ -1883,9 +1881,9 @@ class ProductManagementSerializer(serializers.ModelSerializer):
                 
             size_name = primary_size.name
             
-            # Get the primary color (first color in the colors array)
-            primary_color = variation.colors.first()
-            if not primary_color:
+            # Get all colors for this variation
+            color_names = [color.name for color in variation.colors.all()]
+            if not color_names:
                 continue
             
             # Calculate final price (base price + price adjustment)
@@ -1894,12 +1892,10 @@ class ProductManagementSerializer(serializers.ModelSerializer):
             final_price = base_price + price_adjustment
             
             grouped_variations[size_name] = {
-                "color": {
-                    "id": primary_color.id,
-                    "name": primary_color.name
-                },
+                "size_id": primary_size.id,
+                "colors": color_names,
                 "price": final_price,
-                "quantity": variation.stock_quantity
+                "stock_quantity": variation.stock_quantity
             }
         
         return grouped_variations
