@@ -1650,6 +1650,10 @@ class ProductSerializer(serializers.ModelSerializer):
 
     def get_main_image(self, obj):
         if obj.main_image:
+            # If it's already a string URL, return it directly
+            if isinstance(obj.main_image, str):
+                return obj.main_image
+            # If it's a Cloudinary resource, get the URL
             return obj.main_image.url
         return None
 
@@ -1849,6 +1853,10 @@ class ProductManagementSerializer(serializers.ModelSerializer):
 
     def get_main_image(self, obj):
         if obj.main_image:
+            # If it's already a string URL, return it directly
+            if isinstance(obj.main_image, str):
+                return obj.main_image
+            # If it's a Cloudinary resource, get the URL
             return obj.main_image.url
         return None
 
