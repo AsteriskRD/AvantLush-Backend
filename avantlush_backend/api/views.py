@@ -5608,7 +5608,7 @@ class ProductViewSet(viewsets.ModelViewSet):
             main_image_file = None
             if hasattr(self.request, 'FILES'):
                 # main image
-                main_image_file = self.request.FILES.get('main_image_file')
+                main_image_file = self.request.FILES.get('main_image')
                 if main_image_file:
                     try:
                         from cloudinary.uploader import upload as cloudinary_upload
