@@ -1804,9 +1804,16 @@ class ProductManagementSerializer(serializers.ModelSerializer):
         
         # Add main image
         if obj.main_image:
-            result['main_image'] = obj.main_image.url
+            # If it's already a string URL, return it directly
+            if isinstance(obj.main_image, str):
+                main_image_url = obj.main_image
+            else:
+                # If it's a Cloudinary resource, get the URL
+                main_image_url = obj.main_image.url
+            
+            result['main_image'] = main_image_url
             # Also add it to the gallery as the first item
-            result['gallery'] = [obj.main_image.url]
+            result['gallery'] = [main_image_url]
         
         # Add additional gallery images from JSONField
         if obj.images:
