@@ -103,6 +103,7 @@ Response (201)
   "price": 25.0,
   "discount_type": "percentage",
   "discount_value": 10.0,
+  "final_price": 22.5,
   "vat_amount": 0.0,
   "sku": "AUTO-CLAS-00123",
   "barcode": "1234567890123",
@@ -120,6 +121,9 @@ Response (201)
 
 Notes
 - `price_adjustment` is computed internally as `variation.price - product.price`.
+- `final_price` is automatically calculated based on `discount_type` and `discount_value`:
+  - For `percentage`: `final_price = price - (price * discount_value / 100)`
+  - For `fixed`: `final_price = price - discount_value` (minimum 0)
 - Sizes and colors are created by name if not found.
 - SKU auto-generates if omitted or left blank.
 - Slug auto-generates server-side and is included in the response; the frontend can link using `/products/{slug}` or keep the `id`.

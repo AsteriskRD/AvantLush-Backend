@@ -1759,6 +1759,7 @@ class ProductManagementSerializer(serializers.ModelSerializer):
     status_display = serializers.SerializerMethodField()
     added_date_formatted = serializers.SerializerMethodField() # For "Added" column
     main_image = serializers.SerializerMethodField()
+    final_price = serializers.SerializerMethodField()
     
     is_liked = serializers.SerializerMethodField()
     all_images = serializers.SerializerMethodField()
@@ -1772,7 +1773,7 @@ class ProductManagementSerializer(serializers.ModelSerializer):
             'image_files', 'is_featured', 'is_liked',
             'variations',
             # Pricing
-            'price', 'discount_type', 'discount_value', 
+            'price', 'discount_type', 'discount_value', 'final_price',
             'vat_amount',
             # Inventory
             'sku', 'barcode', 'stock_quantity',
@@ -1866,6 +1867,10 @@ class ProductManagementSerializer(serializers.ModelSerializer):
             # If it's a Cloudinary resource, get the URL
             return obj.main_image.url
         return None
+
+    def get_final_price(self, obj):
+        """Calculate the final price after applying discount"""
+        return float(obj.get_final_price())
 
     def get_variants_count(self, obj):
         return obj.variations.count() if hasattr(obj, 'variations') else 0
