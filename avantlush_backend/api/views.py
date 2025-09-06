@@ -6130,6 +6130,21 @@ class ProductViewSet(viewsets.ModelViewSet):
             return Response({'message': 'Color removed from product'})
         return Response({'message': 'Color not found for this product'}, status=404)
 
+    def destroy(self, request, *args, **kwargs):
+        """Custom destroy method to return proper response format"""
+        try:
+            instance = self.get_object()
+            instance.delete()
+            return Response({
+                'is_success': True,
+                'message': 'Product deleted successfully'
+            }, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({
+                'is_success': False,
+                'message': f'Error deleting product: {str(e)}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
     @action(detail=False, methods=['GET'])
     def debug_wishlist(self, request):
         """Debug endpoint to check wishlist status"""
