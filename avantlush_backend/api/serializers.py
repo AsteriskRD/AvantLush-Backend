@@ -1724,6 +1724,9 @@ class ProductManagementSerializer(serializers.ModelSerializer):
     
     # Read-only tags field for responses
     tags_display = serializers.SerializerMethodField()
+    
+    # Category field to handle both names and IDs
+    category = serializers.CharField(required=False, allow_blank=True, write_only=True)
 
     # Add this new field to handle multiple image uploads
     image_files = serializers.ListField(
@@ -1979,6 +1982,45 @@ class ProductManagementSerializer(serializers.ModelSerializer):
         
         return tag_objects
 
+    def process_category(self, category_data):
+        """Process category data - handle both category names and IDs"""
+        if not category_data or category_data is None or category_data == "":
+            return None
+        
+        # If it's a number (ID)
+        if isinstance(category_data, int) or str(category_data).isdigit():
+            try:
+                from .models import Category
+                category = Category.objects.get(id=int(category_data))
+                return category
+            except Category.DoesNotExist:
+                return None
+        else:
+            # It's a category name - create or get existing
+            category_name = str(category_data).strip()
+            if category_name:  # Only process non-empty category names
+                try:
+                    from .models import Category
+                    from django.utils.text import slugify
+                    
+                    # Ensure unique slug when creating
+                    base_slug = slugify(category_name) or "category"
+                    unique_slug = base_slug
+                    counter = 1
+                    while Category.objects.filter(slug=unique_slug).exists():
+                        unique_slug = f"{base_slug}-{counter}"
+                        counter += 1
+                    
+                    category, created = Category.objects.get_or_create(
+                        name=category_name,
+                        defaults={"slug": unique_slug}
+                    )
+                    return category
+                except Exception:
+                    return None
+        
+        return None
+
     def create(self, validated_data):
         # Handle variations, tags, and image files
         # Ensure slug exists and is unique
@@ -1994,7 +2036,14 @@ class ProductManagementSerializer(serializers.ModelSerializer):
             validated_data['slug'] = unique_slug
         variations_data = validated_data.pop('variations', [])
         tags_data = validated_data.pop('tags', [])
+        category_data = validated_data.pop('category', None)
         image_files = validated_data.pop('image_files', None)
+        
+        # Process category
+        if category_data is not None:
+            category_obj = self.process_category(category_data)
+            if category_obj:
+                validated_data['category'] = category_obj
         
         # Create product first
         product = Product.objects.create(**validated_data)
@@ -2066,7 +2115,14 @@ class ProductManagementSerializer(serializers.ModelSerializer):
             validated_data['slug'] = unique_slug
         variations_data = validated_data.pop('variations', [])
         tags_data = validated_data.pop('tags', [])
+        category_data = validated_data.pop('category', None)
         image_files = validated_data.pop('image_files', None)
+        
+        # Process category
+        if category_data is not None:
+            category_obj = self.process_category(category_data)
+            if category_obj:
+                validated_data['category'] = category_obj
         
         # Update product fields
         for attr, value in validated_data.items():
