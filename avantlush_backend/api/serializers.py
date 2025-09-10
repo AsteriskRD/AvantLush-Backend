@@ -2128,6 +2128,9 @@ class ProductManagementSerializer(serializers.ModelSerializer):
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         
+        # Save the instance to persist changes
+        instance.save()
+        
         # Process and update tags
         if tags_data is not None:  # Allow empty list to clear all tags
             tag_objects = self.process_tags(tags_data)
