@@ -1767,7 +1767,6 @@ class ProductManagementSerializer(serializers.ModelSerializer):
     variants_count = serializers.SerializerMethodField()
     status_display = serializers.SerializerMethodField()
     added_date_formatted = serializers.SerializerMethodField() # For "Added" column
-    main_image = serializers.SerializerMethodField()
     final_price = serializers.SerializerMethodField()
     
     is_liked = serializers.SerializerMethodField()
