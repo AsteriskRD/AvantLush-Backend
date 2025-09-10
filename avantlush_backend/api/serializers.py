@@ -1888,11 +1888,6 @@ class ProductManagementSerializer(serializers.ModelSerializer):
 
     def validate_main_image(self, value):
         """Custom validation for main_image field"""
-        print(f"DEBUG VALIDATION: main_image validation called with: {value}")
-        if value is not None:
-            print(f"DEBUG VALIDATION: main_image file name: {value.name}")
-            print(f"DEBUG VALIDATION: main_image file size: {value.size}")
-            print(f"DEBUG VALIDATION: main_image file type: {value.content_type}")
         return value
 
     def get_final_price(self, obj):
@@ -2072,27 +2067,18 @@ class ProductManagementSerializer(serializers.ModelSerializer):
         
         # Process main image
         if main_image_file is not None:
-            print(f"DEBUG CREATE: Processing main_image_file: {main_image_file}")
-            
             # Upload main image to Cloudinary
             try:
                 from cloudinary.uploader import upload as cloudinary_upload
-                print(f"DEBUG CREATE: Uploading to Cloudinary...")
                 result = cloudinary_upload(
                     main_image_file,
                     folder='products/',
                     resource_type='image'
                 )
-                print(f"DEBUG CREATE: Cloudinary result: {result}")
                 url = result.get('secure_url') or result.get('url')
-                print(f"DEBUG CREATE: Extracted URL: {url}")
                 if url:
                     validated_data['main_image'] = url
-                    print(f"DEBUG CREATE: Set main_image in validated_data: {url}")
-                else:
-                    print("DEBUG CREATE: No URL found in Cloudinary result")
-            except Exception as e:
-                print(f"DEBUG CREATE: Error uploading to Cloudinary: {e}")
+            except Exception:
                 pass  # Continue even if upload fails
         
         # Create product first
@@ -2151,7 +2137,6 @@ class ProductManagementSerializer(serializers.ModelSerializer):
         return product
     
     def update(self, instance, validated_data):
-        print(f"DEBUG SERIALIZER: Update method called with validated_data: {validated_data}")
         # Handle variations, tags, and image files
         # If slug not provided but name changes, generate a unique slug
         new_name = validated_data.get('name')
@@ -2178,36 +2163,25 @@ class ProductManagementSerializer(serializers.ModelSerializer):
         
         # Process main image
         if main_image_file is not None:
-            print(f"DEBUG: Processing main_image_file: {main_image_file}")
-            
             # Delete old main image if it exists
             if instance.main_image:
                 try:
-                    print(f"DEBUG: Deleting old main image: {instance.main_image}")
                     instance.main_image.delete()
-                except Exception as e:
-                    print(f"DEBUG: Error deleting old image: {e}")
+                except Exception:
                     pass  # Continue even if deletion fails
             
             # Upload new main image to Cloudinary
             try:
                 from cloudinary.uploader import upload as cloudinary_upload
-                print(f"DEBUG: Uploading to Cloudinary...")
                 result = cloudinary_upload(
                     main_image_file,
                     folder='products/',
                     resource_type='image'
                 )
-                print(f"DEBUG: Cloudinary result: {result}")
                 url = result.get('secure_url') or result.get('url')
-                print(f"DEBUG: Extracted URL: {url}")
                 if url:
                     validated_data['main_image'] = url
-                    print(f"DEBUG: Set main_image in validated_data: {url}")
-                else:
-                    print("DEBUG: No URL found in Cloudinary result")
-            except Exception as e:
-                print(f"DEBUG: Error uploading to Cloudinary: {e}")
+            except Exception:
                 pass  # Continue even if upload fails
         
         # Update product fields

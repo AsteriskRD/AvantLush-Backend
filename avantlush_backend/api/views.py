@@ -5249,14 +5249,7 @@ class ProductViewSet(viewsets.ModelViewSet):
         return context
 
     def update(self, request, *args, **kwargs):
-        """Custom update method with debugging"""
-        print(f"DEBUG VIEW: Update method called")
-        print(f"DEBUG VIEW: Request data: {request.data}")
-        print(f"DEBUG VIEW: Request FILES: {request.FILES}")
-        print(f"DEBUG VIEW: main_image in FILES: {'main_image' in request.FILES}")
-        if 'main_image' in request.FILES:
-            print(f"DEBUG VIEW: main_image file: {request.FILES['main_image']}")
-        
+        """Custom update method to handle file uploads properly"""
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
         
@@ -5270,19 +5263,13 @@ class ProductViewSet(viewsets.ModelViewSet):
                 else:
                     # If key exists in both, prefer the file from FILES
                     data[key] = file_list
-            print(f"DEBUG VIEW: Combined data: {data}")
         
         serializer = self.get_serializer(instance, data=data, partial=partial)
-        print(f"DEBUG VIEW: Serializer created, checking validity...")
-        print(f"DEBUG VIEW: Serializer data before validation: {serializer.initial_data}")
         
         if serializer.is_valid():
-            print(f"DEBUG VIEW: Serializer is valid, calling save...")
             serializer.save()
-            print(f"DEBUG VIEW: Serializer save completed")
             return Response(serializer.data)
         else:
-            print(f"DEBUG VIEW: Serializer errors: {serializer.errors}")
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def perform_create(self, serializer):
