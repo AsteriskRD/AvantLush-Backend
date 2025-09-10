@@ -5263,11 +5263,18 @@ class ProductViewSet(viewsets.ModelViewSet):
         # Combine request.data and request.FILES for the serializer
         data = request.data.copy()
         if request.FILES:
-            data.update(request.FILES)
+            # Only add files that aren't already in data to avoid duplication
+            for key, file_list in request.FILES.items():
+                if key not in data:
+                    data[key] = file_list
+                else:
+                    # If key exists in both, prefer the file from FILES
+                    data[key] = file_list
             print(f"DEBUG VIEW: Combined data: {data}")
         
         serializer = self.get_serializer(instance, data=data, partial=partial)
         print(f"DEBUG VIEW: Serializer created, checking validity...")
+        print(f"DEBUG VIEW: Serializer data before validation: {serializer.initial_data}")
         
         if serializer.is_valid():
             print(f"DEBUG VIEW: Serializer is valid, calling save...")
