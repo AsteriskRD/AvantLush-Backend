@@ -5769,29 +5769,7 @@ class ProductViewSet(viewsets.ModelViewSet):
 
         return Response(response_data, status=status.HTTP_201_CREATED)
 
-    def update(self, request, *args, **kwargs):
-        # Similar to create, but for updating
-        partial = kwargs.pop('partial', False)
-        instance = self.get_object()
-        
-        # Handle variations
-        variations_data = request.data.pop('variations', [])
-        
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
-        serializer.is_valid(raise_exception=True)
-        product = serializer.save()
-        
-        # Update variations
-        # This is a simple approach - you might want more sophisticated variation management
-        product.variations.all().delete()
-        for variation_data in variations_data:
-            ProductVariation.objects.create(
-                product=product,
-                variation_type=variation_data.get('variation_type'),
-                variation_value=variation_data.get('variation_value')
-            )
-        
-        return Response(serializer.data)
+    # Removed conflicting update method - using serializer's update method instead
     
     @action(detail=True, methods=['POST'])
     def duplicate(self, request, pk=None):
