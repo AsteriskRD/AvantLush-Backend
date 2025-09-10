@@ -1729,7 +1729,7 @@ class ProductManagementSerializer(serializers.ModelSerializer):
     category = serializers.CharField(required=False, allow_blank=True, write_only=True)
 
     # Main image field for uploads (write-only)
-    main_image = serializers.FileField(required=False, write_only=True)
+    main_image = serializers.FileField(required=False, write_only=True, allow_empty_file=False)
     
     # Read-only main image URL field for responses
     main_image_url = serializers.SerializerMethodField()
@@ -1886,6 +1886,15 @@ class ProductManagementSerializer(serializers.ModelSerializer):
             # If it's a Cloudinary resource, get the URL
             return obj.main_image.url
         return None
+
+    def validate_main_image(self, value):
+        """Custom validation for main_image field"""
+        print(f"DEBUG VALIDATION: main_image validation called with: {value}")
+        if value is not None:
+            print(f"DEBUG VALIDATION: main_image file name: {value.name}")
+            print(f"DEBUG VALIDATION: main_image file size: {value.size}")
+            print(f"DEBUG VALIDATION: main_image file type: {value.content_type}")
+        return value
 
     def get_final_price(self, obj):
         """Calculate the final price after applying discount"""
