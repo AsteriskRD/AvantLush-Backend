@@ -5267,9 +5267,12 @@ class ProductViewSet(viewsets.ModelViewSet):
             print(f"DEBUG VIEW: Combined data: {data}")
         
         serializer = self.get_serializer(instance, data=data, partial=partial)
+        print(f"DEBUG VIEW: Serializer created, checking validity...")
         
         if serializer.is_valid():
+            print(f"DEBUG VIEW: Serializer is valid, calling save...")
             serializer.save()
+            print(f"DEBUG VIEW: Serializer save completed")
             return Response(serializer.data)
         else:
             print(f"DEBUG VIEW: Serializer errors: {serializer.errors}")

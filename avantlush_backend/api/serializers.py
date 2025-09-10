@@ -2143,6 +2143,7 @@ class ProductManagementSerializer(serializers.ModelSerializer):
         return product
     
     def update(self, instance, validated_data):
+        print(f"DEBUG SERIALIZER: Update method called with validated_data: {validated_data}")
         # Handle variations, tags, and image files
         # If slug not provided but name changes, generate a unique slug
         new_name = validated_data.get('name')
