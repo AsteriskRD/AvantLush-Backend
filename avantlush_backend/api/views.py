@@ -5248,6 +5248,26 @@ class ProductViewSet(viewsets.ModelViewSet):
         context['request'] = self.request
         return context
 
+    def update(self, request, *args, **kwargs):
+        """Custom update method with debugging"""
+        print(f"DEBUG VIEW: Update method called")
+        print(f"DEBUG VIEW: Request data: {request.data}")
+        print(f"DEBUG VIEW: Request FILES: {request.FILES}")
+        print(f"DEBUG VIEW: main_image in FILES: {'main_image' in request.FILES}")
+        if 'main_image' in request.FILES:
+            print(f"DEBUG VIEW: main_image file: {request.FILES['main_image']}")
+        
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        else:
+            print(f"DEBUG VIEW: Serializer errors: {serializer.errors}")
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
     def perform_create(self, serializer):
         """Automatically generate SKU when creating a product"""
         from .utils import generate_sku
