@@ -2149,6 +2149,7 @@ class ProductManagementSerializer(serializers.ModelSerializer):
         variations_data = validated_data.pop('variations', [])
         tags_data = validated_data.pop('tags', [])
         category_data = validated_data.pop('category', None)
+        main_image_file = validated_data.pop('main_image', None)
         image_files = validated_data.pop('image_files', None)
         
         # Process category
