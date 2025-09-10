@@ -5259,7 +5259,14 @@ class ProductViewSet(viewsets.ModelViewSet):
         
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        
+        # Combine request.data and request.FILES for the serializer
+        data = request.data.copy()
+        if request.FILES:
+            data.update(request.FILES)
+            print(f"DEBUG VIEW: Combined data: {data}")
+        
+        serializer = self.get_serializer(instance, data=data, partial=partial)
         
         if serializer.is_valid():
             serializer.save()
