@@ -2064,18 +2064,27 @@ class ProductManagementSerializer(serializers.ModelSerializer):
         
         # Process main image
         if main_image_file is not None:
+            print(f"DEBUG CREATE: Processing main_image_file: {main_image_file}")
+            
             # Upload main image to Cloudinary
             try:
                 from cloudinary.uploader import upload as cloudinary_upload
+                print(f"DEBUG CREATE: Uploading to Cloudinary...")
                 result = cloudinary_upload(
                     main_image_file,
                     folder='products/',
                     resource_type='image'
                 )
+                print(f"DEBUG CREATE: Cloudinary result: {result}")
                 url = result.get('secure_url') or result.get('url')
+                print(f"DEBUG CREATE: Extracted URL: {url}")
                 if url:
                     validated_data['main_image'] = url
-            except Exception:
+                    print(f"DEBUG CREATE: Set main_image in validated_data: {url}")
+                else:
+                    print("DEBUG CREATE: No URL found in Cloudinary result")
+            except Exception as e:
+                print(f"DEBUG CREATE: Error uploading to Cloudinary: {e}")
                 pass  # Continue even if upload fails
         
         # Create product first
@@ -2160,25 +2169,36 @@ class ProductManagementSerializer(serializers.ModelSerializer):
         
         # Process main image
         if main_image_file is not None:
+            print(f"DEBUG: Processing main_image_file: {main_image_file}")
+            
             # Delete old main image if it exists
             if instance.main_image:
                 try:
+                    print(f"DEBUG: Deleting old main image: {instance.main_image}")
                     instance.main_image.delete()
-                except Exception:
+                except Exception as e:
+                    print(f"DEBUG: Error deleting old image: {e}")
                     pass  # Continue even if deletion fails
             
             # Upload new main image to Cloudinary
             try:
                 from cloudinary.uploader import upload as cloudinary_upload
+                print(f"DEBUG: Uploading to Cloudinary...")
                 result = cloudinary_upload(
                     main_image_file,
                     folder='products/',
                     resource_type='image'
                 )
+                print(f"DEBUG: Cloudinary result: {result}")
                 url = result.get('secure_url') or result.get('url')
+                print(f"DEBUG: Extracted URL: {url}")
                 if url:
                     validated_data['main_image'] = url
-            except Exception:
+                    print(f"DEBUG: Set main_image in validated_data: {url}")
+                else:
+                    print("DEBUG: No URL found in Cloudinary result")
+            except Exception as e:
+                print(f"DEBUG: Error uploading to Cloudinary: {e}")
                 pass  # Continue even if upload fails
         
         # Update product fields
