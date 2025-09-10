@@ -1728,6 +1728,12 @@ class ProductManagementSerializer(serializers.ModelSerializer):
     # Category field to handle both names and IDs
     category = serializers.CharField(required=False, allow_blank=True, write_only=True)
 
+    # Main image field for uploads (write-only)
+    main_image = serializers.FileField(required=False, write_only=True)
+    
+    # Read-only main image URL field for responses
+    main_image_url = serializers.SerializerMethodField()
+
     # Add this new field to handle multiple image uploads
     image_files = serializers.ListField(
         child=serializers.FileField(max_length=1000000, allow_empty_file=False, use_url=False),
@@ -1772,7 +1778,7 @@ class ProductManagementSerializer(serializers.ModelSerializer):
         fields = [
             # General Information
             'id', 'name', 'slug', 'description', 'product_details', 'category', 'category_name', 
-            'tags', 'tags_display', 'status', 'status_display', 'main_image', 'images',
+            'tags', 'tags_display', 'status', 'status_display', 'main_image', 'main_image_url', 'images',
             'image_files', 'is_featured', 'is_liked',
             'variations',
             # Pricing
@@ -1863,6 +1869,16 @@ class ProductManagementSerializer(serializers.ModelSerializer):
         return False
 
     def get_main_image(self, obj):
+        if obj.main_image:
+            # If it's already a string URL, return it directly
+            if isinstance(obj.main_image, str):
+                return obj.main_image
+            # If it's a Cloudinary resource, get the URL
+            return obj.main_image.url
+        return None
+
+    def get_main_image_url(self, obj):
+        """Get the main image URL for responses"""
         if obj.main_image:
             # If it's already a string URL, return it directly
             if isinstance(obj.main_image, str):
@@ -2037,6 +2053,7 @@ class ProductManagementSerializer(serializers.ModelSerializer):
         variations_data = validated_data.pop('variations', [])
         tags_data = validated_data.pop('tags', [])
         category_data = validated_data.pop('category', None)
+        main_image_file = validated_data.pop('main_image', None)
         image_files = validated_data.pop('image_files', None)
         
         # Process category
@@ -2044,6 +2061,22 @@ class ProductManagementSerializer(serializers.ModelSerializer):
             category_obj = self.process_category(category_data)
             if category_obj:
                 validated_data['category'] = category_obj
+        
+        # Process main image
+        if main_image_file is not None:
+            # Upload main image to Cloudinary
+            try:
+                from cloudinary.uploader import upload as cloudinary_upload
+                result = cloudinary_upload(
+                    main_image_file,
+                    folder='products/',
+                    resource_type='image'
+                )
+                url = result.get('secure_url') or result.get('url')
+                if url:
+                    validated_data['main_image'] = url
+            except Exception:
+                pass  # Continue even if upload fails
         
         # Create product first
         product = Product.objects.create(**validated_data)
@@ -2123,6 +2156,29 @@ class ProductManagementSerializer(serializers.ModelSerializer):
             category_obj = self.process_category(category_data)
             if category_obj:
                 validated_data['category'] = category_obj
+        
+        # Process main image
+        if main_image_file is not None:
+            # Delete old main image if it exists
+            if instance.main_image:
+                try:
+                    instance.main_image.delete()
+                except Exception:
+                    pass  # Continue even if deletion fails
+            
+            # Upload new main image to Cloudinary
+            try:
+                from cloudinary.uploader import upload as cloudinary_upload
+                result = cloudinary_upload(
+                    main_image_file,
+                    folder='products/',
+                    resource_type='image'
+                )
+                url = result.get('secure_url') or result.get('url')
+                if url:
+                    validated_data['main_image'] = url
+            except Exception:
+                pass  # Continue even if upload fails
         
         # Update product fields
         for attr, value in validated_data.items():
