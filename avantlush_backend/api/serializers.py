@@ -1729,7 +1729,7 @@ class ProductManagementSerializer(serializers.ModelSerializer):
     category = serializers.CharField(required=False, allow_blank=True, write_only=True)
 
     # Main image field for uploads (write-only)
-    main_image = serializers.FileField(required=False, write_only=True, allow_empty_file=False)
+    main_image_file = serializers.FileField(required=False, write_only=True, allow_empty_file=False)
     
     # Read-only main image URL field for responses
     main_image_url = serializers.SerializerMethodField()
@@ -1777,7 +1777,7 @@ class ProductManagementSerializer(serializers.ModelSerializer):
         fields = [
             # General Information
             'id', 'name', 'slug', 'description', 'product_details', 'category', 'category_name', 
-            'tags', 'tags_display', 'status', 'status_display', 'main_image', 'main_image_url', 'images',
+            'tags', 'tags_display', 'status', 'status_display', 'main_image', 'main_image_file', 'main_image_url', 'images',
             'image_files', 'is_featured', 'is_liked',
             'variations',
             # Pricing
@@ -2056,7 +2056,7 @@ class ProductManagementSerializer(serializers.ModelSerializer):
         variations_data = validated_data.pop('variations', [])
         tags_data = validated_data.pop('tags', [])
         category_data = validated_data.pop('category', None)
-        main_image_file = validated_data.pop('main_image', None)
+        main_image_file = validated_data.pop('main_image_file', None)
         image_files = validated_data.pop('image_files', None)
         
         # Process category
@@ -2152,7 +2152,7 @@ class ProductManagementSerializer(serializers.ModelSerializer):
         variations_data = validated_data.pop('variations', [])
         tags_data = validated_data.pop('tags', [])
         category_data = validated_data.pop('category', None)
-        main_image_file = validated_data.pop('main_image', None)
+        main_image_file = validated_data.pop('main_image_file', None)
         image_files = validated_data.pop('image_files', None)
         
         # Process category

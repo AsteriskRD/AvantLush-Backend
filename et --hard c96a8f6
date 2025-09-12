@@ -1,0 +1,10 @@
+[33m0f415e4[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmaster[m[33m, [m[1;31morigin/master[m[33m)[m Force redeploy: Add comment to trigger production deployment and fix main_image_file error
+[33made91ce[m Correct field names: use main_image for uploads and main_image_url for responses
+[33m8dd5099[m Fix image display issue: separate main_image_file for uploads and main_image for responses
+[33m280a8f6[m Update main_image_file to main_image field name for frontend compatibility
+[33mc96a8f6[m Fix product image display issue
+[33md53d2af[m Clean up debug code after successful main image upload fix
+[33m6f6b60d[m Fix duplicate main_image field definition
+[33m063b5cf[m Fix main_image field validation and add debugging
+[33m481c0ab[m Add debugging to track serializer initial_data
+[33mb4b621f[m Add more detailed debugging to track serializer flow

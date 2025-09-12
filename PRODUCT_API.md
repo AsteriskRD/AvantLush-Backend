@@ -50,7 +50,7 @@ Request (multipart form-data)
 - Use when sending initial images inline.
 - Fields (text): same as JSON above, but `tags`, `product_details`, and `variations` must be JSON-encoded strings (product_details is [required])
 - Files:
-  - `main_image` (single file) — optional; sets primary image
+  - `main_image_file` (single file) — optional; sets primary image
   - `image_files` (multiple) — optional; additional gallery images
 
 One-call create with images (multipart example)
@@ -72,7 +72,7 @@ curl -X POST "{{base_url}}/api/products/" \
   -F "tags=[\"summer\",\"tops\"]" \
   -F "product_details=[\"100% cotton\",\"Regular fit\"]" \
   -F "variations={\"Small\":{\"colors\":[\"Red\",\"Blue\"],\"price\":40.0,\"stock_quantity\":100},\"Medium\":{\"colors\":[\"Black\",\"White\"],\"price\":45.0,\"stock_quantity\":150},\"Large\":{\"colors\":[\"Blue\",\"Black\"],\"price\":50.0,\"stock_quantity\":120}}" \
-  -F "main_image=@/path/to/main.jpg" \
+  -F "main_image_file=@/path/to/main.jpg" \
   -F "image_files=@/path/to/1.jpg" \
   -F "image_files=@/path/to/2.jpg"
 ```
@@ -127,7 +127,7 @@ Notes
 - Sizes and colors are created by name if not found.
 - SKU auto-generates if omitted or left blank.
 - Slug auto-generates server-side and is included in the response; the frontend can link using `/products/{slug}` or keep the `id`.
-- `image_files` (multipart) appends to gallery. Set main image via `main_image` in creation or `upload-image` endpoint later.
+- `image_files` (multipart) appends to gallery. Set main image via `main_image_file` in creation or `upload-image` endpoint later.
 - Response image fields:
   - `main_image`: URL or null
   - `images`: array of gallery URLs
@@ -277,7 +277,7 @@ const addProduct = async () => {
 
 		// Basic fields
 		Object.entries(productData).forEach(([key, value]) => {
-			if (key === "main_image" || key === "image_files") return;
+			if (key === "main_image_file" || key === "image_files") return;
 
 			if (key === "product_details") {
 				// convert string to array before sending
