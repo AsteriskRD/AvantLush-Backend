@@ -297,8 +297,8 @@ const addProduct = async () => {
 		});
 
 		// Handle images
-		if (productData.main_image) {
-			formData.append("main_image", productData.main_image);
+		if (productData.main_image_file) {
+			formData.append("main_image_file", productData.main_image_file);
 		}
 		productData.image_files.forEach((file) => {
 			formData.append("image_files", file);

@@ -1732,7 +1732,7 @@ class ProductManagementSerializer(serializers.ModelSerializer):
     main_image_file = serializers.FileField(required=False, write_only=True, allow_empty_file=False)
     
     # Read-only main image URL field for responses
-    main_image_url = serializers.SerializerMethodField()
+    main_image = serializers.SerializerMethodField()
 
     # Add this new field to handle multiple image uploads
     image_files = serializers.ListField(
@@ -1770,6 +1770,7 @@ class ProductManagementSerializer(serializers.ModelSerializer):
     final_price = serializers.SerializerMethodField()
     
     is_liked = serializers.SerializerMethodField()
+    images = serializers.SerializerMethodField()
     all_images = serializers.SerializerMethodField()
     
     class Meta:
@@ -1803,6 +1804,18 @@ class ProductManagementSerializer(serializers.ModelSerializer):
             # product_details must be provided
             'product_details': {'required': True},
         }
+
+    def get_images(self, obj):
+        """Get gallery images as an array of URLs"""
+        gallery_images = []
+        if hasattr(obj, 'productimage_set'):
+            for img in obj.productimage_set.all():
+                if img.image:
+                    if isinstance(img.image, str):
+                        gallery_images.append(img.image)
+                    else:
+                        gallery_images.append(img.image.url)
+        return gallery_images
 
     def get_all_images(self, obj):
         """Collect all product images into a single structure"""
@@ -1876,7 +1889,7 @@ class ProductManagementSerializer(serializers.ModelSerializer):
             return obj.main_image.url
         return None
 
-    def get_main_image_url(self, obj):
+    def get_main_image(self, obj):
         """Get the main image URL for responses"""
         if obj.main_image:
             # If it's already a string URL, return it directly
