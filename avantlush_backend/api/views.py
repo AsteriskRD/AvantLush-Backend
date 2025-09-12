@@ -5882,23 +5882,44 @@ class ProductViewSet(viewsets.ModelViewSet):
         image = request.FILES['image']
         image_type = request.data.get('type', 'main')
         
-        if image_type == 'main':
-            # Handle main image
-            if product.main_image:
-                product.main_image.delete()
-            product.main_image = image
-        else:
-            # Handle additional images
-            current_images = product.images or []
-            image_path = default_storage.save(
-                f'products/additional/{image.name}',
-                ContentFile(image.read())
-            )
-            current_images.append(image_path)
-            product.images = current_images
+        try:
+            from cloudinary.uploader import upload as cloudinary_upload
             
-        product.save()
-        return Response({'message': 'Image uploaded successfully'})
+            # Upload to Cloudinary
+            result = cloudinary_upload(
+                image,
+                folder='products/',
+                resource_type='image'
+            )
+            
+            image_url = result.get('secure_url') or result.get('url')
+            
+            if image_type == 'main':
+                # Handle main image
+                if product.main_image:
+                    try:
+                        product.main_image.delete()
+                    except Exception:
+                        pass  # Continue even if deletion fails
+                product.main_image = image_url
+            else:
+                # Handle additional images
+                current_images = product.images or []
+                current_images.append(image_url)
+                product.images = current_images
+                
+            product.save()
+            return Response({
+                'message': 'Image uploaded successfully',
+                'image_url': image_url,
+                'type': image_type
+            })
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to upload image: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
     # Compatibility route to avoid hyphen/underscore mapping issues in some setups
     @action(detail=True, methods=['POST'], url_path='upload_image')
