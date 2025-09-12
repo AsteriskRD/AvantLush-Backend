@@ -1778,7 +1778,7 @@ class ProductManagementSerializer(serializers.ModelSerializer):
         fields = [
             # General Information
             'id', 'name', 'slug', 'description', 'product_details', 'category', 'category_name', 
-            'tags', 'tags_display', 'status', 'status_display', 'main_image', 'main_image_file', 'main_image_url', 'images',
+            'tags', 'tags_display', 'status', 'status_display', 'main_image', 'main_image_file', 'images',
             'image_files', 'is_featured', 'is_liked',
             'variations',
             # Pricing
