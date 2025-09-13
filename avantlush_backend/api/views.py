@@ -5249,12 +5249,38 @@ class ProductViewSet(viewsets.ModelViewSet):
         return context
 
     def update(self, request, *args, **kwargs):
-        """Custom update method to handle file uploads properly"""
+        """Custom update method to handle file uploads and grouped variations properly"""
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
         
-        # Combine request.data and request.FILES for the serializer
+        import json
+        
+        # Extract raw variations payload for detection/parsing
+        raw_variations = request.data.get('variations', None)
+        
+        # Determine if client sent the new grouped-by-size format
+        is_grouped_map = False
+        grouped_variations_map = None
+        
+        if isinstance(raw_variations, dict):
+            is_grouped_map = True
+            grouped_variations_map = raw_variations
+        elif isinstance(raw_variations, str):
+            # Attempt to parse JSON string maps
+            try:
+                parsed = json.loads(raw_variations)
+                if isinstance(parsed, dict):
+                    is_grouped_map = True
+                    grouped_variations_map = parsed
+            except Exception:
+                pass
+        
+        # Prepare data for serializer (remove grouped map and normalize fields)
         data = request.data.copy()
+        if is_grouped_map:
+            data.pop('variations', None)
+        
+        # Combine request.data and request.FILES for the serializer
         if request.FILES:
             # Only add files that aren't already in data to avoid duplication
             for key, file_list in request.FILES.items():
@@ -5267,7 +5293,82 @@ class ProductViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(instance, data=data, partial=partial)
         
         if serializer.is_valid():
-            serializer.save()
+            product = serializer.save()
+            
+            # If grouped format is provided, create variations accordingly
+            if is_grouped_map and grouped_variations_map:
+                # Lazily import models used below
+                from .models import ProductVariation, Size, Color
+                base_price = float(product.price) if product.price is not None else 0.0
+                
+                # Clear existing variations
+                product.variations.all().delete()
+                
+                for size_name, payload in grouped_variations_map.items():
+                    if not isinstance(payload, dict):
+                        continue
+                    
+                    size_id = payload.get('size_id')
+                    colors_input = payload.get('colors', [])
+                    price_value = payload.get('price', base_price)
+                    stock_quantity = payload.get('stock_quantity', 0)
+                    
+                    # Resolve Size: prefer explicit size_id; else try by name
+                    size_obj = None
+                    if size_id:
+                        try:
+                            size_obj = Size.objects.get(id=size_id)
+                        except Size.DoesNotExist:
+                            size_obj = None
+                    if size_obj is None and size_name:
+                        size_obj, _ = Size.objects.get_or_create(name=size_name)
+                    
+                    # Resolve Colors: accept list of names or ids; create by name if needed
+                    color_objs = []
+                    for c in colors_input:
+                        if isinstance(c, int):
+                            try:
+                                color_objs.append(Color.objects.get(id=c))
+                            except Color.DoesNotExist:
+                                pass
+                        else:
+                            # Treat as name/string
+                            name = str(c).strip()
+                            if name:
+                                color_obj, _ = Color.objects.get_or_create(name=name)
+                                color_objs.append(color_obj)
+                    
+                    # Compute price adjustment vs base product price
+                    try:
+                        price_adj = float(price_value) - base_price
+                    except Exception:
+                        price_adj = 0.0
+                    
+                    # Create the variation row
+                    variation = ProductVariation.objects.create(
+                        product=product,
+                        variation_type='size',
+                        variation=size_name or '',
+                        price_adjustment=price_adj,
+                        stock_quantity=stock_quantity,
+                        is_default=False,
+                    )
+                    
+                    # Link size and colors via M2M and legacy FK for compatibility
+                    if size_obj is not None:
+                        variation.sizes.add(size_obj)
+                        variation.size = size_obj  # legacy FK field
+                    if color_objs:
+                        variation.colors.set(color_objs)
+                        # For legacy FK, set the first color if not already set
+                        if variation.color_id is None:
+                            variation.color = color_objs[0]
+                    
+                    # Auto-generate SKU if absent
+                    if not variation.sku:
+                        variation.sku = variation.generate_sku()
+                    variation.save()
+            
             return Response(serializer.data)
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
