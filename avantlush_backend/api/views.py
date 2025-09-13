@@ -2141,15 +2141,35 @@ class CartViewSet(viewsets.ModelViewSet):
         cart = self.get_cart()  # Remove the request parameter
         product_id = request.data.get('product_id')
         quantity = int(request.data.get('quantity', 1))
+        
+        # Support both old format (size_id, color_id) and new format (size, color)
         size_id = request.data.get('size_id')
         color_id = request.data.get('color_id')
+        size_name = request.data.get('size')
+        color_name = request.data.get('color')
         
         try:
             product = Product.objects.get(id=product_id)
             
-            # Get size and color objects if IDs are provided
-            size = Size.objects.get(id=size_id) if size_id else None
-            color = Color.objects.get(id=color_id) if color_id else None
+            # Resolve size: prefer ID, then name
+            size = None
+            if size_id:
+                try:
+                    size = Size.objects.get(id=size_id)
+                except Size.DoesNotExist:
+                    pass
+            elif size_name:
+                size, _ = Size.objects.get_or_create(name=size_name)
+            
+            # Resolve color: prefer ID, then name
+            color = None
+            if color_id:
+                try:
+                    color = Color.objects.get(id=color_id)
+                except Color.DoesNotExist:
+                    pass
+            elif color_name:
+                color, _ = Color.objects.get_or_create(name=color_name)
             
             # Check if this product variant is already in the cart
             cart_item, created = CartItem.objects.get_or_create(
@@ -2171,16 +2191,6 @@ class CartViewSet(viewsets.ModelViewSet):
         except Product.DoesNotExist:
             return Response(
                 {'error': 'Product not found'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-        except Size.DoesNotExist:
-            return Response(
-                {'error': 'Size not found'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-        except Color.DoesNotExist:
-            return Response(
-                {'error': 'Color not found'},
                 status=status.HTTP_404_NOT_FOUND
             )
         except Exception as e:
