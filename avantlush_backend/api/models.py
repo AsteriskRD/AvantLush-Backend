@@ -320,6 +320,7 @@ class ProductVariation(models.Model):
     variation = models.CharField(max_length=100)  # Keeping for backward compatibility
     price_adjustment = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     stock_quantity = models.PositiveIntegerField(default=0)
+    reserved_quantity = models.PositiveIntegerField(default=0)  # Stock reserved in carts
     sku = models.CharField(max_length=100, unique=True)
     is_default = models.BooleanField(default=False)
     
@@ -337,6 +338,16 @@ class ProductVariation(models.Model):
 
     def __str__(self):
         return f"{self.product.name} - {self.variation_type}: {self.variation}"
+    
+    @property
+    def available_quantity(self):
+        """Calculate available stock (total - reserved)"""
+        return max(0, self.stock_quantity - self.reserved_quantity)
+    
+    @property
+    def is_in_stock(self):
+        """Check if variation has available stock"""
+        return self.available_quantity > 0
 
     def generate_sku(self):
         """Generate a unique SKU for this product variation"""

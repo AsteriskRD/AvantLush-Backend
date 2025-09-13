@@ -1679,7 +1679,7 @@ class ProductSerializer(serializers.ModelSerializer):
         return False
     
     def get_variations(self, obj):
-        """Group variations by size and return simplified structure"""
+        """Group variations by size and return simplified structure with exact stock numbers"""
         variations = obj.variations.all()
         if not variations.exists():
             return {}
@@ -1694,9 +1694,16 @@ class ProductSerializer(serializers.ModelSerializer):
                 
             size_name = primary_size.name
             
-            # Get all colors for this variation
-            color_names = [color.name for color in variation.colors.all()]
-            if not color_names:
+            # Get all colors for this variation with stock info
+            colors_info = []
+            for color in variation.colors.all():
+                colors_info.append({
+                    "name": color.name,
+                    "available": variation.available_quantity,
+                    "in_stock": variation.is_in_stock
+                })
+            
+            if not colors_info:
                 continue
             
             # Calculate final price (base price + price adjustment)
@@ -1706,9 +1713,11 @@ class ProductSerializer(serializers.ModelSerializer):
             
             grouped_variations[size_name] = {
                 "size_id": primary_size.id,
-                "colors": color_names,
+                "colors": colors_info,
                 "price": final_price,
-                "stock_quantity": variation.stock_quantity
+                "stock_quantity": variation.stock_quantity,
+                "available_quantity": variation.available_quantity,
+                "reserved_quantity": variation.reserved_quantity
             }
         
         return grouped_variations

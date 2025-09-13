@@ -2171,6 +2171,24 @@ class CartViewSet(viewsets.ModelViewSet):
             elif color_name:
                 color, _ = Color.objects.get_or_create(name=color_name)
             
+            # Find the specific variation for stock checking
+            variation = None
+            if size and color:
+                from .models import ProductVariation
+                variation = ProductVariation.objects.filter(
+                    product=product,
+                    sizes=size,
+                    colors=color
+                ).first()
+            
+            # Check stock availability if variation exists
+            if variation:
+                available = variation.available_quantity
+                if quantity > available:
+                    return Response({
+                        'error': f'Only {available} units available for {size.name} {color.name}'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+            
             # Check if this product variant is already in the cart
             cart_item, created = CartItem.objects.get_or_create(
                 cart=cart,
@@ -2181,9 +2199,26 @@ class CartViewSet(viewsets.ModelViewSet):
             )
             
             if not created:
-                # If the item already exists, update the quantity
+                # If the item already exists, check total quantity
+                new_total_quantity = cart_item.quantity + quantity
+                if variation and new_total_quantity > variation.available_quantity:
+                    return Response({
+                        'error': f'Only {variation.available_quantity} units available. You already have {cart_item.quantity} in cart.'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
+                # Update the quantity
                 cart_item.quantity += quantity
                 cart_item.save()
+            
+            # Reserve stock if variation exists
+            if variation:
+                variation.reserved_quantity += quantity
+                variation.save()
+                
+                # Check if product should be auto-drafted
+                if variation.available_quantity == 0:
+                    product.status = 'draft'
+                    product.save()
             
             serializer = CartItemSerializer(cart_item)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -2252,6 +2287,26 @@ class CartViewSet(viewsets.ModelViewSet):
         
         try:
             cart_item = CartItem.objects.get(cart=cart, id=item_id)
+            
+            # Release reserved stock if variation exists
+            if cart_item.size and cart_item.color:
+                from .models import ProductVariation
+                variation = ProductVariation.objects.filter(
+                    product=cart_item.product,
+                    sizes=cart_item.size,
+                    colors=cart_item.color
+                ).first()
+                
+                if variation:
+                    # Release reserved stock
+                    variation.reserved_quantity -= cart_item.quantity
+                    variation.save()
+                    
+                    # Check if product should be reactivated
+                    if variation.available_quantity > 0 and cart_item.product.status == 'draft':
+                        cart_item.product.status = 'active'
+                        cart_item.product.save()
+            
             cart_item.delete()
             return Response({'status': 'success'})
         except CartItem.DoesNotExist:
@@ -2264,6 +2319,27 @@ class CartViewSet(viewsets.ModelViewSet):
     def clear(self, request):
         """Clear all items from cart"""
         cart = self.get_cart()
+        
+        # Release all reserved stock before clearing cart
+        for cart_item in cart.items.all():
+            if cart_item.size and cart_item.color:
+                from .models import ProductVariation
+                variation = ProductVariation.objects.filter(
+                    product=cart_item.product,
+                    sizes=cart_item.size,
+                    colors=cart_item.color
+                ).first()
+                
+                if variation:
+                    # Release reserved stock
+                    variation.reserved_quantity -= cart_item.quantity
+                    variation.save()
+                    
+                    # Check if product should be reactivated
+                    if variation.available_quantity > 0 and cart_item.product.status == 'draft':
+                        cart_item.product.status = 'active'
+                        cart_item.product.save()
+        
         CartItem.objects.filter(cart=cart).delete()
         return Response({'status': 'success'})
     
