@@ -675,20 +675,30 @@ class CartItemSerializer(serializers.ModelSerializer):
     product_price = serializers.DecimalField(source='product.price', max_digits=10, decimal_places=2, read_only=True)
     stock_status = serializers.CharField(source='product.status', read_only=True)
     product_image = serializers.SerializerMethodField(read_only=True)
-    # Size and color serializers
+    # Size and color serializers (read-only for response)
     size = SizeSerializer(read_only=True)
     color = ColorSerializer(read_only=True)
-    size_id = serializers.PrimaryKeyRelatedField(
-        queryset=Size.objects.all(),
-        source='size',
+    
+    # Write-only fields for input (support both ID and name formats)
+    size_id = serializers.IntegerField(
         write_only=True,
-        required=False
+        required=False,
+        allow_null=True
     )
-    color_id = serializers.PrimaryKeyRelatedField(
-        queryset=Color.objects.all(),
-        source='color',
+    color_id = serializers.IntegerField(
         write_only=True,
-        required=False
+        required=False,
+        allow_null=True
+    )
+    size_name = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_null=True
+    )
+    color_name = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_null=True
     )
     quantity_left = serializers.SerializerMethodField(read_only=True)  # New field
 
@@ -696,7 +706,8 @@ class CartItemSerializer(serializers.ModelSerializer):
         model = CartItem
         fields = [
             'id', 'product', 'quantity', 'product_name', 'product_price',
-            'stock_status', 'product_image', 'size', 'color', 'size_id', 'color_id',
+            'stock_status', 'product_image', 'size', 'color', 
+            'size_id', 'color_id', 'size_name', 'color_name',
             'quantity_left'  # Add new field here
         ]
 

@@ -2145,8 +2145,8 @@ class CartViewSet(viewsets.ModelViewSet):
         # Support both old format (size_id, color_id) and new format (size, color)
         size_id = request.data.get('size_id')
         color_id = request.data.get('color_id')
-        size_name = request.data.get('size')
-        color_name = request.data.get('color')
+        size_name = request.data.get('size') or request.data.get('size_name')
+        color_name = request.data.get('color') or request.data.get('color_name')
         
         try:
             product = Product.objects.get(id=product_id)
