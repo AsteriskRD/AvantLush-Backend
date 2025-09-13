@@ -1647,6 +1647,7 @@ class ProductSerializer(serializers.ModelSerializer):
     is_physical_product = serializers.BooleanField()
     is_liked = serializers.SerializerMethodField()
     variations = serializers.SerializerMethodField()
+    final_price = serializers.SerializerMethodField()
 
     def get_main_image(self, obj):
         if obj.main_image:
@@ -1701,10 +1702,14 @@ class ProductSerializer(serializers.ModelSerializer):
         
         return grouped_variations
     
+    def get_final_price(self, obj):
+        """Calculate the final price after applying discount"""
+        return float(obj.get_final_price())
+    
     class Meta:
         model = Product
         fields = [
-            'id', 'name', 'slug', 'description', 'price', 
+            'id', 'name', 'slug', 'description', 'price', 'final_price',
             'category', 'category_name', 'images', 'stock_quantity',
             'is_featured', 'is_physical_product', 'sku', 'status', 
             'created_at', 'updated_at', 'rating', 'num_ratings', 
