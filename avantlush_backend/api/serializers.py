@@ -1933,7 +1933,7 @@ class ProductManagementSerializer(serializers.ModelSerializer):
         return obj.variations.count() if hasattr(obj, 'variations') else 0
     
     def get_variations(self, obj):
-        """Group variations by size and return simplified structure"""
+        """Group variations by size and return enhanced structure with stock information"""
         variations = obj.variations.all()
         if not variations.exists():
             return {}
@@ -1948,8 +1948,14 @@ class ProductManagementSerializer(serializers.ModelSerializer):
                 
             size_name = primary_size.name
             
-            # Get all colors for this variation (allow empty colors)
-            color_names = [color.name for color in variation.colors.all()]
+            # Get all colors for this variation with stock info (allow empty colors)
+            colors_info = []
+            for color in variation.colors.all():
+                colors_info.append({
+                    "name": color.name,
+                    "available": variation.available_quantity,
+                    "in_stock": variation.is_in_stock
+                })
             
             # Calculate final price (base price + price adjustment)
             base_price = float(obj.price)
@@ -1958,9 +1964,11 @@ class ProductManagementSerializer(serializers.ModelSerializer):
             
             grouped_variations[size_name] = {
                 "size_id": primary_size.id,
-                "colors": color_names,  # Can be empty list
+                "colors": colors_info,  # Enhanced structure with stock info
                 "price": final_price,
-                "stock_quantity": variation.stock_quantity
+                "stock_quantity": variation.stock_quantity,
+                "available_quantity": variation.available_quantity,
+                "reserved_quantity": variation.reserved_quantity
             }
         
         return grouped_variations
