@@ -5399,15 +5399,17 @@ class ProductViewSet(viewsets.ModelViewSet):
                     price_value = payload.get('price', base_price)
                     stock_quantity = payload.get('stock_quantity', 0)
                     
-                    # Resolve Size: prefer explicit size_id; else try by name
+                    # Resolve Size: prefer size name for new variations; fallback to size_id
                     size_obj = None
-                    if size_id:
+                    if size_name:
+                        # First try to get or create by name (this allows custom size names)
+                        size_obj, _ = Size.objects.get_or_create(name=size_name)
+                    elif size_id:
+                        # Fallback to size_id if no name provided
                         try:
                             size_obj = Size.objects.get(id=size_id)
                         except Size.DoesNotExist:
                             size_obj = None
-                    if size_obj is None and size_name:
-                        size_obj, _ = Size.objects.get_or_create(name=size_name)
                     
                     # Resolve Colors: accept list of names or ids; create by name if needed
                     color_objs = []
