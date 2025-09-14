@@ -1694,7 +1694,7 @@ class ProductSerializer(serializers.ModelSerializer):
                 
             size_name = primary_size.name
             
-            # Get all colors for this variation with stock info
+            # Get all colors for this variation with stock info (allow empty colors)
             colors_info = []
             for color in variation.colors.all():
                 colors_info.append({
@@ -1703,9 +1703,6 @@ class ProductSerializer(serializers.ModelSerializer):
                     "in_stock": variation.is_in_stock
                 })
             
-            if not colors_info:
-                continue
-            
             # Calculate final price (base price + price adjustment)
             base_price = float(obj.price)
             price_adjustment = float(variation.price_adjustment)
@@ -1713,7 +1710,7 @@ class ProductSerializer(serializers.ModelSerializer):
             
             grouped_variations[size_name] = {
                 "size_id": primary_size.id,
-                "colors": colors_info,
+                "colors": colors_info,  # Can be empty list
                 "price": final_price,
                 "stock_quantity": variation.stock_quantity,
                 "available_quantity": variation.available_quantity,
@@ -1951,10 +1948,8 @@ class ProductManagementSerializer(serializers.ModelSerializer):
                 
             size_name = primary_size.name
             
-            # Get all colors for this variation
+            # Get all colors for this variation (allow empty colors)
             color_names = [color.name for color in variation.colors.all()]
-            if not color_names:
-                continue
             
             # Calculate final price (base price + price adjustment)
             base_price = float(obj.price)
@@ -1963,7 +1958,7 @@ class ProductManagementSerializer(serializers.ModelSerializer):
             
             grouped_variations[size_name] = {
                 "size_id": primary_size.id,
-                "colors": color_names,
+                "colors": color_names,  # Can be empty list
                 "price": final_price,
                 "stock_quantity": variation.stock_quantity
             }
