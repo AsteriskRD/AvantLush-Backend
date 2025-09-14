@@ -218,7 +218,7 @@ def create_order_notification(sender, instance, created, **kwargs):
         send_admin_order_email(instance, 'NEW_ORDER')
     
     # Also notify on status changes (but not on creation)
-    elif not created and 'status' in kwargs.get('update_fields', []):
+    elif not created and 'status' in (kwargs.get('update_fields') or []):
         from .models import OrderNotification
         
         # Create status change notification
