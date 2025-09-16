@@ -2239,7 +2239,22 @@ class CartViewSet(viewsets.ModelViewSet):
         """Update item quantity in cart"""
         cart = self.get_cart()
         item_id = request.data.get('item_id')
-        quantity = int(request.data.get('quantity', 0))
+        quantity = request.data.get('quantity')  # Required field
+        
+        # Validate required fields
+        if quantity is None:
+            return Response(
+                {'error': 'quantity field is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            quantity = int(quantity)
+        except (ValueError, TypeError):
+            return Response(
+                {'error': 'quantity must be a valid number'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
         try:
             cart_item = CartItem.objects.get(cart=cart, id=item_id)
