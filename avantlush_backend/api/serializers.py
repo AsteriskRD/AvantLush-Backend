@@ -1708,19 +1708,26 @@ class ProductSerializer(serializers.ModelSerializer):
             price_adjustment = float(variation.price_adjustment)
             final_price = base_price + price_adjustment
             
-            # Create unique variation ID: PRODUCT_ID + SIZE_ABBREV + COLOR_ABBREV
+            # Create unique variation ID: PRODUCT_ID + SIZE_ABBREV
             size_abbrev = primary_size.name.upper()[:3]  # First 3 chars of size name
-            color_abbrev = variation.colors.first().name.upper()[:3] if variation.colors.exists() else "DEF"
-            unique_variation_id = f"{obj.id}_{size_abbrev}_{color_abbrev}"
+            unique_variation_id = f"{obj.id}_{size_abbrev}"
             
-            grouped_variations[size_name] = {
-                "size_id": unique_variation_id,  # Use unique variation ID instead of size ID
-                "colors": colors_info,  # Can be empty list
-                "price": final_price,
-                "stock_quantity": variation.stock_quantity,
-                "available_quantity": variation.available_quantity,
-                "reserved_quantity": variation.reserved_quantity
-            }
+            # Only add if not already exists (to avoid overwriting)
+            if size_name not in grouped_variations:
+                grouped_variations[size_name] = {
+                    "size_id": unique_variation_id,  # Use unique variation ID instead of size ID
+                    "colors": colors_info,  # Can be empty list
+                    "price": final_price,
+                    "stock_quantity": variation.stock_quantity,
+                    "available_quantity": variation.available_quantity,
+                    "reserved_quantity": variation.reserved_quantity
+                }
+            else:
+                # If size already exists, merge colors
+                existing_colors = grouped_variations[size_name]["colors"]
+                for color_info in colors_info:
+                    if color_info not in existing_colors:
+                        existing_colors.append(color_info)
         
         return grouped_variations
     
