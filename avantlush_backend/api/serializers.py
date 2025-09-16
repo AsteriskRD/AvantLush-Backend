@@ -743,6 +743,22 @@ class CartItemSerializer(serializers.ModelSerializer):
         # Return the current stock left for this product
         return obj.product.stock_quantity
     
+    def get_variant_price(self, obj):
+        """Get the variant-specific price if size and color are specified"""
+        if obj.size and obj.color:
+            from .models import ProductVariation
+            try:
+                variation = ProductVariation.objects.get(
+                    product=obj.product,
+                    sizes=obj.size,
+                    colors=obj.color
+                )
+                # Calculate final price: base product price + price adjustment
+                return obj.product.price + variation.price_adjustment
+            except ProductVariation.DoesNotExist:
+                pass
+        return None  # Return None if no variant-specific price
+    
 class CartSerializer(serializers.ModelSerializer):
     items = CartItemSerializer(many=True, read_only=True)
     user = serializers.PrimaryKeyRelatedField(read_only=True)

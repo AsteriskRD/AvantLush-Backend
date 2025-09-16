@@ -2139,54 +2139,80 @@ class CartViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['post'])
     def add_item(self, request):
         cart = self.get_cart()  # Remove the request parameter
-        product_id = request.data.get('product_id')
         quantity = int(request.data.get('quantity', 1))
         
-        # Support both old format (size_id, color_id) and new format (size, color)
-        size_id = request.data.get('size_id')
-        color_id = request.data.get('color_id')
-        size_name = request.data.get('size') or request.data.get('size_name')
-        color_name = request.data.get('color') or request.data.get('color_name')
+        # Support both variation_id lookup and traditional product_id + size/color
+        variation_id = request.data.get('variation_id')
+        product_id = request.data.get('product_id')
         
         try:
-            product = Product.objects.get(id=product_id)
+            from .models import ProductVariation
             
-            # Resolve size: prefer ID, then name
-            size = None
-            if size_id:
+            if variation_id:
+                # NEW: Direct variation lookup
                 try:
-                    size = Size.objects.get(id=size_id)
-                except Size.DoesNotExist:
-                    pass
-            elif size_name:
-                size, _ = Size.objects.get_or_create(name=size_name)
-            
-            # Resolve color: prefer ID, then name
-            color = None
-            if color_id:
-                try:
-                    color = Color.objects.get(id=color_id)
-                except Color.DoesNotExist:
-                    pass
-            elif color_name:
-                color, _ = Color.objects.get_or_create(name=color_name)
-            
-            # Find the specific variation for stock checking
-            variation = None
-            if size and color:
-                from .models import ProductVariation
-                variation = ProductVariation.objects.filter(
-                    product=product,
-                    sizes=size,
-                    colors=color
-                ).first()
+                    variation = ProductVariation.objects.get(id=variation_id)
+                    product = variation.product
+                    size = variation.sizes.first() if variation.sizes.exists() else None
+                    color = variation.colors.first() if variation.colors.exists() else None
+                except ProductVariation.DoesNotExist:
+                    return Response(
+                        {'error': 'Variation not found'},
+                        status=status.HTTP_404_NOT_FOUND
+                    )
+            else:
+                # EXISTING: Traditional product_id + size/color lookup
+                if not product_id:
+                    return Response(
+                        {'error': 'Either variation_id or product_id is required'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                product = Product.objects.get(id=product_id)
+                
+                # Support both old format (size_id, color_id) and new format (size, color)
+                size_id = request.data.get('size_id')
+                color_id = request.data.get('color_id')
+                size_name = request.data.get('size') or request.data.get('size_name')
+                color_name = request.data.get('color') or request.data.get('color_name')
+                
+                # Resolve size: prefer ID, then name
+                size = None
+                if size_id:
+                    try:
+                        size = Size.objects.get(id=size_id)
+                    except Size.DoesNotExist:
+                        pass
+                elif size_name:
+                    size, _ = Size.objects.get_or_create(name=size_name)
+                
+                # Resolve color: prefer ID, then name
+                color = None
+                if color_id:
+                    try:
+                        color = Color.objects.get(id=color_id)
+                    except Color.DoesNotExist:
+                        pass
+                elif color_name:
+                    color, _ = Color.objects.get_or_create(name=color_name)
+                
+                # Find the specific variation for stock checking
+                variation = None
+                if size and color:
+                    variation = ProductVariation.objects.filter(
+                        product=product,
+                        sizes=size,
+                        colors=color
+                    ).first()
             
             # Check stock availability if variation exists
             if variation:
                 available = variation.available_quantity
                 if quantity > available:
+                    size_name = size.name if size else 'N/A'
+                    color_name = color.name if color else 'N/A'
                     return Response({
-                        'error': f'Only {available} units available for {size.name} {color.name}'
+                        'error': f'Only {available} units available for {size_name} {color_name}'
                     }, status=status.HTTP_400_BAD_REQUEST)
             
             # Check if this product variant is already in the cart

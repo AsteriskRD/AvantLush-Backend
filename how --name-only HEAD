@@ -1,0 +1,5 @@
+[33me319b59[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmaster[m[33m, [m[1;31morigin/master[m[33m)[m Fix custom size variations and signals TypeError
+[33m54674dc[m recent changes made
+[33m4fed665[m Implement comprehensive stock management system
+[33m61c6bba[m Fix: Update CartItemSerializer to handle size/color names properly
+[33mdfdab3e[m Fix: Update cart add-item endpoint to support size/color names
