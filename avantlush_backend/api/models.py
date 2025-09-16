@@ -162,10 +162,10 @@ class Product(models.Model):
     
     # Shipping fields
     is_physical_product = models.BooleanField(default=True)
-    weight = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    height = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    length = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    width = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    weight = models.CharField(max_length=50, null=True, blank=True, help_text="Weight with unit (e.g., '2.5 kg', '1.2 lbs')")
+    height = models.CharField(max_length=50, null=True, blank=True, help_text="Height with unit (e.g., '30 cm', '12 inches')")
+    length = models.CharField(max_length=50, null=True, blank=True, help_text="Length with unit (e.g., '25 cm', '10 inches')")
+    width = models.CharField(max_length=50, null=True, blank=True, help_text="Width with unit (e.g., '15 cm', '6 inches')")
 
     class Meta:
         ordering = ['-created_at']
