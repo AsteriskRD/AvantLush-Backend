@@ -6542,6 +6542,21 @@ class CategoryViewSet(viewsets.ModelViewSet):
         
         return queryset.order_by('name')
     
+    def destroy(self, request, *args, **kwargs):
+        """Custom destroy method to return proper JSON response"""
+        try:
+            instance = self.get_object()
+            instance.delete()
+            return Response({
+                'is_success': True,
+                'message': 'Category deleted successfully'
+            }, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({
+                'is_success': False,
+                'message': f'Error deleting category: {str(e)}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+    
     @action(detail=False, methods=['GET'])
     def tree(self, request):
         """Get hierarchical category tree"""
