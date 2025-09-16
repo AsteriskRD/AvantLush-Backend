@@ -2141,67 +2141,68 @@ class CartViewSet(viewsets.ModelViewSet):
         cart = self.get_cart()  # Remove the request parameter
         quantity = int(request.data.get('quantity', 1))
         
-        # Support both variation_id lookup and traditional product_id + size/color
-        variation_id = request.data.get('variation_id')
+        # Support both unique variation ID (in size_id) and traditional product_id + size/color
+        size_id = request.data.get('size_id')  # This now contains the unique variation ID
         product_id = request.data.get('product_id')
+        size_name = request.data.get('size')
+        color_name = request.data.get('color')
         
         # Debug logging
         print(f"🔍 DEBUG: Request data: {request.data}")
-        print(f"🔍 DEBUG: variation_id: {variation_id}")
+        print(f"🔍 DEBUG: size_id (unique variation ID): {size_id}")
         print(f"🔍 DEBUG: product_id: {product_id}")
         
         try:
             from .models import ProductVariation
             
-            if variation_id:
-                # NEW: Direct variation lookup
-                print(f"🔍 DEBUG: Looking up variation_id: {variation_id}")
+            if size_id and '_' in str(size_id):
+                # NEW: Direct variation lookup using unique variation ID
+                print(f"🔍 DEBUG: Looking up unique variation ID: {size_id}")
                 try:
-                    # Check if it's a unique variation ID (format: PRODUCT_ID_SIZE_COLOR)
-                    if '_' in str(variation_id):
-                        # Parse unique variation ID: "21_STA_BLU"
-                        parts = str(variation_id).split('_')
-                        if len(parts) >= 3:
-                            product_id_from_variation = int(parts[0])
-                            size_abbrev = parts[1]
-                            color_abbrev = parts[2]
-                            
-                            # Find the product first
-                            product = Product.objects.get(id=product_id_from_variation)
-                            
-                            # Find the variation by matching size and color abbreviations
-                            variations = ProductVariation.objects.filter(product=product)
-                            variation = None
-                            
-                            for var in variations:
-                                size = var.sizes.first()
-                                color = var.colors.first()
-                                if (size and size.name.upper()[:3] == size_abbrev and 
-                                    color and color.name.upper()[:3] == color_abbrev):
-                                    variation = var
-                                    break
-                            
-                            if not variation:
-                                return Response({
-                                    'is_success': False,
-                                    'data': {'error': f'Variation not found for {variation_id}'}
-                                }, status=status.HTTP_404_NOT_FOUND)
-                                
-                            size = variation.sizes.first() if variation.sizes.exists() else None
-                            color = variation.colors.first() if variation.colors.exists() else None
-                            print(f"🔍 DEBUG: Found variation via unique ID: {variation.id}, product: {product.name} (ID: {product.id})")
-                        else:
+                    # Parse unique variation ID (format: PRODUCT_ID_SIZE_COLOR)
+                    # Parse unique variation ID: "21_STA_BLU"
+                    parts = str(size_id).split('_')
+                    if len(parts) >= 3:
+                        product_id_from_variation = int(parts[0])
+                        size_abbrev = parts[1]
+                        color_abbrev = parts[2]
+                        
+                        # Find the product first
+                        product = Product.objects.get(id=product_id_from_variation)
+                        
+                        # Find the variation by matching size and color abbreviations
+                        variations = ProductVariation.objects.filter(product=product)
+                        variation = None
+                        
+                        for var in variations:
+                            size = var.sizes.first()
+                            color = var.colors.first()
+                            if (size and size.name.upper()[:3] == size_abbrev and 
+                                color and color.name.upper()[:3] == color_abbrev):
+                                variation = var
+                                break
+                        
+                        if not variation:
                             return Response({
                                 'is_success': False,
-                                'data': {'error': 'Invalid variation ID format'}
-                            }, status=status.HTTP_400_BAD_REQUEST)
-                    else:
-                        # Legacy: Direct variation ID lookup
-                        variation = ProductVariation.objects.get(id=variation_id)
-                        product = variation.product
+                                'data': {'error': f'Variation not found for {size_id}'}
+                            }, status=status.HTTP_404_NOT_FOUND)
+                        
                         size = variation.sizes.first() if variation.sizes.exists() else None
                         color = variation.colors.first() if variation.colors.exists() else None
-                        print(f"🔍 DEBUG: Found variation via legacy ID: {variation.id}, product: {product.name} (ID: {product.id})")
+                        print(f"🔍 DEBUG: Found variation via unique ID: {variation.id}, product: {product.name} (ID: {product.id})")
+                    else:
+                        return Response({
+                            'is_success': False,
+                            'data': {'error': 'Invalid variation ID format'}
+                        }, status=status.HTTP_400_BAD_REQUEST)
+                else:
+                    # Legacy: Direct variation ID lookup (numeric)
+                    variation = ProductVariation.objects.get(id=size_id)
+                    product = variation.product
+                    size = variation.sizes.first() if variation.sizes.exists() else None
+                    color = variation.colors.first() if variation.colors.exists() else None
+                    print(f"🔍 DEBUG: Found variation via legacy ID: {variation.id}, product: {product.name} (ID: {product.id})")
                         
                 except ProductVariation.DoesNotExist:
                     return Response({

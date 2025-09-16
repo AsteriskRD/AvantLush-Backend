@@ -1714,8 +1714,7 @@ class ProductSerializer(serializers.ModelSerializer):
             unique_variation_id = f"{obj.id}_{size_abbrev}_{color_abbrev}"
             
             grouped_variations[size_name] = {
-                "variation_id": unique_variation_id,  # NEW: Unique variation identifier
-                "size_id": primary_size.id,
+                "size_id": unique_variation_id,  # Use unique variation ID instead of size ID
                 "colors": colors_info,  # Can be empty list
                 "price": final_price,
                 "stock_quantity": variation.stock_quantity,
