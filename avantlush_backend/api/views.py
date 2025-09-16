@@ -2145,28 +2145,35 @@ class CartViewSet(viewsets.ModelViewSet):
         variation_id = request.data.get('variation_id')
         product_id = request.data.get('product_id')
         
+        # Debug logging
+        print(f"🔍 DEBUG: Request data: {request.data}")
+        print(f"🔍 DEBUG: variation_id: {variation_id}")
+        print(f"🔍 DEBUG: product_id: {product_id}")
+        
         try:
             from .models import ProductVariation
             
             if variation_id:
                 # NEW: Direct variation lookup
+                print(f"🔍 DEBUG: Looking up variation_id: {variation_id}")
                 try:
                     variation = ProductVariation.objects.get(id=variation_id)
                     product = variation.product
                     size = variation.sizes.first() if variation.sizes.exists() else None
                     color = variation.colors.first() if variation.colors.exists() else None
+                    print(f"🔍 DEBUG: Found variation: {variation.id}, product: {product.name} (ID: {product.id})")
                 except ProductVariation.DoesNotExist:
-                    return Response(
-                        {'error': 'Variation not found'},
-                        status=status.HTTP_404_NOT_FOUND
-                    )
+                    return Response({
+                        'is_success': False,
+                        'data': {'error': 'Variation not found'}
+                    }, status=status.HTTP_404_NOT_FOUND)
             else:
                 # EXISTING: Traditional product_id + size/color lookup
                 if not product_id:
-                    return Response(
-                        {'error': 'Either variation_id or product_id is required'},
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
+                    return Response({
+                        'is_success': False,
+                        'data': {'error': 'Either variation_id or product_id is required'}
+                    }, status=status.HTTP_400_BAD_REQUEST)
                 
                 product = Product.objects.get(id=product_id)
                 
@@ -2212,7 +2219,8 @@ class CartViewSet(viewsets.ModelViewSet):
                     size_name = size.name if size else 'N/A'
                     color_name = color.name if color else 'N/A'
                     return Response({
-                        'error': f'Only {available} units available for {size_name} {color_name}'
+                        'is_success': False,
+                        'data': {'error': f'Only {available} units available for {size_name} {color_name}'}
                     }, status=status.HTTP_400_BAD_REQUEST)
             
             # Check if this product variant is already in the cart
@@ -2229,7 +2237,8 @@ class CartViewSet(viewsets.ModelViewSet):
                 new_total_quantity = cart_item.quantity + quantity
                 if variation and new_total_quantity > variation.available_quantity:
                     return Response({
-                        'error': f'Only {variation.available_quantity} units available. You already have {cart_item.quantity} in cart.'
+                        'is_success': False,
+                        'data': {'error': f'Only {variation.available_quantity} units available. You already have {cart_item.quantity} in cart.'}
                     }, status=status.HTTP_400_BAD_REQUEST)
                 
                 # Update the quantity
@@ -2250,15 +2259,15 @@ class CartViewSet(viewsets.ModelViewSet):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         
         except Product.DoesNotExist:
-            return Response(
-                {'error': 'Product not found'},
-                status=status.HTTP_404_NOT_FOUND
-            )
+            return Response({
+                'is_success': False,
+                'data': {'error': 'Product not found'}
+            }, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            return Response(
-                {'error': str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({
+                'is_success': False,
+                'data': {'error': str(e)}
+            }, status=status.HTTP_400_BAD_REQUEST)
     
     @action(detail=False, methods=['POST'])
     def update_quantity(self, request):
@@ -6541,21 +6550,6 @@ class CategoryViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(name__icontains=name)
         
         return queryset.order_by('name')
-    
-    def destroy(self, request, *args, **kwargs):
-        """Custom destroy method to return proper JSON response"""
-        try:
-            instance = self.get_object()
-            instance.delete()
-            return Response({
-                'is_success': True,
-                'message': 'Category deleted successfully'
-            }, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({
-                'is_success': False,
-                'message': f'Error deleting category: {str(e)}'
-            }, status=status.HTTP_400_BAD_REQUEST)
     
     @action(detail=False, methods=['GET'])
     def tree(self, request):
