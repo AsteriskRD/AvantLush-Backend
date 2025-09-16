@@ -743,22 +743,6 @@ class CartItemSerializer(serializers.ModelSerializer):
         # Return the current stock left for this product
         return obj.product.stock_quantity
     
-    def get_variant_price(self, obj):
-        """Get the variant-specific price if size and color are specified"""
-        if obj.size and obj.color:
-            from .models import ProductVariation
-            try:
-                variation = ProductVariation.objects.get(
-                    product=obj.product,
-                    sizes=obj.size,
-                    colors=obj.color
-                )
-                # Calculate final price: base product price + price adjustment
-                return obj.product.price + variation.price_adjustment
-            except ProductVariation.DoesNotExist:
-                pass
-        return None  # Return None if no variant-specific price
-    
 class CartSerializer(serializers.ModelSerializer):
     items = CartItemSerializer(many=True, read_only=True)
     user = serializers.PrimaryKeyRelatedField(read_only=True)
@@ -1724,7 +1708,13 @@ class ProductSerializer(serializers.ModelSerializer):
             price_adjustment = float(variation.price_adjustment)
             final_price = base_price + price_adjustment
             
+            # Create unique variation ID: PRODUCT_ID + SIZE_ABBREV + COLOR_ABBREV
+            size_abbrev = primary_size.name.upper()[:3]  # First 3 chars of size name
+            color_abbrev = variation.colors.first().name.upper()[:3] if variation.colors.exists() else "DEF"
+            unique_variation_id = f"{obj.id}_{size_abbrev}_{color_abbrev}"
+            
             grouped_variations[size_name] = {
+                "variation_id": unique_variation_id,  # NEW: Unique variation identifier
                 "size_id": primary_size.id,
                 "colors": colors_info,  # Can be empty list
                 "price": final_price,

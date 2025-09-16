@@ -2157,16 +2157,67 @@ class CartViewSet(viewsets.ModelViewSet):
                 # NEW: Direct variation lookup
                 print(f"🔍 DEBUG: Looking up variation_id: {variation_id}")
                 try:
-                    variation = ProductVariation.objects.get(id=variation_id)
-                    product = variation.product
-                    size = variation.sizes.first() if variation.sizes.exists() else None
-                    color = variation.colors.first() if variation.colors.exists() else None
-                    print(f"🔍 DEBUG: Found variation: {variation.id}, product: {product.name} (ID: {product.id})")
+                    # Check if it's a unique variation ID (format: PRODUCT_ID_SIZE_COLOR)
+                    if '_' in str(variation_id):
+                        # Parse unique variation ID: "21_STA_BLU"
+                        parts = str(variation_id).split('_')
+                        if len(parts) >= 3:
+                            product_id_from_variation = int(parts[0])
+                            size_abbrev = parts[1]
+                            color_abbrev = parts[2]
+                            
+                            # Find the product first
+                            product = Product.objects.get(id=product_id_from_variation)
+                            
+                            # Find the variation by matching size and color abbreviations
+                            variations = ProductVariation.objects.filter(product=product)
+                            variation = None
+                            
+                            for var in variations:
+                                size = var.sizes.first()
+                                color = var.colors.first()
+                                if (size and size.name.upper()[:3] == size_abbrev and 
+                                    color and color.name.upper()[:3] == color_abbrev):
+                                    variation = var
+                                    break
+                            
+                            if not variation:
+                                return Response({
+                                    'is_success': False,
+                                    'data': {'error': f'Variation not found for {variation_id}'}
+                                }, status=status.HTTP_404_NOT_FOUND)
+                                
+                            size = variation.sizes.first() if variation.sizes.exists() else None
+                            color = variation.colors.first() if variation.colors.exists() else None
+                            print(f"🔍 DEBUG: Found variation via unique ID: {variation.id}, product: {product.name} (ID: {product.id})")
+                        else:
+                            return Response({
+                                'is_success': False,
+                                'data': {'error': 'Invalid variation ID format'}
+                            }, status=status.HTTP_400_BAD_REQUEST)
+                    else:
+                        # Legacy: Direct variation ID lookup
+                        variation = ProductVariation.objects.get(id=variation_id)
+                        product = variation.product
+                        size = variation.sizes.first() if variation.sizes.exists() else None
+                        color = variation.colors.first() if variation.colors.exists() else None
+                        print(f"🔍 DEBUG: Found variation via legacy ID: {variation.id}, product: {product.name} (ID: {product.id})")
+                        
                 except ProductVariation.DoesNotExist:
                     return Response({
                         'is_success': False,
                         'data': {'error': 'Variation not found'}
                     }, status=status.HTTP_404_NOT_FOUND)
+                except Product.DoesNotExist:
+                    return Response({
+                        'is_success': False,
+                        'data': {'error': 'Product not found'}
+                    }, status=status.HTTP_404_NOT_FOUND)
+                except ValueError:
+                    return Response({
+                        'is_success': False,
+                        'data': {'error': 'Invalid variation ID format'}
+                    }, status=status.HTTP_400_BAD_REQUEST)
             else:
                 # EXISTING: Traditional product_id + size/color lookup
                 if not product_id:
