@@ -2141,7 +2141,7 @@ class CartViewSet(viewsets.ModelViewSet):
         cart = self.get_cart()  # Remove the request parameter
         quantity = int(request.data.get('quantity', 1))
         
-        # Support both unique variation ID (in size_id or product_id) and traditional product_id + size/color
+        # Support both unique variation ID (in size_id) and traditional product_id + size/color
         size_id = request.data.get('size_id')  # This now contains the unique variation ID
         product_id = request.data.get('product_id')
         size_name = request.data.get('size')
@@ -2155,43 +2155,37 @@ class CartViewSet(viewsets.ModelViewSet):
         try:
             from .models import ProductVariation
             
-            # Check if either size_id or product_id contains a unique variation ID
-            unique_variation_id = None
             if size_id and '_' in str(size_id):
-                unique_variation_id = size_id
-                print(f"🔍 DEBUG: Found unique variation ID in size_id: {unique_variation_id}")
-            elif product_id and '_' in str(product_id):
-                unique_variation_id = product_id
-                print(f"🔍 DEBUG: Found unique variation ID in product_id: {unique_variation_id}")
-            
-            if unique_variation_id:
                 # NEW: Direct variation lookup using unique variation ID
-                print(f"🔍 DEBUG: Looking up unique variation ID: {unique_variation_id}")
+                print(f"🔍 DEBUG: Looking up unique variation ID: {size_id}")
                 try:
-                    # Parse unique variation ID (format: PRODUCT_ID_SIZE_ABBREV)
-                    # Parse unique variation ID: "21_XL"
-                    parts = str(unique_variation_id).split('_')
-                    if len(parts) >= 2:
+                    # Parse unique variation ID (format: PRODUCT_ID_SIZE_COLOR)
+                    # Parse unique variation ID: "21_STA_BLU"
+                    parts = str(size_id).split('_')
+                    if len(parts) >= 3:
                         product_id_from_variation = int(parts[0])
                         size_abbrev = parts[1]
+                        color_abbrev = parts[2]
                         
                         # Find the product first
                         product = Product.objects.get(id=product_id_from_variation)
                         
-                        # Find the variation by matching size abbreviation
+                        # Find the variation by matching size and color abbreviations
                         variations = ProductVariation.objects.filter(product=product)
                         variation = None
                         
                         for var in variations:
                             size = var.sizes.first()
-                            if size and size.name.upper()[:3] == size_abbrev:
+                            color = var.colors.first()
+                            if (size and size.name.upper()[:3] == size_abbrev and 
+                                color and color.name.upper()[:3] == color_abbrev):
                                 variation = var
                                 break
                         
                         if not variation:
                             return Response({
                                 'is_success': False,
-                                'data': {'error': f'Variation not found for {unique_variation_id}'}
+                                'data': {'error': f'Variation not found for {size_id}'}
                             }, status=status.HTTP_404_NOT_FOUND)
                         
                         size = variation.sizes.first() if variation.sizes.exists() else None
