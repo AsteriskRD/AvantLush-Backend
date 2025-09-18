@@ -2031,6 +2031,92 @@ class AddressViewSet(viewsets.ModelViewSet):
                 formatted_errors[field] = str(error_list)
                 
         return formatted_errors
+    
+    @action(detail=False, methods=['GET'], url_path='lookup-by-variation')
+    def lookup_by_variation(self, request):
+        """
+        Lookup a product using a unique variation ID (e.g., '21_XL')
+        Returns the product with the specific variation highlighted
+        """
+        variation_id = request.query_params.get('variation_id')
+        
+        if not variation_id:
+            return Response({
+                'is_success': False,
+                'data': {'error': 'variation_id parameter is required'}
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            from .models import ProductVariation
+            
+            # Parse unique variation ID (format: PRODUCT_ID_SIZE_ABBREV)
+            # Example: "21_XL"
+            parts = str(variation_id).split('_')
+            if len(parts) < 2:
+                return Response({
+                    'is_success': False,
+                    'data': {'error': 'Invalid variation ID format. Expected: PRODUCT_ID_SIZE_ABBREV (e.g., 21_XL)'}
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            product_id_from_variation = int(parts[0])
+            size_abbrev = parts[1]
+            
+            # Find the product
+            product = Product.objects.get(id=product_id_from_variation)
+            
+            # Find the specific variation
+            variations = ProductVariation.objects.filter(product=product)
+            target_variation = None
+            
+            for var in variations:
+                size = var.sizes.first()
+                if size and size.name.upper()[:3] == size_abbrev:
+                    target_variation = var
+                    break
+            
+            if not target_variation:
+                return Response({
+                    'is_success': False,
+                    'data': {'error': f'Variation not found for {variation_id}'}
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            # Serialize the product
+            serializer = ProductSerializer(product, context={'request': request})
+            product_data = serializer.data
+            
+            # Add the specific variation info
+            product_data['target_variation'] = {
+                'variation_id': variation_id,
+                'size': target_variation.sizes.first().name if target_variation.sizes.exists() else None,
+                'color': target_variation.colors.first().name if target_variation.colors.exists() else None,
+                'stock_quantity': target_variation.stock_quantity,
+                'available_quantity': target_variation.available_quantity,
+                'reserved_quantity': target_variation.reserved_quantity,
+                'is_in_stock': target_variation.is_in_stock,
+                'price_adjustment': float(target_variation.price_adjustment),
+                'final_price': float(product.price) + float(target_variation.price_adjustment)
+            }
+            
+            return Response({
+                'is_success': True,
+                'data': product_data
+            })
+            
+        except Product.DoesNotExist:
+            return Response({
+                'is_success': False,
+                'data': {'error': f'Product not found for variation ID {variation_id}'}
+            }, status=status.HTTP_404_NOT_FOUND)
+        except ValueError:
+            return Response({
+                'is_success': False,
+                'data': {'error': 'Invalid variation ID format. Product ID must be numeric.'}
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({
+                'is_success': False,
+                'data': {'error': str(e)}
+            }, status=status.HTTP_400_BAD_REQUEST)
         
 class ArticleViewSet(viewsets.ModelViewSet):
     queryset = Article.objects.all()
