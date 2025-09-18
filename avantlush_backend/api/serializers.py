@@ -672,7 +672,7 @@ class ArticleSerializer(serializers.ModelSerializer):
 
 class CartItemSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source='product.name', read_only=True)
-    product_price = serializers.DecimalField(source='product.price', max_digits=10, decimal_places=2, read_only=True)
+    product_price = serializers.SerializerMethodField(read_only=True)
     stock_status = serializers.CharField(source='product.status', read_only=True)
     product_image = serializers.SerializerMethodField(read_only=True)
     # Size and color serializers (read-only for response)
@@ -739,9 +739,40 @@ class CartItemSerializer(serializers.ModelSerializer):
             
         return None  # Return None if no images are available
 
+    def get_product_price(self, obj):
+        """Calculate variant-specific price (base price + price adjustment)"""
+        base_price = float(obj.product.price)
+        
+        # Find the specific variation for this cart item
+        from .models import ProductVariation
+        variation = ProductVariation.objects.filter(
+            product=obj.product,
+            sizes=obj.size,
+            colors=obj.color
+        ).first()
+        
+        if variation:
+            price_adjustment = float(variation.price_adjustment)
+            return base_price + price_adjustment
+        else:
+            # Fallback to base price if no variation found
+            return base_price
+    
     def get_quantity_left(self, obj):
-        # Return the current stock left for this product
-        return obj.product.stock_quantity
+        """Return the available quantity for this specific variant"""
+        # Find the specific variation for this cart item
+        from .models import ProductVariation
+        variation = ProductVariation.objects.filter(
+            product=obj.product,
+            sizes=obj.size,
+            colors=obj.color
+        ).first()
+        
+        if variation:
+            return variation.available_quantity
+        else:
+            # Fallback to product stock if no variation found
+            return obj.product.stock_quantity
     
 class CartSerializer(serializers.ModelSerializer):
     items = CartItemSerializer(many=True, read_only=True)
