@@ -2232,15 +2232,23 @@ class CartViewSet(viewsets.ModelViewSet):
                         'data': {'error': 'Invalid variation ID format'}
                     }, status=status.HTTP_400_BAD_REQUEST)
             
-            # EXISTING: Traditional product_id + size/color lookup
-            if not size_id or '_' not in str(size_id):
+            else:
+                # EXISTING: Traditional product_id + size/color lookup
                 if not product_id:
                     return Response({
                         'is_success': False,
                         'data': {'error': 'Either size_id (unique variation ID) or product_id is required'}
                     }, status=status.HTTP_400_BAD_REQUEST)
                 
-                product = Product.objects.get(id=product_id)
+                # Handle case where product_id might be a string (should be integer for traditional lookup)
+                try:
+                    product_id_int = int(product_id)
+                    product = Product.objects.get(id=product_id_int)
+                except ValueError:
+                    return Response({
+                        'is_success': False,
+                        'data': {'error': 'product_id must be a valid integer for traditional lookup'}
+                    }, status=status.HTTP_400_BAD_REQUEST)
                 
                 # Support both old format (size_id, color_id) and new format (size, color)
                 traditional_size_id = request.data.get('size_id')
