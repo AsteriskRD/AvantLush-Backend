@@ -2214,25 +2214,6 @@ class CartViewSet(viewsets.ModelViewSet):
                         'data': {'error': 'Product not found'}
                     }, status=status.HTTP_404_NOT_FOUND)
             else:
-                # Legacy: Direct variation ID lookup (numeric)
-                try:
-                    variation = ProductVariation.objects.get(id=size_id)
-                    product = variation.product
-                    size = variation.sizes.first() if variation.sizes.exists() else None
-                    color = variation.colors.first() if variation.colors.exists() else None
-                    print(f"🔍 DEBUG: Found variation via legacy ID: {variation.id}, product: {product.name} (ID: {product.id})")
-                except ProductVariation.DoesNotExist:
-                    return Response({
-                        'is_success': False,
-                        'data': {'error': 'Variation not found'}
-                    }, status=status.HTTP_404_NOT_FOUND)
-                except ValueError:
-                    return Response({
-                        'is_success': False,
-                        'data': {'error': 'Invalid variation ID format'}
-                    }, status=status.HTTP_400_BAD_REQUEST)
-            
-            else:
                 # EXISTING: Traditional product_id + size/color lookup
                 if not product_id:
                     return Response({
