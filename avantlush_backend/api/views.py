@@ -2175,6 +2175,28 @@ class CartViewSet(viewsets.ModelViewSet):
         cart = self.get_cart()  # Remove the request parameter
         quantity = int(request.data.get('quantity', 1))
         
+        # Support cart_item_id for updating existing cart items
+        cart_item_id = request.data.get('cart_item_id')
+        if cart_item_id:
+            try:
+                cart_item = CartItem.objects.get(id=cart_item_id, cart=cart)
+                cart_item.quantity += quantity
+                cart_item.save()
+                
+                return Response({
+                    'is_success': True,
+                    'data': {
+                        'cart_item_id': cart_item.id,
+                        'quantity': cart_item.quantity,
+                        'message': 'Cart item quantity updated successfully'
+                    }
+                })
+            except CartItem.DoesNotExist:
+                return Response({
+                    'is_success': False,
+                    'data': {'error': 'Cart item not found'}
+                }, status=status.HTTP_404_NOT_FOUND)
+        
         # Support both unique variation ID (in size_id) and traditional product_id + size/color
         size_id = request.data.get('size_id')  # This now contains the unique variation ID
         product_id = request.data.get('product_id')
@@ -2271,6 +2293,14 @@ class CartViewSet(viewsets.ModelViewSet):
                 size_name = request.data.get('size') or request.data.get('size_name')
                 color_name = request.data.get('color') or request.data.get('color_name')
                 
+                # Debug logging
+                print(f"🔍 DEBUG: Request data for cart add_item:")
+                print(f"   - product_id: {product_id}")
+                print(f"   - traditional_size_id: {traditional_size_id}")
+                print(f"   - color_id: {color_id}")
+                print(f"   - size_name: {size_name}")
+                print(f"   - color_name: {color_name}")
+                
                 # Resolve size: prefer ID, then name
                 size = None
                 if traditional_size_id:
@@ -2290,6 +2320,11 @@ class CartViewSet(viewsets.ModelViewSet):
                         pass
                 elif color_name:
                     color, _ = Color.objects.get_or_create(name=color_name)
+                
+                # Debug logging for resolved values
+                print(f"🔍 DEBUG: Resolved values:")
+                print(f"   - size: {size} (ID: {size.id if size else None})")
+                print(f"   - color: {color} (ID: {color.id if color else None})")
                 
                 # Find the specific variation for stock checking
                 variation = None
@@ -2312,6 +2347,12 @@ class CartViewSet(viewsets.ModelViewSet):
                     }, status=status.HTTP_400_BAD_REQUEST)
             
             # Check if this product variant is already in the cart
+            print(f"🔍 DEBUG: Attempting get_or_create:")
+            print(f"   - cart: {cart.id}")
+            print(f"   - product: {product.id}")
+            print(f"   - size: {size.id if size else None}")
+            print(f"   - color: {color.id if color else None}")
+            
             cart_item, created = CartItem.objects.get_or_create(
                 cart=cart,
                 product=product,
@@ -2319,6 +2360,10 @@ class CartViewSet(viewsets.ModelViewSet):
                 color=color,
                 defaults={'quantity': quantity}
             )
+            
+            print(f"🔍 DEBUG: get_or_create result:")
+            print(f"   - created: {created}")
+            print(f"   - cart_item_id: {cart_item.id}")
             
             if not created:
                 # If the item already exists, check total quantity

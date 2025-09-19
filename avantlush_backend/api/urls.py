@@ -32,6 +32,7 @@ from .views import (
     ProductReviewViewSet,
     TokenValidationView,
     CarouselViewSet,
+    ShippingMethodViewSet,
     admin_login,
     check_admin_access,
     OrderCreateView,
