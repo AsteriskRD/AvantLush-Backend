@@ -1716,6 +1716,15 @@ class ProductSerializer(serializers.ModelSerializer):
             ).exists()
         return False
     
+    def _get_display_available_quantity(self, variation):
+        """Helper method to get the correct available quantity for display"""
+        # Special logic for last item: if stock_quantity = 1 and reserved_quantity > 0,
+        # still show available_quantity = 1 until payment is completed
+        if variation.stock_quantity == 1 and variation.reserved_quantity > 0:
+            return 1  # Always show 1 for the last item until payment
+        else:
+            return variation.available_quantity
+    
     def get_variations(self, obj):
         """Group variations by size and return simplified structure with exact stock numbers"""
         variations = obj.variations.all()
@@ -1737,7 +1746,7 @@ class ProductSerializer(serializers.ModelSerializer):
             for color in variation.colors.all():
                 colors_info.append({
                     "name": color.name,
-                    "available": variation.available_quantity,
+                    "available": self._get_display_available_quantity(variation),
                     "in_stock": variation.is_in_stock
                 })
             
@@ -1757,7 +1766,7 @@ class ProductSerializer(serializers.ModelSerializer):
                     "colors": colors_info,  # Can be empty list
                     "price": final_price,
                     "stock_quantity": variation.stock_quantity,
-                    "available_quantity": variation.available_quantity,
+                    "available_quantity": self._get_display_available_quantity(variation),
                     "reserved_quantity": variation.reserved_quantity
                 }
             else:
@@ -2003,7 +2012,7 @@ class ProductManagementSerializer(serializers.ModelSerializer):
             for color in variation.colors.all():
                 colors_info.append({
                     "name": color.name,
-                    "available": variation.available_quantity,
+                    "available": self._get_display_available_quantity(variation),
                     "in_stock": variation.is_in_stock
                 })
             
@@ -2023,7 +2032,7 @@ class ProductManagementSerializer(serializers.ModelSerializer):
                     "colors": colors_info,  # Enhanced structure with stock info
                     "price": final_price,
                     "stock_quantity": variation.stock_quantity,
-                    "available_quantity": variation.available_quantity,
+                    "available_quantity": self._get_display_available_quantity(variation),
                     "reserved_quantity": variation.reserved_quantity
                 }
             else:
