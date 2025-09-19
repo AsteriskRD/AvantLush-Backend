@@ -805,7 +805,15 @@ class Address(models.Model):
         super().save(*args, **kwargs)
 
 class ShippingMethod(models.Model):
+    SHIPPING_TYPE_CHOICES = [
+        ('FLAT_RATE', 'Flat Rate'),
+        ('FREE', 'Free'),
+        ('WEIGHT_BASED', 'Weight Based'),
+        ('DISTANCE_BASED', 'Distance Based'),
+    ]
+    
     name = models.CharField(max_length=100)
+    shipping_type = models.CharField(max_length=20, choices=SHIPPING_TYPE_CHOICES, default='FLAT_RATE')
     price = models.DecimalField(max_digits=10, decimal_places=2)
     estimated_days = models.PositiveIntegerField()
     is_active = models.BooleanField(default=True)

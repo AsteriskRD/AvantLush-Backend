@@ -3,6 +3,7 @@ from django.contrib.auth import get_user_model, authenticate
 from django.contrib.auth.password_validation import validate_password
 from django.core import exceptions
 from django.utils.text import slugify
+from django.utils import timezone
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
 from allauth.socialaccount.providers.apple.views import AppleOAuth2Adapter
@@ -769,7 +770,12 @@ class CartItemSerializer(serializers.ModelSerializer):
         ).first()
         
         if variation:
-            return variation.available_quantity
+            # Special logic for last item: if stock_quantity = 1 and reserved_quantity > 0,
+            # still show available_quantity = 1 until payment is completed
+            if variation.stock_quantity == 1 and variation.reserved_quantity > 0:
+                return 1  # Always show 1 for the last item until payment
+            else:
+                return variation.available_quantity
         else:
             # Fallback to product stock if no variation found
             return obj.product.stock_quantity
@@ -1373,10 +1379,11 @@ class SavedCardSerializer(serializers.ModelSerializer):
 
 class ShippingMethodSerializer(serializers.ModelSerializer):
     delivery_date = serializers.SerializerMethodField()
+    shipping_type_display = serializers.CharField(source='get_shipping_type_display', read_only=True)
 
     class Meta:
         model = ShippingMethod
-        fields = ['id', 'name', 'price', 'estimated_days', 'description', 'delivery_date']
+        fields = ['id', 'name', 'shipping_type', 'shipping_type_display', 'price', 'estimated_days', 'description', 'delivery_date', 'is_active']
 
     def get_delivery_date(self, obj):
         """Returns estimated delivery date as shown in UI"""

@@ -2445,8 +2445,9 @@ class CartViewSet(viewsets.ModelViewSet):
                 ).first()
                 
                 if variation:
-                    # Release reserved stock
-                    variation.reserved_quantity -= cart_item.quantity
+                    # Release reserved stock - ensure it doesn't go below 0
+                    actual_reserved_to_release = min(cart_item.quantity, variation.reserved_quantity)
+                    variation.reserved_quantity -= actual_reserved_to_release
                     variation.save()
                     
                     # Check if product should be reactivated
@@ -2478,8 +2479,9 @@ class CartViewSet(viewsets.ModelViewSet):
                 ).first()
                 
                 if variation:
-                    # Release reserved stock
-                    variation.reserved_quantity -= cart_item.quantity
+                    # Release reserved stock - ensure it doesn't go below 0
+                    actual_reserved_to_release = min(cart_item.quantity, variation.reserved_quantity)
+                    variation.reserved_quantity -= actual_reserved_to_release
                     variation.save()
                     
                     # Check if product should be reactivated
@@ -4204,10 +4206,31 @@ def create_clover_hosted_checkout(request):
             }, status=500)
 '''
 
-class ShippingMethodViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = ShippingMethod.objects.filter(is_active=True)
+class ShippingMethodViewSet(viewsets.ModelViewSet):
+    queryset = ShippingMethod.objects.all()
     serializer_class = ShippingMethodSerializer
-    permission_classes = [IsAuthenticated]
+    
+    def get_permissions(self):
+        """
+        Instantiates and returns the list of permissions that this view requires.
+        """
+        if self.action in ['list', 'retrieve']:
+            permission_classes = [IsAuthenticated]
+        else:
+            # Create, update, delete require admin permissions
+            permission_classes = [IsAuthenticated, IsAdminUser]
+        return [permission() for permission in permission_classes]
+    
+    def get_queryset(self):
+        """
+        Return shipping methods based on user permissions
+        """
+        if self.request.user.is_staff:
+            # Admin users can see all shipping methods (active and inactive)
+            return ShippingMethod.objects.all()
+        else:
+            # Regular users can only see active shipping methods
+            return ShippingMethod.objects.filter(is_active=True)
 
 
 class SupportTicketViewSet(viewsets.ModelViewSet):
