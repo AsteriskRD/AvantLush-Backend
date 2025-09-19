@@ -4,6 +4,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.core import exceptions
 from django.utils.text import slugify
 from django.utils import timezone
+from django.db import models
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
 from allauth.socialaccount.providers.apple.views import AppleOAuth2Adapter
@@ -777,8 +778,21 @@ class CartItemSerializer(serializers.ModelSerializer):
             else:
                 return variation.available_quantity
         else:
-            # Fallback to product stock if no variation found
-            return obj.product.stock_quantity
+            # For main products without variations, apply the same logic
+            # Calculate available quantity (total stock - reserved stock)
+            total_reserved = CartItem.objects.filter(
+                product=obj.product,
+                size__isnull=True,
+                color__isnull=True
+            ).aggregate(total=models.Sum('quantity'))['total'] or 0
+            
+            available_quantity = max(0, obj.product.stock_quantity - total_reserved)
+            
+            # Apply last item logic for main products too
+            if available_quantity == 0 and total_reserved > 0:
+                return 1  # Always show 1 for the last item until payment
+            else:
+                return available_quantity
     
 class CartSerializer(serializers.ModelSerializer):
     items = CartItemSerializer(many=True, read_only=True)
