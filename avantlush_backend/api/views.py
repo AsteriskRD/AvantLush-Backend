@@ -818,11 +818,17 @@ def clover_hosted_webhook(request):
                 order.payment_status = 'FAILED'
                 order.save()
                 
+                # Release reserved stock for failed payment
+                _release_reserved_stock_for_order(order)
+                
                 logger.info(f"Payment declined for order {order.order_number}")
                 
             elif webhook_status == 'CANCELLED':
                 payment.status = 'CANCELLED'
                 # Don't change order status - user might try again with different payment method
+                
+                # Release reserved stock for cancelled payment
+                _release_reserved_stock_for_order(order)
                 
                 logger.info(f"Payment cancelled for order {order.order_number}")
             
@@ -952,9 +958,37 @@ def create_clover_hosted_checkout(request):
                     price=cart_item.product.price
                 )
                 subtotal += cart_item.product.price * cart_item.quantity
-                # Update stock
+                
+                # Update stock - handle both product and variation stock
                 cart_item.product.stock_quantity -= cart_item.quantity
                 cart_item.product.save()
+                
+                # Also update variation stock if it exists
+                if cart_item.size and cart_item.color:
+                    from .models import ProductVariation
+                    variation = ProductVariation.objects.filter(
+                        product=cart_item.product,
+                        sizes=cart_item.size,
+                        colors=cart_item.color
+                    ).first()
+                    
+                    if variation:
+                        # For last item: now reduce the actual stock_quantity
+                        if variation.available_quantity == 1:
+                            # This was a last item - now reduce actual stock
+                            variation.stock_quantity -= cart_item.quantity
+                            variation.reserved_quantity -= cart_item.quantity  # Release the reservation
+                            variation.save()
+                            
+                            # Now the product should become draft since stock is actually 0
+                            if variation.available_quantity == 0:
+                                cart_item.product.status = 'draft'
+                                cart_item.product.save()
+                        else:
+                            # Normal behavior for quantities > 1
+                            variation.stock_quantity -= cart_item.quantity
+                            variation.reserved_quantity -= cart_item.quantity  # Release the reservation
+                            variation.save()
             
             # Update order totals
             order.subtotal = subtotal
@@ -2301,13 +2335,22 @@ class CartViewSet(viewsets.ModelViewSet):
             
             # Reserve stock if variation exists
             if variation:
-                variation.reserved_quantity += quantity
-                variation.save()
-                
-                # Check if product should be auto-drafted
-                if variation.available_quantity == 0:
-                    product.status = 'draft'
-                    product.save()
+                # Special logic for last item (quantity = 1)
+                if variation.available_quantity == 1:
+                    # For last item: don't reduce available_quantity, just reserve it
+                    # This allows multiple users to add the same "last item" to their carts
+                    variation.reserved_quantity += quantity
+                    variation.save()
+                    # Don't change product status - keep it active until payment is confirmed
+                else:
+                    # Normal behavior for quantities > 1
+                    variation.reserved_quantity += quantity
+                    variation.save()
+                    
+                    # Check if product should be auto-drafted (only for quantities > 1)
+                    if variation.available_quantity == 0:
+                        product.status = 'draft'
+                        product.save()
             
             serializer = CartItemSerializer(cart_item)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -3656,6 +3699,33 @@ class CheckoutViewSet(viewsets.ViewSet):
                     
                     cart_item.product.stock_quantity -= cart_item.quantity
                     cart_item.product.save()
+                    
+                    # Also update variation stock if it exists
+                    if cart_item.size and cart_item.color:
+                        from .models import ProductVariation
+                        variation = ProductVariation.objects.filter(
+                            product=cart_item.product,
+                            sizes=cart_item.size,
+                            colors=cart_item.color
+                        ).first()
+                        
+                        if variation:
+                            # For last item: now reduce the actual stock_quantity
+                            if variation.available_quantity == 1:
+                                # This was a last item - now reduce actual stock
+                                variation.stock_quantity -= cart_item.quantity
+                                variation.reserved_quantity -= cart_item.quantity  # Release the reservation
+                                variation.save()
+                                
+                                # Now the product should become draft since stock is actually 0
+                                if variation.available_quantity == 0:
+                                    cart_item.product.status = 'draft'
+                                    cart_item.product.save()
+                            else:
+                                # Normal behavior for quantities > 1
+                                variation.stock_quantity -= cart_item.quantity
+                                variation.reserved_quantity -= cart_item.quantity  # Release the reservation
+                                variation.save()
                     
                     subtotal += cart_item.product.price * cart_item.quantity
 
@@ -7756,3 +7826,36 @@ class ProductVariationViewSet(viewsets.ModelViewSet):
         return Response({
             'message': f'Size variant "{size_name}" removed successfully'
         })
+
+
+def _release_reserved_stock_for_order(order):
+    """
+    Helper function to release reserved stock when payment fails or is cancelled
+    """
+    try:
+        from .models import ProductVariation
+        
+        # Get all order items
+        order_items = order.items.all()
+        
+        for order_item in order_items:
+            # Find the corresponding variation
+            if order_item.size and order_item.color:
+                variation = ProductVariation.objects.filter(
+                    product=order_item.product,
+                    sizes=order_item.size,
+                    colors=order_item.color
+                ).first()
+                
+                if variation:
+                    # Release the reserved quantity
+                    variation.reserved_quantity = max(0, variation.reserved_quantity - order_item.quantity)
+                    variation.save()
+                    
+                    # If this was a last item, make sure product status is correct
+                    if variation.available_quantity > 0 and order_item.product.status == 'draft':
+                        order_item.product.status = 'active'
+                        order_item.product.save()
+                        
+    except Exception as e:
+        logger.error(f"Error releasing reserved stock for order {order.id}: {str(e)}")
