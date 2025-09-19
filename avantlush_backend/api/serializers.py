@@ -770,9 +770,9 @@ class CartItemSerializer(serializers.ModelSerializer):
         ).first()
         
         if variation:
-            # Special logic for last item: if stock_quantity = 1 and reserved_quantity > 0,
+            # Special logic for last item: if available_quantity would be 0 due to reservations,
             # still show available_quantity = 1 until payment is completed
-            if variation.stock_quantity == 1 and variation.reserved_quantity > 0:
+            if variation.available_quantity == 0 and variation.reserved_quantity > 0:
                 return 1  # Always show 1 for the last item until payment
             else:
                 return variation.available_quantity
@@ -1718,9 +1718,9 @@ class ProductSerializer(serializers.ModelSerializer):
     
     def _get_display_available_quantity(self, variation):
         """Helper method to get the correct available quantity for display"""
-        # Special logic for last item: if stock_quantity = 1 and reserved_quantity > 0,
+        # Special logic for last item: if available_quantity would be 0 due to reservations,
         # still show available_quantity = 1 until payment is completed
-        if variation.stock_quantity == 1 and variation.reserved_quantity > 0:
+        if variation.available_quantity == 0 and variation.reserved_quantity > 0:
             return 1  # Always show 1 for the last item until payment
         else:
             return variation.available_quantity
