@@ -1408,18 +1408,32 @@ class WishlistItemSerializer(serializers.ModelSerializer):
         # Resolve size and color objects
         size = None
         if size_name:
-            size, _ = Size.objects.get_or_create(name=size_name)
+            from .models import Size
+            size, created = Size.objects.get_or_create(name=size_name)
+            print(f"🔍 DEBUG: Size object: {size} (created: {created})")
         
         color = None
         if color_name:
-            color, _ = Color.objects.get_or_create(name=color_name)
+            from .models import Color
+            color, created = Color.objects.get_or_create(name=color_name)
+            print(f"🔍 DEBUG: Color object: {color} (created: {created})")
+        
+        print(f"🔍 DEBUG: About to create WishlistItem with size={size}, color={color}")
+        print(f"🔍 DEBUG: validated_data keys: {list(validated_data.keys())}")
         
         # Create the wishlist item with resolved size and color objects
-        return WishlistItem.objects.create(
-            size=size,
-            color=color,
-            **validated_data
-        )
+        try:
+            wishlist_item = WishlistItem.objects.create(
+                size=size,
+                color=color,
+                **validated_data
+            )
+            print(f"🔍 DEBUG: Successfully created WishlistItem: {wishlist_item}")
+            return wishlist_item
+        except Exception as e:
+            print(f"🔍 DEBUG: Error creating WishlistItem: {str(e)}")
+            print(f"🔍 DEBUG: size type: {type(size)}, color type: {type(color)}")
+            raise
     
     def get_size_display(self, obj):
         return obj.size.name if obj.size else None
