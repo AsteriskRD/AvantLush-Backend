@@ -3332,34 +3332,19 @@ class WishlistItemViewSet(viewsets.ModelViewSet):
         # Get or create the user's wishlist
         wishlist, created = Wishlist.objects.get_or_create(user=request.user)
         
-        # Get the product ID from the request
-        product_id = request.data.get('product')
+        # Prepare data for serializer (let the serializer handle the product ID parsing)
+        mutable_data = request.data.copy()
+        mutable_data['wishlist'] = wishlist.id
         
-        # Handle unique variation ID (e.g., "41_MED")
-        if isinstance(product_id, str) and '_' in product_id:
-            try:
-                # Parse unique variation ID
-                product_id_from_variation, size_abbrev = product_id.split('_', 1)
-                product = Product.objects.get(id=int(product_id_from_variation))
-            except (ValueError, Product.DoesNotExist):
-                return Response(
-                    {'error': 'Product does not exist'},
-                    status=status.HTTP_404_NOT_FOUND
-                )
-        else:
-            # Validate product exists (regular product ID)
-            try:
-                product = Product.objects.get(id=product_id)
-            except Product.DoesNotExist:
-                return Response(
-                    {'error': 'Product does not exist'},
-                    status=status.HTTP_404_NOT_FOUND
-                )
+        # Create new wishlist item
+        serializer = self.get_serializer(data=mutable_data)
+        serializer.is_valid(raise_exception=True)
         
         # Check if the product is already in the wishlist
+        product = serializer.validated_data['product']
         existing_item = WishlistItem.objects.filter(
             wishlist=wishlist, 
-            product_id=product.id
+            product=product
         ).first()
         
         # If the item already exists, return an error
@@ -3369,15 +3354,6 @@ class WishlistItemViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Prepare data for serializer
-        mutable_data = {
-            'wishlist': wishlist.id,
-            'product': product_id
-        }
-        
-        # Create new wishlist item
-        serializer = self.get_serializer(data=mutable_data)
-        serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
         
         headers = self.get_success_headers(serializer.data)
