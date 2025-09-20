@@ -2250,9 +2250,22 @@ class CartViewSet(viewsets.ModelViewSet):
                                 'data': {'error': f'Variation not found for {unique_variation_id}'}
                             }, status=status.HTTP_404_NOT_FOUND)
                         
-                        size = variation.sizes.first() if variation.sizes.exists() else None
-                        color = variation.colors.first() if variation.colors.exists() else None
+                        # Use the size and color from the request data, not from the variation
+                        # This ensures we use the exact variant the frontend is requesting
+                        size_name = request.data.get('size') or request.data.get('size_name')
+                        color_name = request.data.get('color') or request.data.get('color_name')
+                        
+                        # Resolve size and color from request data
+                        size = None
+                        if size_name:
+                            size, _ = Size.objects.get_or_create(name=size_name)
+                        
+                        color = None
+                        if color_name:
+                            color, _ = Color.objects.get_or_create(name=color_name)
+                        
                         print(f"🔍 DEBUG: Found variation via unique ID: {variation.id}, product: {product.name} (ID: {product.id})")
+                        print(f"🔍 DEBUG: Using size/color from request: size={size_name} (ID: {size.id if size else None}), color={color_name} (ID: {color.id if color else None})")
                     else:
                         return Response({
                             'is_success': False,
