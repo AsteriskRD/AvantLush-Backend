@@ -200,22 +200,26 @@ def sync_profile_to_customer(sender, instance, created, **kwargs):
 # --- Order Notifications for Admins ---
 @receiver(post_save, sender='api.Order')
 def create_order_notification(sender, instance, created, **kwargs):
-    """Create notification when new order is placed"""
-    if created:
-        from .models import OrderNotification
-        
-        # Create new order notification
-        OrderNotification.objects.create(
-            notification_type='NEW_ORDER',
-            title=f'New Order #{instance.order_number}',
-            message=f'New order placed by {instance.user.email if instance.user else "Guest"} for ${instance.total}',
-            order=instance
-        )
-        
-        print(f"🔔 Order notification created for order #{instance.order_number}")
-        
-        # Send email notification to all admin users
-        send_admin_order_email(instance, 'NEW_ORDER')
+    """Create notification when new order is placed or payment is completed"""
+    
+    # Only send email notification when payment is completed, not when order is first created
+    if not created and 'payment_status' in (kwargs.get('update_fields') or []):
+        # Check if payment status changed to 'PAID'
+        if instance.payment_status == 'PAID':
+            from .models import OrderNotification
+            
+            # Create payment completed notification
+            OrderNotification.objects.create(
+                notification_type='PAYMENT_COMPLETED',
+                title=f'Payment Completed - Order #{instance.order_number}',
+                message=f'Payment completed for order placed by {instance.user.email if instance.user else "Guest"} for ${instance.total}',
+                order=instance
+            )
+            
+            print(f"🔔 Payment completed notification created for order #{instance.order_number}")
+            
+            # Send email notification to all admin users
+            send_admin_order_email(instance, 'PAYMENT_COMPLETED')
     
     # Also notify on status changes (but not on creation)
     elif not created and 'status' in (kwargs.get('update_fields') or []):
@@ -274,7 +278,9 @@ def send_admin_order_email(order, notification_type):
     plain_message = strip_tags(html_message)
     
     # Prepare email content based on notification type
-    if notification_type == 'NEW_ORDER':
+    if notification_type == 'PAYMENT_COMPLETED':
+        subject = f'💰 Payment Completed - Order #{order.order_number} - Avantlush Dashboard'
+    elif notification_type == 'NEW_ORDER':
         subject = f'🆕 New Order #{order.order_number} - Avantlush Dashboard'
     else:  # ORDER_STATUS_CHANGED
         subject = f'🔄 Order #{order.order_number} Status Updated - Avantlush Dashboard'
