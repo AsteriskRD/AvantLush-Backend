@@ -4312,6 +4312,22 @@ class ShippingMethodViewSet(viewsets.ModelViewSet):
         else:
             # Regular users can only see active shipping methods
             return ShippingMethod.objects.filter(is_active=True)
+    
+    def destroy(self, request, *args, **kwargs):
+        """Custom destroy method to return proper JSON response"""
+        try:
+            instance = self.get_object()
+            shipping_method_name = instance.name
+            instance.delete()
+            return Response({
+                'is_success': True,
+                'message': f'Shipping method "{shipping_method_name}" deleted successfully'
+            }, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({
+                'is_success': False,
+                'message': f'Error deleting shipping method: {str(e)}'
+            }, status=status.HTTP_400_BAD_REQUEST)
 
 
 class SupportTicketViewSet(viewsets.ModelViewSet):
