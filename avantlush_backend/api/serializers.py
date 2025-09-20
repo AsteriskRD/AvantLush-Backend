@@ -1345,7 +1345,7 @@ class WishlistItemSerializer(serializers.ModelSerializer):
         read_only_fields = ['wishlist']
     
     def create(self, validated_data):
-        # Extract size and color from validated_data
+        # Extract size and color from validated_data (these are write-only fields)
         size_name = validated_data.pop('size', None)
         color_name = validated_data.pop('color', None)
         
@@ -1414,7 +1414,7 @@ class WishlistItemSerializer(serializers.ModelSerializer):
         if color_name:
             color, _ = Color.objects.get_or_create(name=color_name)
         
-        # Create the wishlist item with resolved size and color
+        # Create the wishlist item with resolved size and color objects
         return WishlistItem.objects.create(
             size=size,
             color=color,
