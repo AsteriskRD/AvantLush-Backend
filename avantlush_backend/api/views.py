@@ -2302,7 +2302,7 @@ class CartViewSet(viewsets.ModelViewSet):
                 
                 # Support both old format (size_id, color_id) and new format (size, color)
                 traditional_size_id = request.data.get('size_id')
-                color_id = request.data.get('color_id')
+        color_id = request.data.get('color_id')
                 size_name = request.data.get('size') or request.data.get('size_name')
                 color_name = request.data.get('color') or request.data.get('color_name')
                 
@@ -2398,19 +2398,21 @@ class CartViewSet(viewsets.ModelViewSet):
             
             # Reserve stock if variation exists
             if variation:
-                # Special logic for last item (quantity = 1)
-                if variation.available_quantity == 1:
-                    # For last item: don't reduce available_quantity, just reserve it
-                    # This allows multiple users to add the same "last item" to their carts
-                    variation.reserved_quantity += quantity
-                    variation.save()
-                    # Don't change product status - keep it active until payment is confirmed
+                # Check if this is the last item BEFORE reserving stock
+                is_last_item = variation.available_quantity == 1
+                
+                # Always reserve the stock
+                variation.reserved_quantity += quantity
+                variation.save()
+                
+                # Special logic for last item: don't auto-draft the product
+                if is_last_item:
+                    # For last item: keep product active until payment is confirmed
+                    # The available_quantity will show 0, but our serializer will show 1
+                    pass
                 else:
                     # Normal behavior for quantities > 1
-                    variation.reserved_quantity += quantity
-                    variation.save()
-                    
-                    # Check if product should be auto-drafted (only for quantities > 1)
+                    # Check if product should be auto-drafted
                     if variation.available_quantity == 0:
                         product.status = 'draft'
                         product.save()
@@ -3329,7 +3331,19 @@ class WishlistItemViewSet(viewsets.ModelViewSet):
         # Get the product ID from the request
         product_id = request.data.get('product')
         
-        # Validate product exists
+        # Handle unique variation ID (e.g., "41_MED")
+        if isinstance(product_id, str) and '_' in product_id:
+            try:
+                # Parse unique variation ID
+                product_id_from_variation, size_abbrev = product_id.split('_', 1)
+                product = Product.objects.get(id=int(product_id_from_variation))
+            except (ValueError, Product.DoesNotExist):
+                return Response(
+                    {'error': 'Product does not exist'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        else:
+            # Validate product exists (regular product ID)
         try:
             product = Product.objects.get(id=product_id)
         except Product.DoesNotExist:
@@ -3341,7 +3355,7 @@ class WishlistItemViewSet(viewsets.ModelViewSet):
         # Check if the product is already in the wishlist
         existing_item = WishlistItem.objects.filter(
             wishlist=wishlist, 
-            product_id=product_id
+            product_id=product.id
         ).first()
         
         # If the item already exists, return an error
@@ -4278,7 +4292,7 @@ class ShippingMethodViewSet(viewsets.ModelViewSet):
         Instantiates and returns the list of permissions that this view requires.
         """
         if self.action in ['list', 'retrieve']:
-            permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated]
         else:
             # Create, update, delete require admin permissions
             permission_classes = [IsAuthenticated, IsAdminUser]
@@ -6344,22 +6358,22 @@ class ProductViewSet(viewsets.ModelViewSet):
             )
             
             image_url = result.get('secure_url') or result.get('url')
-            
-            if image_type == 'main':
-                # Handle main image
-                if product.main_image:
+        
+        if image_type == 'main':
+            # Handle main image
+            if product.main_image:
                     try:
-                        product.main_image.delete()
+                product.main_image.delete()
                     except Exception:
                         pass  # Continue even if deletion fails
                 product.main_image = image_url
-            else:
-                # Handle additional images
-                current_images = product.images or []
+        else:
+            # Handle additional images
+            current_images = product.images or []
                 current_images.append(image_url)
-                product.images = current_images
-                
-            product.save()
+            product.images = current_images
+            
+        product.save()
             return Response({
                 'message': 'Image uploaded successfully',
                 'image_url': image_url,
