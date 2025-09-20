@@ -1356,6 +1356,10 @@ class WishlistItemSerializer(serializers.ModelSerializer):
         if hasattr(self.fields['product'], '_size_abbrev') and self.fields['product']._size_abbrev:
             # We have a unique variation ID, let's extract the variant information
             size_abbrev = self.fields['product']._size_abbrev
+            original_data = self.fields['product']._original_data
+            
+            print(f"🔍 DEBUG: Processing unique variation ID: {original_data}")
+            print(f"🔍 DEBUG: Extracted size abbreviation: {size_abbrev}")
             
             # Map size abbreviations to actual size names
             size_mapping = {
@@ -1366,11 +1370,14 @@ class WishlistItemSerializer(serializers.ModelSerializer):
                 'XXL': 'XXL',
                 'S': 'Small',
                 'M': 'Medium',
-                'L': 'Large'
+                'L': 'Large',
+                'SMA': 'Small',  # Add SMA mapping for Small
+                'SM': 'Small'    # Add SM mapping for Small
             }
             
             # Get the actual size name
             size_name = size_mapping.get(size_abbrev, size_abbrev)
+            print(f"🔍 DEBUG: Mapped size name: {size_name}")
             
             # Find the variation that has this size
             from .models import ProductVariation
@@ -1385,9 +1392,18 @@ class WishlistItemSerializer(serializers.ModelSerializer):
                 if color:
                     color_name = color.name
                 
-                print(f"🔍 DEBUG: Found variation for {self.fields['product']._original_data}: size={size_name}, color={color_name}")
+                print(f"🔍 DEBUG: Found variation for {original_data}: size={size_name}, color={color_name}")
             else:
-                print(f"🔍 DEBUG: No variation found for {self.fields['product']._original_data} with size {size_name}")
+                print(f"🔍 DEBUG: No variation found for {original_data} with size {size_name}")
+                # Let's also check what variations exist for this product
+                all_variations = ProductVariation.objects.filter(product=product)
+                print(f"🔍 DEBUG: Available variations for product {product.id}:")
+                for var in all_variations:
+                    sizes = [s.name for s in var.sizes.all()]
+                    colors = [c.name for c in var.colors.all()]
+                    print(f"🔍 DEBUG:   - Sizes: {sizes}, Colors: {colors}")
+        else:
+            print(f"🔍 DEBUG: No variant info found in FlexibleProductField")
         
         # Resolve size and color objects
         size = None
