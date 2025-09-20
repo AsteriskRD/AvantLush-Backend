@@ -925,6 +925,25 @@ def create_clover_hosted_checkout(request):
             
             # Create the order for the authenticated user
             shipping_address = data.get('shipping_address', {})
+            
+            # Handle shipping method
+            shipping_method = None
+            shipping_cost = Decimal('0.00')
+            if data.get('shipping_method_id'):
+                try:
+                    shipping_method = ShippingMethod.objects.get(id=data['shipping_method_id'])
+                    shipping_cost = shipping_method.price
+                except ShippingMethod.DoesNotExist:
+                    return Response({
+                        'is_success': False,
+                        'data': {
+                            'status': 'error',
+                            'message': f'Shipping method with ID {data["shipping_method_id"]} not found'
+                        }
+                    }, status=400)
+            elif data.get('shipping_cost'):
+                shipping_cost = Decimal(data.get('shipping_cost', '0.00'))
+            
             order = Order.objects.create(
                 user=request.user,  # 🔧 FIX: Always use authenticated user
                 shipping_address=shipping_address.get('street_address', '123 Test St'),
@@ -932,7 +951,8 @@ def create_clover_hosted_checkout(request):
                 shipping_state=shipping_address.get('state', 'CA'),
                 shipping_country=shipping_address.get('country', 'US'),
                 shipping_zip=shipping_address.get('zip_code', '12345'),
-                shipping_cost=Decimal(data.get('shipping_cost', '4.99')),
+                shipping_method=shipping_method,
+                shipping_cost=shipping_cost,
                 subtotal=Decimal('0.00'),
                 total=Decimal(data['total_amount']),
                 status='PENDING',
@@ -3752,6 +3772,15 @@ class CheckoutViewSet(viewsets.ViewSet):
                 discount_code = request.data.get('discount_code')
                 totals = self.calculate_order_totals(cart_items, shipping_cost, discount_code)
 
+                # Handle shipping method
+                shipping_method = None
+                if request.data.get('shipping_method_id'):
+                    try:
+                        shipping_method = ShippingMethod.objects.get(id=request.data['shipping_method_id'])
+                        shipping_cost = shipping_method.price
+                    except ShippingMethod.DoesNotExist:
+                        pass  # Use default shipping cost
+
                 # Create order with calculated totals
                 order = Order.objects.create(
                     user=request.user,
@@ -3760,6 +3789,7 @@ class CheckoutViewSet(viewsets.ViewSet):
                     shipping_state=address_data['state'],
                     shipping_country=address_data['country'],
                     shipping_zip=address_data['zip_code'],
+                    shipping_method=shipping_method,
                     shipping_cost=shipping_cost,
                     subtotal=totals['subtotal'],
                     discount=totals['discount'],
