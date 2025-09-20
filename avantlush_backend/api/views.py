@@ -3336,21 +3336,63 @@ class WishlistItemViewSet(viewsets.ModelViewSet):
         mutable_data = request.data.copy()
         mutable_data['wishlist'] = wishlist.id
         
+        # Extract size and color from unique variation ID if present
+        product_id = request.data.get('product')
+        if isinstance(product_id, str) and '_' in product_id:
+            # Parse unique variation ID to get size abbreviation
+            product_id_from_variation, size_abbrev = product_id.split('_', 1)
+            
+            # Map size abbreviations to full names
+            size_mapping = {
+                'STA': 'Standard',
+                'MED': 'Medium', 
+                'LAR': 'Large',
+                'XL': 'XL',
+                'XXL': 'XXL',
+                'S': 'Small',
+                'M': 'Medium',
+                'L': 'Large'
+            }
+            
+            # Set the size name if we have a mapping
+            if size_abbrev in size_mapping:
+                mutable_data['size'] = size_mapping[size_abbrev]
+        
         # Create new wishlist item
         serializer = self.get_serializer(data=mutable_data)
         serializer.is_valid(raise_exception=True)
         
-        # Check if the product is already in the wishlist
+        # Check if the exact variant is already in the wishlist
         product = serializer.validated_data['product']
+        size_name = mutable_data.get('size')
+        color_name = mutable_data.get('color')
+        
+        # Resolve size and color objects for checking
+        size = None
+        if size_name:
+            size, _ = Size.objects.get_or_create(name=size_name)
+        
+        color = None
+        if color_name:
+            color, _ = Color.objects.get_or_create(name=color_name)
+        
         existing_item = WishlistItem.objects.filter(
             wishlist=wishlist, 
-            product=product
+            product=product,
+            size=size,
+            color=color
         ).first()
         
-        # If the item already exists, return an error
+        # If the exact variant already exists, return an error
         if existing_item:
+            variant_info = ""
+            if size:
+                variant_info += f" (Size: {size.name})"
+            if color:
+                variant_info += f" (Color: {color.name})"
+            
             return Response(
-                {'error': 'Product already exists in your wishlist'},
+                {'error': f'This variant of {product.name}{variant_info} already exists in your wishlist'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         

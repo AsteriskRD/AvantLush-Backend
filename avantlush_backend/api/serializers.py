@@ -1309,12 +1309,15 @@ class FlexibleProductField(serializers.Field):
             try:
                 product_id_from_variation, size_abbrev = data.split('_', 1)
                 product = Product.objects.get(id=int(product_id_from_variation))
+                # Store the size abbreviation for later use
+                self._size_abbrev = size_abbrev
                 return product
             except (ValueError, Product.DoesNotExist):
                 raise serializers.ValidationError(f"Product with ID {data} does not exist")
         else:
             # Handle regular integer product ID
             try:
+                self._size_abbrev = None
                 return Product.objects.get(id=data)
             except Product.DoesNotExist:
                 raise serializers.ValidationError(f"Product with ID {data} does not exist")
@@ -1325,11 +1328,34 @@ class FlexibleProductField(serializers.Field):
 class WishlistItemSerializer(serializers.ModelSerializer):
     product_details = serializers.SerializerMethodField()
     product = FlexibleProductField()  # Use our custom field
+    size = serializers.CharField(write_only=True, required=False, allow_null=True)
+    color = serializers.CharField(write_only=True, required=False, allow_null=True)
     
     class Meta:
         model = WishlistItem
-        fields = ['id', 'wishlist', 'product', 'added_at', 'product_details']
+        fields = ['id', 'wishlist', 'product', 'size', 'color', 'added_at', 'product_details']
         read_only_fields = ['wishlist']
+    
+    def create(self, validated_data):
+        # Extract size and color from validated_data
+        size_name = validated_data.pop('size', None)
+        color_name = validated_data.pop('color', None)
+        
+        # Resolve size and color objects
+        size = None
+        if size_name:
+            size, _ = Size.objects.get_or_create(name=size_name)
+        
+        color = None
+        if color_name:
+            color, _ = Color.objects.get_or_create(name=color_name)
+        
+        # Create the wishlist item with resolved size and color
+        return WishlistItem.objects.create(
+            size=size,
+            color=color,
+            **validated_data
+        )
     
     def get_product_details(self, obj):
         product = obj.product

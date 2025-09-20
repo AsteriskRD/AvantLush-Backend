@@ -633,7 +633,18 @@ class Wishlist(models.Model):
 class WishlistItem(models.Model):
     wishlist = models.ForeignKey(Wishlist, on_delete=models.CASCADE, related_name='items')
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
+    # Add variant information to distinguish between different variations of the same product
+    size = models.ForeignKey(Size, on_delete=models.SET_NULL, null=True, blank=True)
+    color = models.ForeignKey(Color, on_delete=models.SET_NULL, null=True, blank=True)
     added_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        unique_together = ['wishlist', 'product', 'size', 'color']
+    
+    def __str__(self):
+        size_info = f", Size: {self.size.name}" if self.size else ""
+        color_info = f", Color: {self.color.name}" if self.color else ""
+        return f"{self.product.name}{size_info}{color_info} in {self.wishlist.user.username}'s wishlist"
 
 class WishlistNotification(models.Model):
     """Model to store wishlist item stock notifications"""
