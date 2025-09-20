@@ -703,6 +703,7 @@ class CartItemSerializer(serializers.ModelSerializer):
         allow_null=True
     )
     quantity_left = serializers.SerializerMethodField(read_only=True)  # New field
+    variation_id = serializers.SerializerMethodField(read_only=True)  # Add unique variation ID
 
     class Meta:
         model = CartItem
@@ -710,7 +711,7 @@ class CartItemSerializer(serializers.ModelSerializer):
             'id', 'product', 'quantity', 'product_name', 'product_price',
             'stock_status', 'product_image', 'size', 'color', 
             'size_id', 'color_id', 'size_name', 'color_name',
-            'quantity_left'  # Add new field here
+            'quantity_left', 'variation_id'  # Add new field here
         ]
 
     def to_representation(self, instance):
@@ -794,6 +795,15 @@ class CartItemSerializer(serializers.ModelSerializer):
             else:
                 return available_quantity
     
+    def get_variation_id(self, obj):
+        """Generate unique variation ID for cart items"""
+        if obj.size:
+            # Generate unique variation ID: PRODUCT_ID_SIZE_ABBREV
+            size_abbrev = obj.size.name.upper()[:3]  # First 3 chars of size name
+            return f"{obj.product.id}_{size_abbrev}"
+        return None
+
+
 class CartSerializer(serializers.ModelSerializer):
     items = CartItemSerializer(many=True, read_only=True)
     user = serializers.PrimaryKeyRelatedField(read_only=True)

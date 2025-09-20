@@ -2379,6 +2379,11 @@ class CartViewSet(viewsets.ModelViewSet):
             print(f"   - cart_item_id: {cart_item.id}")
             
             if not created:
+                print(f"🔍 DEBUG: Item already exists - this is the conflict!")
+                print(f"   - Existing item: product={cart_item.product.id}, size={cart_item.size.id if cart_item.size else None}, color={cart_item.color.id if cart_item.color else None}")
+                print(f"   - Requested item: product={product.id}, size={size.id if size else None}, color={color.id if color else None}")
+            
+            if not created:
                 # If the item already exists, check total quantity
                 new_total_quantity = cart_item.quantity + quantity
                 if variation and new_total_quantity > variation.available_quantity:
