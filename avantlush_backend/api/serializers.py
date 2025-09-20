@@ -1077,14 +1077,25 @@ class OrderCreateEnhancedSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError("Each item must have a valid quantity")
                 
             # Check if product exists and has enough stock
-            try:
-                product = Product.objects.get(id=item['product_id'])
-                if product.stock_quantity < item['quantity']:
-                    raise serializers.ValidationError(
-                        f"Not enough stock for {product.name}. Available: {product.stock_quantity}"
-                    )
-            except Product.DoesNotExist:
-                raise serializers.ValidationError(f"Product with ID {item['product_id']} does not exist")
+            # Handle unique variation ID (e.g., "41_MED")
+            product_id = item['product_id']
+            if isinstance(product_id, str) and '_' in product_id:
+                try:
+                    # Parse unique variation ID
+                    product_id_from_variation, size_abbrev = product_id.split('_', 1)
+                    product = Product.objects.get(id=int(product_id_from_variation))
+                except (ValueError, Product.DoesNotExist):
+                    raise serializers.ValidationError(f"Product with ID {product_id} does not exist")
+            else:
+                try:
+                    product = Product.objects.get(id=product_id)
+                except Product.DoesNotExist:
+                    raise serializers.ValidationError(f"Product with ID {product_id} does not exist")
+            
+            if product.stock_quantity < item['quantity']:
+                raise serializers.ValidationError(
+                    f"Not enough stock for {product.name}. Available: {product.stock_quantity}"
+                )
         
         return items
     
@@ -1112,7 +1123,15 @@ class OrderCreateEnhancedSerializer(serializers.ModelSerializer):
         # Create order items and calculate totals
         subtotal = 0
         for item_data in items_data:
-            product = Product.objects.get(id=item_data['product_id'])
+            # Handle unique variation ID (e.g., "41_MED")
+            product_id = item_data['product_id']
+            if isinstance(product_id, str) and '_' in product_id:
+                # Parse unique variation ID
+                product_id_from_variation, size_abbrev = product_id.split('_', 1)
+                product = Product.objects.get(id=int(product_id_from_variation))
+            else:
+                product = Product.objects.get(id=product_id)
+            
             quantity = item_data['quantity']
             
             # Use provided price or product price
@@ -1164,7 +1183,15 @@ class OrderCreateSerializer(serializers.ModelSerializer):
         # Create order items
         total = 0
         for item_data in items_data:
-            product = Product.objects.get(id=item_data['product_id'])
+            # Handle unique variation ID (e.g., "41_MED")
+            product_id = item_data['product_id']
+            if isinstance(product_id, str) and '_' in product_id:
+                # Parse unique variation ID
+                product_id_from_variation, size_abbrev = product_id.split('_', 1)
+                product = Product.objects.get(id=int(product_id_from_variation))
+            else:
+                product = Product.objects.get(id=product_id)
+            
             quantity = item_data['quantity']
             unit_price = product.price
             
@@ -1262,6 +1289,23 @@ class WishlistItemSerializer(serializers.ModelSerializer):
         model = WishlistItem
         fields = ['id', 'wishlist', 'product', 'added_at', 'product_details']
         read_only_fields = ['wishlist']
+    
+    def validate_product(self, value):
+        """Handle unique variation IDs like '41_MED'"""
+        if isinstance(value, str) and '_' in value:
+            try:
+                # Parse unique variation ID
+                product_id_from_variation, size_abbrev = value.split('_', 1)
+                product = Product.objects.get(id=int(product_id_from_variation))
+                return product
+            except (ValueError, Product.DoesNotExist):
+                raise serializers.ValidationError(f"Product with ID {value} does not exist")
+        else:
+            # Handle regular integer product ID
+            try:
+                return Product.objects.get(id=value)
+            except Product.DoesNotExist:
+                raise serializers.ValidationError(f"Product with ID {value} does not exist")
     
     def get_product_details(self, obj):
         product = obj.product
