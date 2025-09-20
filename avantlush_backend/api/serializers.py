@@ -760,7 +760,7 @@ class CartItemSerializer(serializers.ModelSerializer):
         else:
             # Fallback to base price if no variation found
             return base_price
-    
+
     def get_quantity_left(self, obj):
         """Return the available quantity for this specific variant"""
         # Find the specific variation for this cart item
@@ -803,7 +803,7 @@ class CartItemSerializer(serializers.ModelSerializer):
             return f"{obj.product.id}_{size_abbrev}"
         return None
 
-
+    
 class CartSerializer(serializers.ModelSerializer):
     items = CartItemSerializer(many=True, read_only=True)
     user = serializers.PrimaryKeyRelatedField(read_only=True)
@@ -841,8 +841,19 @@ class OrderItemSerializer(serializers.ModelSerializer):
         return unit_price * quantity
     
     def get_variants(self, obj):
-        # Return empty dict or default value
-        return {}
+        # Return variant information if available
+        variants = {}
+        if obj.size:
+            variants['size'] = {
+                'id': obj.size.id,
+                'name': obj.size.name
+            }
+        if obj.color:
+            variants['color'] = {
+                'id': obj.color.id,
+                'name': obj.color.name
+            }
+        return variants
         
     def get_product_image(self, obj):
         # Get main image URL
@@ -951,6 +962,7 @@ class FlatOrderItemSerializer(serializers.ModelSerializer):
     estimated_delivery_date = serializers.SerializerMethodField()
     product_name = serializers.CharField(source='product.name')
     product_image = serializers.SerializerMethodField()
+    variants = serializers.SerializerMethodField()
     
     def get_customer_name(self, obj):
         if obj.order.user.first_name or obj.order.user.last_name:
@@ -994,6 +1006,21 @@ class FlatOrderItemSerializer(serializers.ModelSerializer):
             return obj.product.images[0]
         return None
     
+    def get_variants(self, obj):
+        # Return variant information if available
+        variants = {}
+        if obj.size:
+            variants['size'] = {
+                'id': obj.size.id,
+                'name': obj.size.name
+            }
+        if obj.color:
+            variants['color'] = {
+                'id': obj.color.id,
+                'name': obj.color.name
+            }
+        return variants
+    
     class Meta:
         model = OrderItem
         fields = [
@@ -1001,7 +1028,7 @@ class FlatOrderItemSerializer(serializers.ModelSerializer):
             'product', 'product_name', 'quantity', 'price', 'total', 'status', 
             'status_display', 'shipping_address', 'created_at', 'estimated_delivery_date',
             'updated_at', 'payment_type', 'order_type', 'product_image',
-            'order_date', 'order_time'
+            'order_date', 'order_time', 'variants'
         ]
 
 class ProductForOrderSerializer(serializers.ModelSerializer):
@@ -1788,7 +1815,7 @@ class ProductSerializer(serializers.ModelSerializer):
                 grouped_variations[size_name] = {
                     "size_id": unique_variation_id,  # Use unique variation ID instead of size ID
                     "colors": colors_info,  # Can be empty list
-                    "price": final_price,
+                "price": final_price,
                     "stock_quantity": variation.stock_quantity,
                     "available_quantity": self._get_display_available_quantity(variation),
                     "reserved_quantity": variation.reserved_quantity
@@ -2063,7 +2090,7 @@ class ProductManagementSerializer(serializers.ModelSerializer):
                 grouped_variations[size_name] = {
                     "size_id": unique_variation_id,  # Use unique variation ID instead of size ID
                     "colors": colors_info,  # Enhanced structure with stock info
-                    "price": final_price,
+                "price": final_price,
                     "stock_quantity": variation.stock_quantity,
                     "available_quantity": self._get_display_available_quantity(variation),
                     "reserved_quantity": variation.reserved_quantity

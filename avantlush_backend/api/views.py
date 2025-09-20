@@ -955,7 +955,9 @@ def create_clover_hosted_checkout(request):
                     order=order,
                     product=cart_item.product,
                     quantity=cart_item.quantity,
-                    price=cart_item.product.price
+                    price=cart_item.product.price,
+                    size=cart_item.size,
+                    color=cart_item.color
                 )
                 subtotal += cart_item.product.price * cart_item.quantity
                 
@@ -1217,7 +1219,9 @@ def create_clover_hosted_checkout_test(request):
                     order=order,
                     product=cart_item.product,
                     quantity=cart_item.quantity,
-                    price=cart_item.product.price
+                    price=cart_item.product.price,
+                    size=cart_item.size,
+                    color=cart_item.color
                 )
                 subtotal += cart_item.product.price * cart_item.quantity
                 
@@ -3773,7 +3777,9 @@ class CheckoutViewSet(viewsets.ViewSet):
                         order=order,
                         product=cart_item.product,
                         quantity=cart_item.quantity,
-                        price=cart_item.product.price
+                        price=cart_item.product.price,
+                        size=cart_item.size,
+                        color=cart_item.color
                     )
                     
                     cart_item.product.stock_quantity -= cart_item.quantity

@@ -592,6 +592,9 @@ class OrderItem(models.Model):
     quantity = models.PositiveIntegerField(default=1)
     price = models.DecimalField(max_digits=10, decimal_places=2)
     subtotal = models.DecimalField(max_digits=10, decimal_places=2)
+    # Add variant information to track which specific variant was ordered
+    size = models.ForeignKey(Size, on_delete=models.SET_NULL, null=True, blank=True)
+    color = models.ForeignKey(Color, on_delete=models.SET_NULL, null=True, blank=True)
     
     def save(self, *args, **kwargs):
         self.subtotal = self.quantity * self.price
@@ -603,7 +606,9 @@ class OrderItem(models.Model):
         self.order.save()
 
     def __str__(self):
-        return f"{self.quantity}x {self.product.name} in Order {self.order.order_number}"
+        size_info = f", Size: {self.size.name}" if self.size else ""
+        color_info = f", Color: {self.color.name}" if self.color else ""
+        return f"{self.quantity}x {self.product.name}{size_info}{color_info} in Order {self.order.order_number}"
 
 
 class OrderTracking(models.Model):
