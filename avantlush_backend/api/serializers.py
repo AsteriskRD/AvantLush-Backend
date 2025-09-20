@@ -878,6 +878,7 @@ class OrderSerializer(serializers.ModelSerializer):
     payment = serializers.SerializerMethodField()
     estimated_delivery_date = serializers.SerializerMethodField()
     products_display_string = serializers.SerializerMethodField()
+    shipping_method_details = serializers.SerializerMethodField()
     
     # Add this method to get the first payment (if any)
     def get_payment(self, obj):
@@ -917,7 +918,7 @@ class OrderSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'order_number', 'customer_email', 'customer_name',
             'items', 'products_display_string', 'total', 'status', 'status_display', 'payment', 'payments',
-            'shipping_address', 'created_at', 'estimated_delivery_date',
+            'shipping_address', 'shipping_method', 'shipping_method_details', 'created_at', 'estimated_delivery_date',
             'updated_at', 'note', 'payment_type', 'order_type',
             'order_date', 'order_time'
         ]
@@ -943,6 +944,20 @@ class OrderSerializer(serializers.ModelSerializer):
     
     def get_status_display(self, obj):
         return obj.get_status_display()
+    
+    def get_shipping_method_details(self, obj):
+        """Get shipping method details if available"""
+        if obj.shipping_method:
+            return {
+                'id': obj.shipping_method.id,
+                'name': obj.shipping_method.name,
+                'shipping_type': obj.shipping_method.shipping_type,
+                'shipping_type_display': obj.shipping_method.get_shipping_type_display(),
+                'price': str(obj.shipping_method.price),
+                'estimated_days': obj.shipping_method.estimated_days,
+                'description': obj.shipping_method.description
+            }
+        return None
 
 
 class FlatOrderItemSerializer(serializers.ModelSerializer):
@@ -1080,7 +1095,7 @@ class OrderCreateEnhancedSerializer(serializers.ModelSerializer):
             'customer_id', 'items', 'payment_type', 'order_type', 
             'status', 'order_date', 'order_time', 'note',
             'shipping_address', 'shipping_city', 'shipping_state',
-            'shipping_country', 'shipping_zip'
+            'shipping_country', 'shipping_zip', 'shipping_method'
         ]
     
     def validate_items(self, items):
@@ -1168,6 +1183,13 @@ class OrderCreateEnhancedSerializer(serializers.ModelSerializer):
         
         # Update order totals
         order.subtotal = subtotal
+        
+        # Auto-calculate shipping cost from selected shipping method
+        if order.shipping_method:
+            order.shipping_cost = order.shipping_method.price
+        else:
+            order.shipping_cost = Decimal('0.00')
+        
         order.save()  # This will trigger total calculation in the model
         
         return order

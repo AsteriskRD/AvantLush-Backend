@@ -543,6 +543,7 @@ class Order(models.Model):
     total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     
     # Shipping Information
+    shipping_method = models.ForeignKey('ShippingMethod', on_delete=models.SET_NULL, null=True, blank=True, related_name='orders')
     shipping_address = models.TextField(null=True, blank=True)
     shipping_city = models.CharField(max_length=100, null=True, blank=True)
     shipping_state = models.CharField(max_length=100, null=True, blank=True)
