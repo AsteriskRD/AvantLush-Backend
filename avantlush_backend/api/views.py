@@ -2302,7 +2302,7 @@ class CartViewSet(viewsets.ModelViewSet):
                 
                 # Support both old format (size_id, color_id) and new format (size, color)
                 traditional_size_id = request.data.get('size_id')
-        color_id = request.data.get('color_id')
+                color_id = request.data.get('color_id')
                 size_name = request.data.get('size') or request.data.get('size_name')
                 color_name = request.data.get('color') or request.data.get('color_name')
                 
@@ -3344,13 +3344,13 @@ class WishlistItemViewSet(viewsets.ModelViewSet):
                 )
         else:
             # Validate product exists (regular product ID)
-        try:
-            product = Product.objects.get(id=product_id)
-        except Product.DoesNotExist:
-            return Response(
-                {'error': 'Product does not exist'},
-                status=status.HTTP_404_NOT_FOUND
-            )
+            try:
+                product = Product.objects.get(id=product_id)
+            except Product.DoesNotExist:
+                return Response(
+                    {'error': 'Product does not exist'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
         
         # Check if the product is already in the wishlist
         existing_item = WishlistItem.objects.filter(
@@ -4292,7 +4292,7 @@ class ShippingMethodViewSet(viewsets.ModelViewSet):
         Instantiates and returns the list of permissions that this view requires.
         """
         if self.action in ['list', 'retrieve']:
-    permission_classes = [IsAuthenticated]
+            permission_classes = [IsAuthenticated]
         else:
             # Create, update, delete require admin permissions
             permission_classes = [IsAuthenticated, IsAdminUser]
@@ -6358,22 +6358,22 @@ class ProductViewSet(viewsets.ModelViewSet):
             )
             
             image_url = result.get('secure_url') or result.get('url')
-        
-        if image_type == 'main':
-            # Handle main image
-            if product.main_image:
+            
+            if image_type == 'main':
+                # Handle main image
+                if product.main_image:
                     try:
-                product.main_image.delete()
+                        product.main_image.delete()
                     except Exception:
                         pass  # Continue even if deletion fails
                 product.main_image = image_url
-        else:
-            # Handle additional images
-            current_images = product.images or []
+            else:
+                # Handle additional images
+                current_images = product.images or []
                 current_images.append(image_url)
-            product.images = current_images
-            
-        product.save()
+                product.images = current_images
+                
+            product.save()
             return Response({
                 'message': 'Image uploaded successfully',
                 'image_url': image_url,
