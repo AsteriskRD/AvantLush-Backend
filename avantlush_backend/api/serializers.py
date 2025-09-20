@@ -1330,10 +1330,12 @@ class WishlistItemSerializer(serializers.ModelSerializer):
     product = FlexibleProductField()  # Use our custom field
     size = serializers.CharField(write_only=True, required=False, allow_null=True)
     color = serializers.CharField(write_only=True, required=False, allow_null=True)
+    size_display = serializers.SerializerMethodField(read_only=True)
+    color_display = serializers.SerializerMethodField(read_only=True)
     
     class Meta:
         model = WishlistItem
-        fields = ['id', 'wishlist', 'product', 'size', 'color', 'added_at', 'product_details']
+        fields = ['id', 'wishlist', 'product', 'size', 'color', 'size_display', 'color_display', 'added_at', 'product_details']
         read_only_fields = ['wishlist']
     
     def create(self, validated_data):
@@ -1356,6 +1358,12 @@ class WishlistItemSerializer(serializers.ModelSerializer):
             color=color,
             **validated_data
         )
+    
+    def get_size_display(self, obj):
+        return obj.size.name if obj.size else None
+    
+    def get_color_display(self, obj):
+        return obj.color.name if obj.color else None
     
     def get_product_details(self, obj):
         product = obj.product
