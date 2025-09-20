@@ -1309,8 +1309,13 @@ class FlexibleProductField(serializers.Field):
             try:
                 product_id_from_variation, size_abbrev = data.split('_', 1)
                 product = Product.objects.get(id=int(product_id_from_variation))
-                # Store the size abbreviation for later use
+                
+                # Store the size abbreviation for later use in the serializer
                 self._size_abbrev = size_abbrev
+                
+                # Also store the original data for the serializer to use
+                self._original_data = data
+                
                 return product
             except (ValueError, Product.DoesNotExist):
                 raise serializers.ValidationError(f"Product with ID {data} does not exist")
@@ -1318,6 +1323,7 @@ class FlexibleProductField(serializers.Field):
             # Handle regular integer product ID
             try:
                 self._size_abbrev = None
+                self._original_data = data
                 return Product.objects.get(id=data)
             except Product.DoesNotExist:
                 raise serializers.ValidationError(f"Product with ID {data} does not exist")
@@ -1342,6 +1348,46 @@ class WishlistItemSerializer(serializers.ModelSerializer):
         # Extract size and color from validated_data
         size_name = validated_data.pop('size', None)
         color_name = validated_data.pop('color', None)
+        
+        # Get the product field to check if it has variant information
+        product = validated_data.get('product')
+        
+        # If the product field is a FlexibleProductField, check for variant info
+        if hasattr(self.fields['product'], '_size_abbrev') and self.fields['product']._size_abbrev:
+            # We have a unique variation ID, let's extract the variant information
+            size_abbrev = self.fields['product']._size_abbrev
+            
+            # Map size abbreviations to actual size names
+            size_mapping = {
+                'STA': 'Standard',
+                'MED': 'Medium', 
+                'LAR': 'Large',
+                'XL': 'XL',
+                'XXL': 'XXL',
+                'S': 'Small',
+                'M': 'Medium',
+                'L': 'Large'
+            }
+            
+            # Get the actual size name
+            size_name = size_mapping.get(size_abbrev, size_abbrev)
+            
+            # Find the variation that has this size
+            from .models import ProductVariation
+            variation = ProductVariation.objects.filter(
+                product=product,
+                sizes__name=size_name
+            ).first()
+            
+            if variation:
+                # Get the first color from this variation
+                color = variation.colors.first()
+                if color:
+                    color_name = color.name
+                
+                print(f"🔍 DEBUG: Found variation for {self.fields['product']._original_data}: size={size_name}, color={color_name}")
+            else:
+                print(f"🔍 DEBUG: No variation found for {self.fields['product']._original_data} with size {size_name}")
         
         # Resolve size and color objects
         size = None

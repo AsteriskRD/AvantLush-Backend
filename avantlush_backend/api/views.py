@@ -3336,55 +3336,7 @@ class WishlistItemViewSet(viewsets.ModelViewSet):
         mutable_data = request.data.copy()
         mutable_data['wishlist'] = wishlist.id
         
-        # Extract size and color from unique variation ID if present
-        product_id = request.data.get('product')
-        if isinstance(product_id, str) and '_' in product_id:
-            # Parse unique variation ID to get size abbreviation
-            product_id_from_variation, size_abbrev = product_id.split('_', 1)
-            
-            # Get the actual product to find the variation
-            try:
-                product = Product.objects.get(id=int(product_id_from_variation))
-                
-                # Find the specific variation that matches this unique ID
-                from .models import ProductVariation, Size
-                
-                # Map size abbreviations to actual size names
-                size_mapping = {
-                    'STA': 'Standard',
-                    'MED': 'Medium', 
-                    'LAR': 'Large',
-                    'XL': 'XL',
-                    'XXL': 'XXL',
-                    'S': 'Small',
-                    'M': 'Medium',
-                    'L': 'Large'
-                }
-                
-                # Get the actual size name
-                size_name = size_mapping.get(size_abbrev, size_abbrev)
-                
-                # Find the variation that has this size
-                variation = ProductVariation.objects.filter(
-                    product=product,
-                    sizes__name=size_name
-                ).first()
-                
-                if variation:
-                    # Get the first color from this variation (or you can modify this logic)
-                    color = variation.colors.first()
-                    if color:
-                        mutable_data['color'] = color.name
-                    
-                    # Set the size name
-                    mutable_data['size'] = size_name
-                    
-                    print(f"🔍 DEBUG: Found variation for {product_id}: size={size_name}, color={color.name if color else 'None'}")
-                else:
-                    print(f"🔍 DEBUG: No variation found for {product_id} with size {size_name}")
-                    
-            except Product.DoesNotExist:
-                print(f"🔍 DEBUG: Product {product_id_from_variation} not found")
+        # The serializer will handle variant extraction from unique variation IDs
         
         # Create new wishlist item
         serializer = self.get_serializer(data=mutable_data)
