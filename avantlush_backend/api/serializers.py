@@ -2005,6 +2005,15 @@ class ProductManagementSerializer(serializers.ModelSerializer):
     def get_variants_count(self, obj):
         return obj.variations.count() if hasattr(obj, 'variations') else 0
     
+    def _get_display_available_quantity(self, variation):
+        """Helper method to get the correct available quantity for display"""
+        # Special logic for last item: if available_quantity would be 0 due to reservations,
+        # still show available_quantity = 1 until payment is completed
+        if variation.available_quantity == 0 and variation.reserved_quantity > 0:
+            return 1  # Always show 1 for the last item until payment
+        else:
+            return variation.available_quantity
+    
     def get_variations(self, obj):
         """Group variations by size and return enhanced structure with stock information"""
         variations = obj.variations.all()
