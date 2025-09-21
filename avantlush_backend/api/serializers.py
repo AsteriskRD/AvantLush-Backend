@@ -1248,12 +1248,15 @@ class OrderCreateSerializer(serializers.ModelSerializer):
         order.total = total
         order.save()
         
-        # Create payment
+        # Create payment with unique transaction_id
+        import uuid
+        transaction_id = f"order_{order.id}_{uuid.uuid4().hex[:8]}"
         Payment.objects.create(
             order=order,
-            method=payment_method,
+            payment_method=payment_method,
             amount=total,
-            status='pending'
+            transaction_id=transaction_id,
+            status='PENDING'
         )
         
         return order
