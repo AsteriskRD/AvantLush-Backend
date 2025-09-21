@@ -167,6 +167,7 @@ from .serializers import (
     CategoryCreateSerializer,
     ReviewSummarySerializer,
     OrderCreateSerializer,
+    OrderCreateEnhancedSerializer,
     OrderItemSerializer,
     CustomerSerializer,
     CustomerDetailSerializer,
@@ -2834,7 +2835,7 @@ class OrderViewSet(viewsets.ModelViewSet):
 
     def get_serializer_class(self):
         if self.action == 'create':
-            return OrderCreateSerializer
+            return OrderCreateEnhancedSerializer
         return OrderSerializer
     
     def create(self, request, *args, **kwargs):
