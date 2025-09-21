@@ -2836,6 +2836,16 @@ class OrderViewSet(viewsets.ModelViewSet):
         if self.action == 'create':
             return OrderCreateSerializer
         return OrderSerializer
+    
+    def create(self, request, *args, **kwargs):
+        """Override create to return full order data after creation"""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        order = serializer.save()
+        
+        # Return the full order data using OrderSerializer
+        response_serializer = OrderSerializer(order, context={'request': request})
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
 
     def get_queryset(self):
         queryset = super().get_queryset()
