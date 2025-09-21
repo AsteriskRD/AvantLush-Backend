@@ -1152,7 +1152,8 @@ class OrderCreateEnhancedSerializer(serializers.ModelSerializer):
         order = Order.objects.create(**validated_data)
         
         # Create order items and calculate totals
-        subtotal = 0
+        from decimal import Decimal
+        subtotal = Decimal('0.00')
         for item_data in items_data:
             # Handle both integer and unique variation IDs
             product_id = item_data['product_id']
@@ -1168,6 +1169,8 @@ class OrderCreateEnhancedSerializer(serializers.ModelSerializer):
             
             # Use provided price or product price
             unit_price = item_data.get('price', product.price)
+            if isinstance(unit_price, str):
+                unit_price = Decimal(unit_price)
             
             order_item = OrderItem.objects.create(
                 order=order,
@@ -1175,7 +1178,7 @@ class OrderCreateEnhancedSerializer(serializers.ModelSerializer):
                 quantity=quantity,
                 price=unit_price
             )
-            subtotal += order_item.subtotal
+            subtotal += Decimal(str(order_item.subtotal))
             
             # Update product stock
             product.stock_quantity -= quantity
