@@ -230,18 +230,40 @@ class CloverPaymentService(BasePaymentService):
                 customer_data['phoneNumber'] = customer_info['phoneNumber']
             # ✅ Don't include phoneNumber if not provided
             
+            # Prepare individual line items from order data
+            line_items = []
+            if 'items' in order_data:
+                # Use individual order items if provided
+                for item in order_data['items']:
+                    item_name = item.get('name', 'Product')
+                    if item.get('size') or item.get('color'):
+                        variant_info = []
+                        if item.get('size'):
+                            variant_info.append(f"Size: {item['size']}")
+                        if item.get('color'):
+                            variant_info.append(f"Color: {item['color']}")
+                        item_name += f" ({', '.join(variant_info)})"
+                    
+                    line_items.append({
+                        "name": item_name,
+                        "price": int(float(item.get('price', 0)) * 100),  # Convert to cents
+                        "unitQty": item.get('quantity', 1),
+                        "note": f"SKU: {item.get('sku', 'N/A')}"
+                    })
+            else:
+                # Fallback to single line item with total
+                line_items.append({
+                    "name": f"Order {order_data.get('order_number', 'N/A')}",
+                    "price": int(float(order_data['total_amount']) * 100),  # Convert to cents
+                    "unitQty": 1,
+                    "note": f"Order total: ${order_data['total_amount']}"
+                })
+            
             # Prepare request data in Clover's required format
             clover_request = {
                 "customer": customer_data,
                 "shoppingCart": {
-                    "lineItems": [
-                        {
-                            "name": f"Order {order_data.get('order_number', 'N/A')}",
-                            "price": int(float(order_data['total_amount']) * 100),  # Convert to cents
-                            "unitQty": 1,
-                            "note": f"Order total: ${order_data['total_amount']}"
-                        }
-                    ]
+                    "lineItems": line_items
                 }
             }
             

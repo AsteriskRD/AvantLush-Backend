@@ -11,7 +11,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from .services import CloverPaymentService
 from .serializers import CloverWebhookSerializer, CloverPaymentStatusSerializer
-from .models import Payment, Order
+from .models import Payment, Order, Cart
 from django.shortcuts import redirect
 from django.http import JsonResponse
 
@@ -811,6 +811,14 @@ def clover_hosted_webhook(request):
                 order.payment_status = 'PAID'
                 order.save()
                 
+                # Clear user's cart after successful payment
+                try:
+                    cart = Cart.objects.get(user=order.user)
+                    cart.items.all().delete()
+                    logger.info(f"✅ Cleared cart for user {order.user.email} after successful payment")
+                except Cart.DoesNotExist:
+                    logger.warning(f"No cart found for user {order.user.email}")
+                
                 logger.info(f"Payment approved for order {order.order_number}")
                 
             elif webhook_status == 'DECLINED':
@@ -1081,11 +1089,28 @@ def create_clover_hosted_checkout(request):
             print(f"✅ Created Payment record #{payment.id} for Order #{order.id}")
         
         # STEP 3: Create Clover Hosted Checkout Session with proper user data
+        # Prepare individual order items for Clover checkout
+        order_items_data = []
+        for item in order.items.all():
+            item_data = {
+                'name': item.product.name,
+                'price': float(item.price),
+                'quantity': item.quantity,
+                'sku': item.product.sku
+            }
+            # Add variant information if available
+            if item.size:
+                item_data['size'] = item.size.name
+            if item.color:
+                item_data['color'] = item.color.name
+            order_items_data.append(item_data)
+        
         clover_order_data = {
             'total_amount': float(order.total),
             'currency': 'USD',
             'order_number': order.order_number,
             'order_id': order.id,
+            'items': order_items_data,  # Include individual items with variant prices
             'customer': {
                 'email': request.user.email,  # 🔧 FIX: Use actual authenticated user
                 'firstName': request.user.first_name or 'Customer',
@@ -1349,11 +1374,28 @@ def create_clover_hosted_checkout_test(request):
             print(f"✅ Created Test Payment record #{payment.id} for Order #{order.id}")
         
         # STEP 3: Create Clover Hosted Checkout Session
+        # Prepare individual order items for Clover checkout
+        order_items_data = []
+        for item in order.items.all():
+            item_data = {
+                'name': item.product.name,
+                'price': float(item.price),
+                'quantity': item.quantity,
+                'sku': item.product.sku
+            }
+            # Add variant information if available
+            if item.size:
+                item_data['size'] = item.size.name
+            if item.color:
+                item_data['color'] = item.color.name
+            order_items_data.append(item_data)
+        
         clover_order_data = {
             'total_amount': float(order.total),
             'currency': 'USD',
             'order_number': order.order_number,
             'order_id': order.id,
+            'items': order_items_data,  # Include individual items with variant prices
             'customer': {
                 'email': test_user.email,
                 'firstName': test_user.first_name or 'Test',
@@ -1729,6 +1771,14 @@ def checkout_success(request):
         order.status = 'PROCESSING'
         order.payment_status = 'PAID'
         order.save()
+        
+        # Clear user's cart after successful payment
+        try:
+            cart = Cart.objects.get(user=order.user)
+            cart.items.all().delete()
+            print(f"✅ Cleared cart for user {order.user.email} after successful payment")
+        except Cart.DoesNotExist:
+            print(f"⚠️ No cart found for user {order.user.email}")
         
         print(f"✅ Payment completed for Order #{order.id}")
         
