@@ -998,15 +998,38 @@ def create_clover_hosted_checkout(request):
                             'message': f'Not enough stock for {cart_item.product.name}. Available: {cart_item.product.stock_quantity}, Requested: {cart_item.quantity}'
                         }
                     }, status=400)
+                
+                # Calculate variant-specific price (base price + price adjustment)
+                base_price = Decimal(str(cart_item.product.price))
+                variant_price = base_price
+                
+                # Find the specific variation for this cart item to get price adjustment
+                if cart_item.size and cart_item.color:
+                    from avantlush_backend.api.models import ProductVariation
+                    variation = ProductVariation.objects.filter(
+                        product=cart_item.product,
+                        sizes=cart_item.size,
+                        colors=cart_item.color
+                    ).first()
+                    
+                    if variation:
+                        price_adjustment = Decimal(str(variation.price_adjustment))
+                        variant_price = base_price + price_adjustment
+                        print(f"✅ Using variant price: {base_price} + {price_adjustment} = {variant_price} for {cart_item.product.name} ({cart_item.size.name}, {cart_item.color.name})")
+                    else:
+                        print(f"⚠️ No variation found for {cart_item.product.name} ({cart_item.size.name}, {cart_item.color.name}), using base price: {base_price}")
+                else:
+                    print(f"✅ No size/color specified for {cart_item.product.name}, using base price: {base_price}")
+                
                 OrderItem.objects.create(
                     order=order,
                     product=cart_item.product,
                     quantity=cart_item.quantity,
-                    price=cart_item.product.price,
+                    price=variant_price,  # Use calculated variant price
                     size=cart_item.size,
                     color=cart_item.color
                 )
-                subtotal += cart_item.product.price * cart_item.quantity
+                subtotal += variant_price * cart_item.quantity
                 
                 # Update stock - handle both product and variation stock
                 cart_item.product.stock_quantity -= cart_item.quantity
@@ -1043,7 +1066,19 @@ def create_clover_hosted_checkout(request):
             order.subtotal = subtotal
             order.save()
             
+            # Create initial payment record for tracking
+            from avantlush_backend.api.models import Payment
+            payment = Payment.objects.create(
+                order=order,
+                amount=order.total,
+                payment_method='CLOVER_HOSTED',
+                status='PENDING',
+                transaction_id=f"clover-pending-{order.id}",
+                gateway_response={'status': 'pending', 'order_created': True}
+            )
+            
             print(f"✅ Created Order #{order.id} - {order.order_number} for user: {request.user.email}")
+            print(f"✅ Created Payment record #{payment.id} for Order #{order.id}")
         
         # STEP 3: Create Clover Hosted Checkout Session with proper user data
         clover_order_data = {
@@ -1262,15 +1297,33 @@ def create_clover_hosted_checkout_test(request):
             # Create order items from cart
             subtotal = Decimal('0.00')
             for cart_item in cart_items:
+                # Calculate variant-specific price (base price + price adjustment)
+                base_price = Decimal(str(cart_item.product.price))
+                variant_price = base_price
+                
+                # Find the specific variation for this cart item to get price adjustment
+                if cart_item.size and cart_item.color:
+                    from avantlush_backend.api.models import ProductVariation
+                    variation = ProductVariation.objects.filter(
+                        product=cart_item.product,
+                        sizes=cart_item.size,
+                        colors=cart_item.color
+                    ).first()
+                    
+                    if variation:
+                        price_adjustment = Decimal(str(variation.price_adjustment))
+                        variant_price = base_price + price_adjustment
+                        print(f"✅ TEST: Using variant price: {base_price} + {price_adjustment} = {variant_price} for {cart_item.product.name} ({cart_item.size.name}, {cart_item.color.name})")
+                
                 OrderItem.objects.create(
                     order=order,
                     product=cart_item.product,
                     quantity=cart_item.quantity,
-                    price=cart_item.product.price,
+                    price=variant_price,  # Use calculated variant price
                     size=cart_item.size,
                     color=cart_item.color
                 )
-                subtotal += cart_item.product.price * cart_item.quantity
+                subtotal += variant_price * cart_item.quantity
                 
                 # Update stock (with safety check)
                 if cart_item.product.stock_quantity >= cart_item.quantity:
@@ -1281,7 +1334,19 @@ def create_clover_hosted_checkout_test(request):
             order.subtotal = subtotal
             order.save()
             
+            # Create initial payment record for tracking
+            from avantlush_backend.api.models import Payment
+            payment = Payment.objects.create(
+                order=order,
+                amount=order.total,
+                payment_method='CLOVER_HOSTED',
+                status='PENDING',
+                transaction_id=f"clover-test-pending-{order.id}",
+                gateway_response={'status': 'pending', 'order_created': True, 'test_mode': True}
+            )
+            
             print(f"✅ Created Test Order #{order.id} - {order.order_number} for user: {test_user.email}")
+            print(f"✅ Created Test Payment record #{payment.id} for Order #{order.id}")
         
         # STEP 3: Create Clover Hosted Checkout Session
         clover_order_data = {
