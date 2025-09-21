@@ -1239,9 +1239,8 @@ class OrderCreateSerializer(serializers.ModelSerializer):
                 order=order,
                 product=product,
                 quantity=quantity,
-                unit_price=unit_price,
-                total_price=unit_price * quantity,
-                variants=item_data.get('variants', {})
+                price=unit_price,
+                subtotal=unit_price * quantity
             )
             total += unit_price * quantity
         
