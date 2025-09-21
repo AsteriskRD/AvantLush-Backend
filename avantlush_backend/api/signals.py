@@ -202,6 +202,10 @@ def sync_profile_to_customer(sender, instance, created, **kwargs):
 def create_order_notification(sender, instance, created, **kwargs):
     """Create notification when new order is placed or payment is completed"""
     
+    print(f"🔍 DEBUG: Order signal triggered - Order #{instance.order_number}, created: {created}")
+    print(f"🔍 DEBUG: payment_status: {instance.payment_status}")
+    print(f"🔍 DEBUG: update_fields: {kwargs.get('update_fields')}")
+    
     # Only send email notification when payment is completed, not when order is first created
     if not created and 'payment_status' in (kwargs.get('update_fields') or []):
         # Check if payment status changed to 'PAID'
