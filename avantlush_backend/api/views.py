@@ -1000,7 +1000,7 @@ def create_clover_hosted_checkout(request):
                         if variation.available_quantity == 1:
                             # This was a last item - now reduce actual stock
                             variation.stock_quantity -= cart_item.quantity
-                            variation.reserved_quantity -= cart_item.quantity  # Release the reservation
+                            variation.reserved_quantity = max(0, variation.reserved_quantity - cart_item.quantity)  # Prevent negative
                             variation.save()
                             
                             # Now the product should become draft since stock is actually 0
@@ -1010,7 +1010,7 @@ def create_clover_hosted_checkout(request):
                         else:
                             # Normal behavior for quantities > 1
                             variation.stock_quantity -= cart_item.quantity
-                            variation.reserved_quantity -= cart_item.quantity  # Release the reservation
+                            variation.reserved_quantity = max(0, variation.reserved_quantity - cart_item.quantity)  # Prevent negative
                             variation.save()
             
             # Update order totals
