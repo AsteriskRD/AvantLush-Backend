@@ -925,7 +925,33 @@ def create_clover_hosted_checkout(request):
                     }, status=400)
             
             # Create the order for the authenticated user
-            shipping_address = data.get('shipping_address', {})
+            # Handle address - support both address_id and shipping_address object
+            shipping_address_data = {}
+            if data.get('address_id'):
+                # Fetch address by ID
+                try:
+                    from avantlush_backend.api.models import Address
+                    address = Address.objects.get(id=data['address_id'], user=request.user)
+                    shipping_address_data = {
+                        'street_address': address.street_address,
+                        'city': address.city,
+                        'state': address.state,
+                        'country': address.country,
+                        'zip_code': address.zip_code
+                    }
+                    print(f"✅ Using address ID {data['address_id']} for user: {request.user.email}")
+                except Address.DoesNotExist:
+                    return Response({
+                        'is_success': False,
+                        'data': {
+                            'status': 'error',
+                            'message': f'Address with ID {data["address_id"]} not found for user'
+                        }
+                    }, status=400)
+            else:
+                # Fallback to shipping_address object (backward compatibility)
+                shipping_address_data = data.get('shipping_address', {})
+                print(f"✅ Using shipping_address object for user: {request.user.email}")
             
             # Handle shipping method
             shipping_method = None
@@ -947,11 +973,11 @@ def create_clover_hosted_checkout(request):
             
             order = Order.objects.create(
                 user=request.user,  # 🔧 FIX: Always use authenticated user
-                shipping_address=shipping_address.get('street_address', '123 Test St'),
-                shipping_city=shipping_address.get('city', 'Test City'),
-                shipping_state=shipping_address.get('state', 'CA'),
-                shipping_country=shipping_address.get('country', 'US'),
-                shipping_zip=shipping_address.get('zip_code', '12345'),
+                shipping_address=shipping_address_data.get('street_address', '123 Test St'),
+                shipping_city=shipping_address_data.get('city', 'Test City'),
+                shipping_state=shipping_address_data.get('state', 'CA'),
+                shipping_country=shipping_address_data.get('country', 'US'),
+                shipping_zip=shipping_address_data.get('zip_code', '12345'),
                 shipping_method=shipping_method,
                 shipping_cost=shipping_cost,
                 subtotal=Decimal('0.00'),
